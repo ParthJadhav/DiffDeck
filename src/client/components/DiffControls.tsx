@@ -60,10 +60,7 @@ function CheckLabel({
 }) {
   return (
     <label className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-1.5 py-1 text-xs text-foreground/85 transition-colors duration-150 hover:bg-accent/60 hover:text-foreground">
-      <Checkbox
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
+      <Checkbox checked={checked} onChange={(event) => onChange(event.target.checked)} />
       <span>{children}</span>
     </label>
   );
@@ -101,13 +98,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ControlSection({
-  children,
-  label,
-}: {
-  children: React.ReactNode;
-  label: string;
-}) {
+function ControlSection({ children, label }: { children: React.ReactNode; label: string }) {
   return (
     <section className="space-y-1">
       <SectionLabel>{label}</SectionLabel>
@@ -147,9 +138,7 @@ function OptionButton<T extends string>({
       <span
         className={cn(
           "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded transition-colors",
-          active
-            ? "bg-primary-foreground/15"
-            : "bg-background/70 text-foreground/80",
+          active ? "bg-primary-foreground/15" : "bg-background/70 text-foreground/80",
         )}
       >
         {icon}
@@ -272,12 +261,7 @@ function MiniIcon({
       );
     case "bars":
       return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="currentColor"
-        >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
           <path d="M3 2h2v12H3zM7 4h6v2H7zM7 10h6v2H7z" />
         </svg>
       );
@@ -469,12 +453,7 @@ function MiniIcon({
       );
     case "dark":
       return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="currentColor"
-        >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
           <path d="M9.5 14A5.8 5.8 0 017.7 2.7 5 5 0 0013.3 9a5.8 5.8 0 01-3.8 5z" />
         </svg>
       );
@@ -493,12 +472,7 @@ function MiniIcon({
         </svg>
       );
     default:
-      return (
-        <span
-          aria-hidden="true"
-          className="h-1.5 w-1.5 rounded-sm bg-current"
-        />
-      );
+      return <span aria-hidden="true" className="h-1.5 w-1.5 rounded-sm bg-current" />;
   }
 }
 
@@ -558,10 +532,7 @@ export function DiffControls(props: DiffControlsProps) {
     );
     node?.focus();
     const onPointerDown = (event: MouseEvent) => {
-      if (
-        containerRef.current != null &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
+      if (containerRef.current != null && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
@@ -589,9 +560,7 @@ export function DiffControls(props: DiffControlsProps) {
           className="max-h-[min(26rem,64vh)] overflow-y-auto overflow-x-hidden rounded-md bg-popover p-2 text-popover-foreground shadow-[0_0_0_1px_hsl(var(--border)/0.72),0_10px_24px_hsl(0_0%_0%/0.16)]"
         >
           <div className="mb-1.5 flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold text-foreground">
-              Diff settings
-            </div>
+            <div className="text-xs font-semibold text-foreground">Diff settings</div>
             <button
               type="button"
               aria-label="Close diff settings"
@@ -604,10 +573,7 @@ export function DiffControls(props: DiffControlsProps) {
 
           <div className="space-y-2.5">
             <ControlSection label="View">
-              <Tabs
-                value={diffView}
-                onValueChange={(v) => onDiffViewChange(v as DiffView)}
-              >
+              <Tabs value={diffView} onValueChange={(v) => onDiffViewChange(v as DiffView)}>
                 <TabsList className="h-6 w-full rounded-md p-0.5">
                   {diffViews.map((view) => (
                     <TabsTrigger
@@ -616,13 +582,7 @@ export function DiffControls(props: DiffControlsProps) {
                       className="h-5 flex-1 gap-1 px-1.5 text-[10px]"
                     >
                       <MiniIcon
-                        name={
-                          view === "file"
-                            ? "file"
-                            : view === "snippet"
-                              ? "snippet"
-                              : "patch"
-                        }
+                        name={view === "file" ? "file" : view === "snippet" ? "snippet" : "patch"}
                       />
                       {viewLabels[view]}
                     </TabsTrigger>
@@ -754,16 +714,10 @@ export function DiffControls(props: DiffControlsProps) {
 
             <ControlSection label="Options">
               <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                <CheckLabel
-                  checked={showLineNumbers}
-                  onChange={onShowLineNumbersChange}
-                >
+                <CheckLabel checked={showLineNumbers} onChange={onShowLineNumbersChange}>
                   Line Numbers
                 </CheckLabel>
-                <CheckLabel
-                  checked={expandUnchanged}
-                  onChange={onExpandUnchangedChange}
-                >
+                <CheckLabel checked={expandUnchanged} onChange={onExpandUnchangedChange}>
                   Expand Unchanged
                 </CheckLabel>
                 <CheckLabel checked={collapsed} onChange={onCollapsedChange}>
@@ -791,8 +745,7 @@ export function DiffControls(props: DiffControlsProps) {
           onClick={() => setOpen((prev) => !prev)}
           className={cn(
             "inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            open &&
-              "bg-accent text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]",
+            open && "bg-accent text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]",
           )}
         >
           <GearIcon />

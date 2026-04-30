@@ -25,11 +25,7 @@ export function useSession(): UseSessionResult {
         }
       } catch (requestError) {
         if (!cancelled) {
-          setError(
-            requestError instanceof Error
-              ? requestError.message
-              : String(requestError),
-          );
+          setError(requestError instanceof Error ? requestError.message : String(requestError));
         }
       } finally {
         if (!cancelled) {

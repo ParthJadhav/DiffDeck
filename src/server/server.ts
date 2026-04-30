@@ -41,9 +41,7 @@ export async function startServer(
   app.get("/api/file-diff", (request, response) => {
     const path = request.query.path;
     if (typeof path !== "string" || path.length === 0) {
-      response
-        .status(400)
-        .json({ error: "Missing required path query parameter." });
+      response.status(400).json({ error: "Missing required path query parameter." });
       return;
     }
 
@@ -59,17 +57,13 @@ export async function startServer(
   app.get("/api/unresolved-file", (request, response) => {
     const path = request.query.path;
     if (typeof path !== "string" || path.length === 0) {
-      response
-        .status(400)
-        .json({ error: "Missing required path query parameter." });
+      response.status(400).json({ error: "Missing required path query parameter." });
       return;
     }
 
     const contents = session.unresolvedFiles.get(path);
     if (contents == null) {
-      response
-        .status(404)
-        .json({ error: `No unresolved file found for ${path}.` });
+      response.status(404).json({ error: `No unresolved file found for ${path}.` });
       return;
     }
 

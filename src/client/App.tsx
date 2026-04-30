@@ -29,28 +29,19 @@ export function App() {
   const [themeType, setThemeType] = useState<ThemeChoice>("system");
   const [diffView, setDiffView] = useState<DiffView>("file");
   const [diffStyle, setDiffStyle] = useState<DiffLayout>("split");
-  const [diffIndicators, setDiffIndicators] =
-    useState<DiffIndicatorMode>("bars");
+  const [diffIndicators, setDiffIndicators] = useState<DiffIndicatorMode>("bars");
   const [lineDiffType, setLineDiffType] = useState<DiffLineMode>("word-alt");
-  const [hunkSeparators, setHunkSeparators] =
-    useState<HunkSeparatorMode>("custom");
+  const [hunkSeparators, setHunkSeparators] = useState<HunkSeparatorMode>("custom");
   const [overflow, setOverflow] = useState<OverflowMode>("scroll");
   const [disableBackground, setDisableBackground] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
   const [expandUnchanged, setExpandUnchanged] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [collapsedFilePaths, setCollapsedFilePaths] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const [viewedFilePaths, setViewedFilePaths] = useState<Set<string>>(
-    () => new Set(),
-  );
+  const [collapsedFilePaths, setCollapsedFilePaths] = useState<Set<string>>(() => new Set());
+  const [viewedFilePaths, setViewedFilePaths] = useState<Set<string>>(() => new Set());
   const [selection, setSelection] = useState<SelectedLineRange | null>(null);
 
-  const reportError = useCallback(
-    (message: string) => setError(message),
-    [setError],
-  );
+  const reportError = useCallback((message: string) => setError(message), [setError]);
 
   const orderedFiles = useMemo(() => {
     if (session == null) return [];
@@ -76,8 +67,7 @@ export function App() {
   }, [session, selectedPath, orderedFiles]);
 
   const { fileDiffs, requestPath } = useFileDiff(reportError);
-  const selectedDiff =
-    selectedPath == null ? null : (fileDiffs[selectedPath] ?? null);
+  const selectedDiff = selectedPath == null ? null : (fileDiffs[selectedPath] ?? null);
   const [scrollSignal, setScrollSignal] = useState(0);
 
   const handleTreeSelection = useCallback((path: string | null) => {
@@ -102,20 +92,17 @@ export function App() {
     }
   }, []);
 
-  const handleCollapsedFileChange = useCallback(
-    (path: string, value: boolean) => {
-      setCollapsedFilePaths((current) => {
-        const next = new Set(current);
-        if (value) {
-          next.add(path);
-        } else {
-          next.delete(path);
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const handleCollapsedFileChange = useCallback((path: string, value: boolean) => {
+    setCollapsedFilePaths((current) => {
+      const next = new Set(current);
+      if (value) {
+        next.add(path);
+      } else {
+        next.delete(path);
+      }
+      return next;
+    });
+  }, []);
 
   const handleViewedFileChange = useCallback((path: string, value: boolean) => {
     setViewedFilePaths((current) => {
@@ -145,8 +132,7 @@ export function App() {
     setSelection(null);
   }, [diffView, selectedPath]);
 
-  const selectedFile =
-    session?.files.find((file) => file.path === selectedPath) ?? null;
+  const selectedFile = session?.files.find((file) => file.path === selectedPath) ?? null;
 
   const copyToClipboard = useCallback(
     async (value: string) => {
@@ -265,11 +251,7 @@ export function App() {
 // individual <FileDiff /> instances are ignored — they must be applied to the
 // pool itself. This child sits inside the provider so it can call
 // setRenderOptions whenever the user toggles the value.
-function WorkerPoolRenderOptionsSync({
-  lineDiffType,
-}: {
-  lineDiffType: DiffLineMode;
-}) {
+function WorkerPoolRenderOptionsSync({ lineDiffType }: { lineDiffType: DiffLineMode }) {
   const pool = useWorkerPool();
   useEffect(() => {
     if (pool == null) return;

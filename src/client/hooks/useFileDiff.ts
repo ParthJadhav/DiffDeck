@@ -7,12 +7,8 @@ export interface UseFileDiffResult {
   requestPath: (path: string) => void;
 }
 
-export function useFileDiff(
-  onError: (message: string) => void,
-): UseFileDiffResult {
-  const [fileDiffs, setFileDiffs] = useState<Record<string, FileDiffMetadata>>(
-    {},
-  );
+export function useFileDiff(onError: (message: string) => void): UseFileDiffResult {
+  const [fileDiffs, setFileDiffs] = useState<Record<string, FileDiffMetadata>>({});
   const inflightRef = useRef<Set<string>>(new Set());
   const loadedRef = useRef<Set<string>>(new Set());
   const onErrorRef = useRef(onError);
@@ -30,9 +26,7 @@ export function useFileDiff(
       })
       .catch((requestError) => {
         onErrorRef.current(
-          requestError instanceof Error
-            ? requestError.message
-            : String(requestError),
+          requestError instanceof Error ? requestError.message : String(requestError),
         );
       })
       .finally(() => {

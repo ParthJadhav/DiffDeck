@@ -19,9 +19,9 @@
     "dev": "./scripts/dev.sh",
     "dev:setup": "./scripts/setup-fake-repo.sh",
     "dev:reset": "REBUILD_FAKE_REPO=1 ./scripts/dev.sh",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "eslint .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "oxlint . --react-plugin --deny-warnings",
     "pack:dry-run": "npm pack --dry-run",
     "prepack": "bun run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit"
@@ -57,20 +57,16 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@biomejs/biome": "^2.4.13",
     "@tailwindcss/vite": "^4.2.4",
     "@types/express": "^5.0.3",
     "@types/node": "^24.9.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
-    "eslint": "^10.2.1",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "prettier": "^3.8.3",
+    "oxlint": "^1.62.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.1",
     "vite": "^7.1.12"
   }
 }

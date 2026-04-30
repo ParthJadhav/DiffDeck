@@ -36,15 +36,12 @@ export function buildSnippetCompare(fileDiff: FileDiffMetadata): {
   };
 }
 
-export function getSelectionSummary(
-  selection: SelectedLineRange | null,
-): string {
+export function getSelectionSummary(selection: SelectedLineRange | null): string {
   if (selection == null) {
     return "No line selection";
   }
 
   const startSide = selection.side == null ? "" : ` ${selection.side}`;
-  const endSide =
-    selection.endSide == null ? startSide : ` ${selection.endSide}`;
+  const endSide = selection.endSide == null ? startSide : ` ${selection.endSide}`;
   return `${selection.start}${startSide} → ${selection.end}${endSide}`;
 }

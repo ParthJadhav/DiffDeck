@@ -99,11 +99,7 @@ async function main(): Promise<void> {
   const options = parseCliArgs(process.argv.slice(2));
   const requestedRepoPath = realpathSync(resolve(options.repo));
   const repoRoot = resolveRepoRoot(requestedRepoPath);
-  const session = buildDiffSession(
-    repoRoot,
-    requestedRepoPath,
-    options.diffArgs,
-  );
+  const session = buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs);
   const server = await startServer(session, options.port, options.host);
 
   console.log(`CLI Diff server running at ${server.url}`);

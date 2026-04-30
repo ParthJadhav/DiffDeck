@@ -1,9 +1,4 @@
-import {
-  processFile,
-  processPatch,
-  type FileContents,
-  type FileDiffMetadata,
-} from "@pierre/diffs";
+import { processFile, processPatch, type FileContents, type FileDiffMetadata } from "@pierre/diffs";
 import type { GitStatus } from "@pierre/trees";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -17,9 +12,7 @@ function runGit(repo: string, args: string[]): string {
 
   if (result.status !== 0) {
     const stderr = result.stderr.trim();
-    throw new Error(
-      stderr.length > 0 ? stderr : `git ${args.join(" ")} failed`,
-    );
+    throw new Error(stderr.length > 0 ? stderr : `git ${args.join(" ")} failed`);
   }
 
   return result.stdout;
@@ -77,9 +70,7 @@ function countChanges(fileDiff: FileDiffMetadata): {
 
 function hasMergeConflictMarkers(contents: string): boolean {
   return (
-    /^<<<<<<< .+$/m.test(contents) &&
-    /^=======$/m.test(contents) &&
-    /^>>>>>>> .+$/m.test(contents)
+    /^<<<<<<< .+$/m.test(contents) && /^=======$/m.test(contents) && /^>>>>>>> .+$/m.test(contents)
   );
 }
 
@@ -126,12 +117,8 @@ function hydrateFileDiff(
 
   const oldPath = partialFileDiff.prevName ?? partialFileDiff.name;
   const newPath = partialFileDiff.name;
-  const oldContents =
-    partialFileDiff.type === "new" ? "" : readIndexFile(repoRoot, oldPath);
-  const newContents =
-    partialFileDiff.type === "deleted"
-      ? ""
-      : readWorktreeFile(repoRoot, newPath);
+  const oldContents = partialFileDiff.type === "new" ? "" : readIndexFile(repoRoot, oldPath);
+  const newContents = partialFileDiff.type === "deleted" ? "" : readWorktreeFile(repoRoot, newPath);
 
   if (oldContents == null || newContents == null) {
     return partialFileDiff;
@@ -153,13 +140,9 @@ function hydrateFileDiff(
 }
 
 function getUnmergedPaths(repoRoot: string): string[] {
-  const result = spawnSync(
-    "git",
-    ["-C", repoRoot, "diff", "--name-only", "--diff-filter=U"],
-    {
-      encoding: "utf8",
-    },
-  );
+  const result = spawnSync("git", ["-C", repoRoot, "diff", "--name-only", "--diff-filter=U"], {
+    encoding: "utf8",
+  });
   if (result.status !== 0) return [];
   return result.stdout
     .split(/\r?\n/)
@@ -191,9 +174,7 @@ export function buildDiffSession(
   const unresolvedFiles = new Map<string, string>();
   const relativeDirectory = relative(repoRoot, currentDirectory);
   const currentDirectoryDisplay =
-    relativeDirectory.length === 0 || relativeDirectory.startsWith("..")
-      ? "."
-      : relativeDirectory;
+    relativeDirectory.length === 0 || relativeDirectory.startsWith("..") ? "." : relativeDirectory;
 
   if (rawDiff.trim().length > 0) {
     const parsedPatch = processPatch(rawDiff, "cli-diff", true);

@@ -1,13 +1,7 @@
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import type { DiffFileSummary } from "../types.js";
 
-export type Tone =
-  | "added"
-  | "deleted"
-  | "renamed"
-  | "modified"
-  | "untracked"
-  | "muted";
+export type Tone = "added" | "deleted" | "renamed" | "modified" | "untracked" | "muted";
 
 export function getGitStatusTone(status: DiffFileSummary["gitStatus"]): Tone {
   switch (status) {
@@ -53,10 +47,7 @@ export function toneTextClass(tone: Tone): string {
   return toneTextClasses[tone];
 }
 
-const toneBadgeVariants: Record<
-  Tone,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
+const toneBadgeVariants: Record<Tone, "default" | "secondary" | "destructive" | "outline"> = {
   added: "outline",
   deleted: "destructive",
   renamed: "outline",
@@ -65,8 +56,6 @@ const toneBadgeVariants: Record<
   muted: "outline",
 };
 
-export function toneBadgeVariant(
-  tone: Tone,
-): "default" | "secondary" | "destructive" | "outline" {
+export function toneBadgeVariant(tone: Tone): "default" | "secondary" | "destructive" | "outline" {
   return toneBadgeVariants[tone];
 }

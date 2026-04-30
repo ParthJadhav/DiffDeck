@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import {
-  FileTree as TreeModel,
-  prepareFileTreeInput,
-  type GitStatusEntry,
-} from "@pierre/trees";
+import { FileTree as TreeModel, prepareFileTreeInput, type GitStatusEntry } from "@pierre/trees";
 import { buildGitStatus } from "../lib/diff.js";
 import type { DiffFileSummary, SessionPayload } from "../types.js";
 
@@ -27,25 +23,17 @@ export function useDiffTree({
   const onSelectionChangeRef = useRef(onSelectionChange);
   onSelectionChangeRef.current = onSelectionChange;
 
-  const filePaths = useMemo(
-    () => session?.files.map((file) => file.path) ?? [],
-    [session],
-  );
+  const filePaths = useMemo(() => session?.files.map((file) => file.path) ?? [], [session]);
 
   const gitStatuses = useMemo<GitStatusEntry[]>(
     () => (session == null ? [] : buildGitStatus(session.files)),
     [session],
   );
 
-  const preparedInput = useMemo(
-    () => prepareFileTreeInput(filePaths),
-    [filePaths],
-  );
+  const preparedInput = useMemo(() => prepareFileTreeInput(filePaths), [filePaths]);
 
   useEffect(() => {
-    fileSummaryRef.current = new Map(
-      (session?.files ?? []).map((file) => [file.path, file]),
-    );
+    fileSummaryRef.current = new Map((session?.files ?? []).map((file) => [file.path, file]));
   }, [session]);
 
   useEffect(() => {
@@ -100,8 +88,7 @@ export function useDiffTree({
           (path) => !previous.has(path) && fileSummaryRef.current.has(path),
         );
         const next =
-          newlySelected ??
-          selectedPaths.find((path) => fileSummaryRef.current.has(path));
+          newlySelected ?? selectedPaths.find((path) => fileSummaryRef.current.has(path));
         if (next != null) {
           onSelectionChangeRef.current(next);
         }
