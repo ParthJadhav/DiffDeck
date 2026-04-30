@@ -1,0 +1,47 @@
+{
+  "name": "cli-diff",
+  "version": "0.1.0",
+  "description": "View git diffs in the browser with @pierre/diffs and @pierre/trees.",
+  "type": "module",
+  "bin": {
+    "cli-diff": "./dist/server/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:client && bun run build:server",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "check": "bun run build",
+    "dev": "./scripts/dev.sh",
+    "dev:setup": "./scripts/setup-fake-repo.sh",
+    "dev:reset": "REBUILD_FAKE_REPO=1 ./scripts/dev.sh"
+  },
+  "keywords": [
+    "diff",
+    "git",
+    "cli",
+    "browser"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@pierre/diffs": "^1.1.20",
+    "@pierre/trees": "^1.0.0-beta.3",
+    "express": "^5.1.0",
+    "open": "^10.1.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.9.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}
