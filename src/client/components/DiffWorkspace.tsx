@@ -53,7 +53,10 @@ type HunkExpansionInstance = {
 
 const hunkExpansionFallbackNodes = new WeakSet<HTMLElement>();
 const hunkExpansionFallbackRoots = new WeakSet<EventTarget>();
-const hunkExpansionFallbackInstances = new WeakMap<HTMLElement, HunkExpansionInstance>();
+const hunkExpansionFallbackInstances = new WeakMap<
+  HTMLElement,
+  HunkExpansionInstance
+>();
 
 function installHunkExpansionFallback(
   node: HTMLElement,
@@ -72,10 +75,12 @@ function installHunkExpansionFallback(
 function addHunkExpansionFallbackRoot(root: EventTarget) {
   if (hunkExpansionFallbackRoots.has(root)) return;
   hunkExpansionFallbackRoots.add(root);
-  root.addEventListener("click", handleHunkExpansionFallback, { capture: true });
+  root.addEventListener("click", handleHunkExpansionFallback, {
+    capture: true,
+  });
 }
 
-function handleHunkExpansionFallback(event: MouseEvent) {
+function handleHunkExpansionFallback(event: Event) {
   const currentTarget = event.currentTarget;
   const node =
     currentTarget instanceof ShadowRoot ? currentTarget.host : currentTarget;
@@ -107,7 +112,10 @@ function handleHunkExpansionFallback(event: MouseEvent) {
     }
 
     if (foundExpandable && target.hasAttribute("data-expand-index")) {
-      const parsed = Number.parseInt(target.getAttribute("data-expand-index") ?? "", 10);
+      const parsed = Number.parseInt(
+        target.getAttribute("data-expand-index") ?? "",
+        10,
+      );
       if (Number.isFinite(parsed)) hunkIndex = parsed;
       break;
     }
@@ -116,7 +124,8 @@ function handleHunkExpansionFallback(event: MouseEvent) {
   if (hunkIndex == null) return;
   event.preventDefault();
   event.stopPropagation();
-  const shouldExpandAll = expandAll || event.shiftKey;
+  const shouldExpandAll =
+    expandAll || (event instanceof MouseEvent && event.shiftKey);
   instance.expandHunk(
     hunkIndex,
     shouldExpandAll ? "both" : direction,
@@ -208,8 +217,10 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       enableGutterUtility: true,
       enableLineSelection: true,
       expandUnchanged,
-      hunkSeparators: hunkSeparators === "custom" ? "line-info-basic" : hunkSeparators,
-      unsafeCSS: hunkSeparators === "custom" ? customHunkSeparatorCSS : undefined,
+      hunkSeparators:
+        hunkSeparators === "custom" ? "line-info-basic" : hunkSeparators,
+      unsafeCSS:
+        hunkSeparators === "custom" ? customHunkSeparatorCSS : undefined,
       expansionLineCount: hunkSeparators === "custom" ? 5 : 100,
       lineHoverHighlight: "both" as const,
       onLineSelected: onSelectionChange,
@@ -236,7 +247,11 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
 
   if (selectedFile == null) {
     return (
-      <main id="main" tabIndex={-1} className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none"
+      >
         <div className="grid flex-1 place-items-center p-8 text-center">
           <div className="max-w-sm space-y-3">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">
@@ -244,7 +259,10 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
             </h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Run the CLI inside a repository with pending changes, or pass{" "}
-              <code className="font-mono text-foreground/80" translate="no">git diff</code> arguments to compare revisions.
+              <code className="font-mono text-foreground/80" translate="no">
+                git diff
+              </code>{" "}
+              arguments to compare revisions.
             </p>
           </div>
         </div>
@@ -253,7 +271,11 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
   }
 
   return (
-    <main id="main" tabIndex={-1} className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none"
+    >
       <section className="min-h-0 min-w-0 flex-1">
         {diffView === "file" ? (
           <MultiFileScroller
@@ -293,7 +315,10 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
               >
                 <span className="inline-flex items-center gap-2">
                   <span>Loading patch diff…</span>
-                  <span aria-hidden="true" className="inline-flex items-end gap-0.5">
+                  <span
+                    aria-hidden="true"
+                    className="inline-flex items-end gap-0.5"
+                  >
                     <span className="shell-loading-dot" />
                     <span className="shell-loading-dot" />
                     <span className="shell-loading-dot" />
@@ -309,9 +334,12 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
             ) : (
               <div className="grid place-items-center p-8 text-center text-sm text-muted-foreground">
                 <div className="space-y-1.5">
-                  <p className="font-medium text-foreground">No patch data available</p>
+                  <p className="font-medium text-foreground">
+                    No patch data available
+                  </p>
                   <p className="text-xs leading-relaxed">
-                    Switch to the File or Snippet view, or rerun the CLI with raw diff enabled.
+                    Switch to the File or Snippet view, or rerun the CLI with
+                    raw diff enabled.
                   </p>
                 </div>
               </div>
@@ -538,9 +566,15 @@ function FileDiffSection({
   onViewedChange: (path: string, value: boolean) => void;
   viewed: boolean;
 }) {
-  const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotation[]>([]);
-  const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
-  const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(null);
+  const [commentAnnotations, setCommentAnnotations] = useState<
+    CommentAnnotation[]
+  >([]);
+  const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(
+    null,
+  );
+  const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(
+    null,
+  );
   const [unresolvedLoading, setUnresolvedLoading] = useState(false);
 
   useEffect(() => {
@@ -560,31 +594,34 @@ function FileDiffSection({
     };
   }, [file.hasMergeConflicts, file.path]);
 
-  const addCommentAtLine = useCallback((side: AnnotationSide, lineNumber: number) => {
-    setCommentAnnotations((current) => {
-      if (
-        current.some(
-          (annotation) =>
-            annotation.side === side &&
-            annotation.lineNumber === lineNumber &&
-            annotation.metadata.kind === "comment-form",
-        )
-      ) {
-        return current;
-      }
-      return [
-        ...current,
-        {
-          side,
-          lineNumber,
-          metadata: {
-            id: `${side}-${lineNumber}-${Date.now()}`,
-            kind: "comment-form",
+  const addCommentAtLine = useCallback(
+    (side: AnnotationSide, lineNumber: number) => {
+      setCommentAnnotations((current) => {
+        if (
+          current.some(
+            (annotation) =>
+              annotation.side === side &&
+              annotation.lineNumber === lineNumber &&
+              annotation.metadata.kind === "comment-form",
+          )
+        ) {
+          return current;
+        }
+        return [
+          ...current,
+          {
+            side,
+            lineNumber,
+            metadata: {
+              id: `${side}-${lineNumber}-${Date.now()}`,
+              kind: "comment-form",
+            },
           },
-        },
-      ];
-    });
-  }, []);
+        ];
+      });
+    },
+    [],
+  );
 
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
@@ -593,38 +630,49 @@ function FileDiffSection({
       diffOptions?.onLineSelected?.(range);
       if (range == null) return;
       const side: AnnotationSide =
-        (range.endSide ?? range.side) === "deletions" ? "deletions" : "additions";
+        (range.endSide ?? range.side) === "deletions"
+          ? "deletions"
+          : "additions";
       addCommentAtLine(side, Math.max(range.start, range.end));
     },
     [addCommentAtLine, diffOptions],
   );
 
-  const handleCommentCancel = useCallback((id: string) => {
-    setCommentAnnotations((current) =>
-      current.filter((annotation) => annotation.metadata.id !== id),
-    );
-    setSelectedLines(null);
-    diffOptions?.onLineSelected?.(null);
-  }, [diffOptions]);
+  const handleCommentCancel = useCallback(
+    (id: string) => {
+      setCommentAnnotations((current) =>
+        current.filter((annotation) => annotation.metadata.id !== id),
+      );
+      setSelectedLines(null);
+      diffOptions?.onLineSelected?.(null);
+    },
+    [diffOptions],
+  );
 
-  const handleCommentSubmit = useCallback((id: string, body: string) => {
-    setCommentAnnotations((current) =>
-      current.map((annotation) =>
-        annotation.metadata.id === id
-          ? {
-              ...annotation,
-              metadata: {
-                ...annotation.metadata,
-                body: body.trim().length > 0 ? body.trim() : "Needs review before merging.",
-                kind: "comment",
-              },
-            }
-          : annotation,
-      ),
-    );
-    setSelectedLines(null);
-    diffOptions?.onLineSelected?.(null);
-  }, [diffOptions]);
+  const handleCommentSubmit = useCallback(
+    (id: string, body: string) => {
+      setCommentAnnotations((current) =>
+        current.map((annotation) =>
+          annotation.metadata.id === id
+            ? {
+                ...annotation,
+                metadata: {
+                  ...annotation.metadata,
+                  body:
+                    body.trim().length > 0
+                      ? body.trim()
+                      : "Needs review before merging.",
+                  kind: "comment",
+                },
+              }
+            : annotation,
+        ),
+      );
+      setSelectedLines(null);
+      diffOptions?.onLineSelected?.(null);
+    },
+    [diffOptions],
+  );
 
   const fileDiffOptions = useMemo(
     () => ({
@@ -651,7 +699,9 @@ function FileDiffSection({
           className="grid place-items-center rounded-md border border-border/40 p-6 text-xs text-muted-foreground"
         >
           <span className="inline-flex items-center gap-2">
-            <span className="font-mono text-foreground/70" translate="no">{file.path}</span>
+            <span className="font-mono text-foreground/70" translate="no">
+              {file.path}
+            </span>
             <span>Loading merge conflict…</span>
           </span>
         </div>
@@ -707,7 +757,9 @@ function FileDiffSection({
         className="grid place-items-center rounded-md border border-border/40 p-6 text-xs text-muted-foreground"
       >
         <span className="inline-flex items-center gap-2">
-          <span className="font-mono text-foreground/70" translate="no">{file.path}</span>
+          <span className="font-mono text-foreground/70" translate="no">
+            {file.path}
+          </span>
           <span>Loading…</span>
         </span>
       </div>
@@ -780,7 +832,9 @@ function CustomFileHeader({
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
-          aria-label={collapsed ? `Expand ${fileDiff.name}` : `Collapse ${fileDiff.name}`}
+          aria-label={
+            collapsed ? `Expand ${fileDiff.name}` : `Collapse ${fileDiff.name}`
+          }
           aria-pressed={collapsed}
           onClick={() => onCollapsedChange(!collapsed)}
           className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -866,7 +920,10 @@ function CommentAnnotationView({
         className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-shadow focus:ring-2 focus:ring-ring"
       />
       <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" onClick={() => onSubmit(annotation.metadata.id, body)}>
+        <Button
+          size="sm"
+          onClick={() => onSubmit(annotation.metadata.id, body)}
+        >
           Comment
         </Button>
         <Button
@@ -921,7 +978,9 @@ function ViewedButton({
   return (
     <button
       type="button"
-      aria-label={viewed ? `Mark ${filePath} unviewed` : `Mark ${filePath} viewed`}
+      aria-label={
+        viewed ? `Mark ${filePath} unviewed` : `Mark ${filePath} viewed`
+      }
       aria-pressed={viewed}
       onClick={onClick}
       className={`ml-1 inline-flex h-7 items-center gap-1.5 rounded-[0.55rem] border px-2 font-sans text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${

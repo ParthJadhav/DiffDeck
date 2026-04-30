@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { FileTree, useFileTreeSelection } from "@pierre/trees/react";
 import type { FileTree as TreeModel } from "@pierre/trees";
 import { createPortal } from "react-dom";
@@ -54,9 +60,14 @@ export function Sidebar({
         {fileCount === 0 ? (
           <div className="grid h-full place-items-center p-6 text-center">
             <div className="space-y-1.5">
-              <p className="text-sm font-medium text-foreground">Nothing to diff</p>
+              <p className="text-sm font-medium text-foreground">
+                Nothing to diff
+              </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                The working tree is clean — or your <code className="font-mono" translate="no">git diff</code>{" "}
+                The working tree is clean — or your{" "}
+                <code className="font-mono" translate="no">
+                  git diff
+                </code>{" "}
                 arguments returned no files.
               </p>
             </div>
@@ -76,8 +87,14 @@ export function Sidebar({
                       onSelect: () => onRevealPath(item.path),
                     },
                     {
-                      label: viewedPaths.has(item.path) ? "Mark Unviewed" : "Mark Viewed",
-                      onSelect: () => onViewedPathChange(item.path, !viewedPaths.has(item.path)),
+                      label: viewedPaths.has(item.path)
+                        ? "Mark Unviewed"
+                        : "Mark Viewed",
+                      onSelect: () =>
+                        onViewedPathChange(
+                          item.path,
+                          !viewedPaths.has(item.path),
+                        ),
                     },
                     {
                       label: "Focus Row",
@@ -97,9 +114,7 @@ export function Sidebar({
         )}
       </div>
       {footer != null ? (
-        <div className="border-t border-border/60 px-3 py-2">
-          {footer}
-        </div>
+        <div className="border-t border-border/60 px-3 py-2">{footer}</div>
       ) : null}
     </aside>
   );
@@ -120,10 +135,12 @@ function ContextMenu({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState<{ top: number; left: number }>(() => ({
-    top: anchorRect.bottom + 4,
-    left: Math.max(8, anchorRect.right - 180),
-  }));
+  const [position, setPosition] = useState<{ top: number; left: number }>(
+    () => ({
+      top: anchorRect.bottom + 4,
+      left: Math.max(8, anchorRect.right - 180),
+    }),
+  );
 
   useLayoutEffect(() => {
     const node = ref.current;
@@ -167,8 +184,7 @@ function ContextMenu({
       next?.focus();
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      const prev =
-        buttons[(activeIndex - 1 + buttons.length) % buttons.length];
+      const prev = buttons[(activeIndex - 1 + buttons.length) % buttons.length];
       prev?.focus();
     } else if (event.key === "Home") {
       event.preventDefault();

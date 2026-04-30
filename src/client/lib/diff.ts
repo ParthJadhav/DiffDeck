@@ -1,7 +1,4 @@
-import type {
-  FileContents,
-  FileDiffMetadata,
-} from "@pierre/diffs/react";
+import type { FileContents, FileDiffMetadata } from "@pierre/diffs/react";
 import type { SelectedLineRange } from "@pierre/diffs";
 import type { GitStatusEntry } from "@pierre/trees";
 import type { DiffFileSummary } from "../types.js";
@@ -39,12 +36,15 @@ export function buildSnippetCompare(fileDiff: FileDiffMetadata): {
   };
 }
 
-export function getSelectionSummary(selection: SelectedLineRange | null): string {
+export function getSelectionSummary(
+  selection: SelectedLineRange | null,
+): string {
   if (selection == null) {
     return "No line selection";
   }
 
   const startSide = selection.side == null ? "" : ` ${selection.side}`;
-  const endSide = selection.endSide == null ? startSide : ` ${selection.endSide}`;
+  const endSide =
+    selection.endSide == null ? startSide : ` ${selection.endSide}`;
   return `${selection.start}${startSide} → ${selection.end}${endSide}`;
 }

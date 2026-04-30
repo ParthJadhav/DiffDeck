@@ -37,7 +37,10 @@ export function useDiffTree({
     [session],
   );
 
-  const preparedInput = useMemo(() => prepareFileTreeInput(filePaths), [filePaths]);
+  const preparedInput = useMemo(
+    () => prepareFileTreeInput(filePaths),
+    [filePaths],
+  );
 
   useEffect(() => {
     fileSummaryRef.current = new Map(

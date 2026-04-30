@@ -68,7 +68,12 @@ export function TabsTrigger({
   const active = ctx.value === value;
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+    if (
+      event.key !== "ArrowRight" &&
+      event.key !== "ArrowLeft" &&
+      event.key !== "Home" &&
+      event.key !== "End"
+    ) {
       return;
     }
     event.preventDefault();
@@ -80,7 +85,8 @@ export function TabsTrigger({
     const index = tabs.indexOf(event.currentTarget);
     let nextIndex = index;
     if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
-    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "ArrowLeft")
+      nextIndex = (index - 1 + tabs.length) % tabs.length;
     else if (event.key === "Home") nextIndex = 0;
     else if (event.key === "End") nextIndex = tabs.length - 1;
     const next = tabs[nextIndex];

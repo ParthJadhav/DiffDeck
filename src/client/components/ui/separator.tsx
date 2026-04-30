@@ -5,7 +5,9 @@ export function Separator({
   className,
   orientation = "horizontal",
   ...props
-}: HTMLAttributes<HTMLDivElement> & { orientation?: "horizontal" | "vertical" }) {
+}: HTMLAttributes<HTMLDivElement> & {
+  orientation?: "horizontal" | "vertical";
+}) {
   return (
     <div
       role="separator"

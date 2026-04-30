@@ -16,7 +16,12 @@ export function useRawDiff(
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (diffView !== "patch" || rawDiff != null || loading || !rawDiffAvailable) {
+    if (
+      diffView !== "patch" ||
+      rawDiff != null ||
+      loading ||
+      !rawDiffAvailable
+    ) {
       return;
     }
 

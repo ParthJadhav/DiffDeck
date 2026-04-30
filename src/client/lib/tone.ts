@@ -53,7 +53,10 @@ export function toneTextClass(tone: Tone): string {
   return toneTextClasses[tone];
 }
 
-const toneBadgeVariants: Record<Tone, "default" | "secondary" | "destructive" | "outline"> = {
+const toneBadgeVariants: Record<
+  Tone,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
   added: "outline",
   deleted: "destructive",
   renamed: "outline",
@@ -62,6 +65,8 @@ const toneBadgeVariants: Record<Tone, "default" | "secondary" | "destructive" | 
   muted: "outline",
 };
 
-export function toneBadgeVariant(tone: Tone): "default" | "secondary" | "destructive" | "outline" {
+export function toneBadgeVariant(
+  tone: Tone,
+): "default" | "secondary" | "destructive" | "outline" {
   return toneBadgeVariants[tone];
 }

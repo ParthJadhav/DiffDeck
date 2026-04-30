@@ -29,9 +29,11 @@ export function App() {
   const [themeType, setThemeType] = useState<ThemeChoice>("system");
   const [diffView, setDiffView] = useState<DiffView>("file");
   const [diffStyle, setDiffStyle] = useState<DiffLayout>("split");
-  const [diffIndicators, setDiffIndicators] = useState<DiffIndicatorMode>("bars");
+  const [diffIndicators, setDiffIndicators] =
+    useState<DiffIndicatorMode>("bars");
   const [lineDiffType, setLineDiffType] = useState<DiffLineMode>("word-alt");
-  const [hunkSeparators, setHunkSeparators] = useState<HunkSeparatorMode>("custom");
+  const [hunkSeparators, setHunkSeparators] =
+    useState<HunkSeparatorMode>("custom");
   const [overflow, setOverflow] = useState<OverflowMode>("scroll");
   const [disableBackground, setDisableBackground] = useState(false);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
@@ -75,7 +77,7 @@ export function App() {
 
   const { fileDiffs, requestPath } = useFileDiff(reportError);
   const selectedDiff =
-    selectedPath == null ? null : fileDiffs[selectedPath] ?? null;
+    selectedPath == null ? null : (fileDiffs[selectedPath] ?? null);
   const [scrollSignal, setScrollSignal] = useState(0);
 
   const handleTreeSelection = useCallback((path: string | null) => {
@@ -100,17 +102,20 @@ export function App() {
     }
   }, []);
 
-  const handleCollapsedFileChange = useCallback((path: string, value: boolean) => {
-    setCollapsedFilePaths((current) => {
-      const next = new Set(current);
-      if (value) {
-        next.add(path);
-      } else {
-        next.delete(path);
-      }
-      return next;
-    });
-  }, []);
+  const handleCollapsedFileChange = useCallback(
+    (path: string, value: boolean) => {
+      setCollapsedFilePaths((current) => {
+        const next = new Set(current);
+        if (value) {
+          next.add(path);
+        } else {
+          next.delete(path);
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const handleViewedFileChange = useCallback((path: string, value: boolean) => {
     setViewedFilePaths((current) => {

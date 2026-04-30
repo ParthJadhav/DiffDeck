@@ -8,8 +8,7 @@ const base =
   "inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,scale] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.96] active:duration-75 disabled:pointer-events-none disabled:opacity-50";
 
 const variants: Record<Variant, string> = {
-  default:
-    "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
+  default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
   ghost: "hover:bg-accent hover:text-accent-foreground",
   outline:
     "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
@@ -31,7 +30,16 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", size = "default", type = "button", ...props }, ref) => (
+  (
+    {
+      className,
+      variant = "default",
+      size = "default",
+      type = "button",
+      ...props
+    },
+    ref,
+  ) => (
     <button
       ref={ref}
       type={type}

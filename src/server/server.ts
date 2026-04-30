@@ -19,7 +19,11 @@ function getIndexHtml(clientDir: string): string {
   return readFileSync(join(clientDir, "index.html"), "utf8");
 }
 
-export async function startServer(session: DiffSession, port: number, host: string): Promise<RunningServer> {
+export async function startServer(
+  session: DiffSession,
+  port: number,
+  host: string,
+): Promise<RunningServer> {
   const clientDir = getClientDir();
   const indexHtml = getIndexHtml(clientDir);
   const app = express();
@@ -37,7 +41,9 @@ export async function startServer(session: DiffSession, port: number, host: stri
   app.get("/api/file-diff", (request, response) => {
     const path = request.query.path;
     if (typeof path !== "string" || path.length === 0) {
-      response.status(400).json({ error: "Missing required path query parameter." });
+      response
+        .status(400)
+        .json({ error: "Missing required path query parameter." });
       return;
     }
 
@@ -53,13 +59,17 @@ export async function startServer(session: DiffSession, port: number, host: stri
   app.get("/api/unresolved-file", (request, response) => {
     const path = request.query.path;
     if (typeof path !== "string" || path.length === 0) {
-      response.status(400).json({ error: "Missing required path query parameter." });
+      response
+        .status(400)
+        .json({ error: "Missing required path query parameter." });
       return;
     }
 
     const contents = session.unresolvedFiles.get(path);
     if (contents == null) {
-      response.status(404).json({ error: `No unresolved file found for ${path}.` });
+      response
+        .status(404)
+        .json({ error: `No unresolved file found for ${path}.` });
       return;
     }
 

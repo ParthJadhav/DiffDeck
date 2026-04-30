@@ -10,7 +10,9 @@ export interface UseFileDiffResult {
 export function useFileDiff(
   onError: (message: string) => void,
 ): UseFileDiffResult {
-  const [fileDiffs, setFileDiffs] = useState<Record<string, FileDiffMetadata>>({});
+  const [fileDiffs, setFileDiffs] = useState<Record<string, FileDiffMetadata>>(
+    {},
+  );
   const inflightRef = useRef<Set<string>>(new Set());
   const loadedRef = useRef<Set<string>>(new Set());
   const onErrorRef = useRef(onError);
