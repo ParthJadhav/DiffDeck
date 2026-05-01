@@ -36,7 +36,7 @@ export function CommentAnnotationView({
 
   if (annotation.metadata.kind === "comment") {
     return (
-      <div className="my-3 ml-4 max-w-2xl rounded-md border border-border/70 bg-card p-3 shadow-sm">
+      <div className="app-comment-card my-3 ml-4 max-w-2xl rounded-lg p-3">
         <div className="mb-1 flex items-center gap-2 text-xs">
           <span className="font-semibold text-foreground">You</span>
           <span className="text-muted-foreground">now</span>
@@ -49,7 +49,7 @@ export function CommentAnnotationView({
   }
 
   return (
-    <div className="my-3 ml-4 max-w-2xl rounded-md border border-border/70 bg-card p-3 shadow-sm">
+    <div className="app-comment-card my-3 ml-4 max-w-2xl rounded-lg p-3">
       <div className="mb-2 flex items-center gap-2 text-xs">
         <span className="font-semibold text-foreground">New comment</span>
         <span className="font-mono text-muted-foreground">
@@ -62,7 +62,7 @@ export function CommentAnnotationView({
         onChange={(event) => setBody(event.target.value)}
         aria-label={`Comment on ${annotation.side} line ${annotation.lineNumber}`}
         placeholder="Leave a comment"
-        className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-shadow focus:ring-2 focus:ring-ring"
+        className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] duration-150 ease-out focus:border-ring focus:ring-2 focus:ring-ring"
       />
       <div className="mt-3 flex items-center gap-2">
         <Button size="sm" onClick={() => onSubmit(annotation.metadata.id, body)}>

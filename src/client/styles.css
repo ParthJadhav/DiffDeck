@@ -45,22 +45,22 @@
 }
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
+  --background: 240 12% 98.5%;
+  --foreground: 240 10% 6%;
+  --card: 240 20% 99%;
   --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
+  --popover: 240 20% 99%;
   --popover-foreground: 240 10% 3.9%;
   --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
+  --primary-foreground: 240 20% 98.5%;
+  --secondary: 240 7% 94.5%;
   --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
+  --muted: 240 7% 94.5%;
   --muted-foreground: 240 4% 38%;
-  --accent: 240 4.8% 95.9%;
+  --accent: 240 7% 94.5%;
   --accent-foreground: 240 5.9% 10%;
   --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
+  --destructive-foreground: 240 20% 98.5%;
   --info: 204 80% 40%;
   --info-border: 204 70% 75%;
   --info-foreground: 204 80% 31%;
@@ -69,8 +69,8 @@
   --warning-border: 36 80% 70%;
   --warning-foreground: 36 92% 30%;
   --warning-muted: 36 90% 95%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
+  --border: 240 6% 88%;
+  --input: 240 6% 88%;
   --ring: 240 5.9% 10%;
   --radius: 0.5rem;
 
@@ -79,15 +79,26 @@
   --diff-modified: 217 91% 50%;
   --diff-renamed: 38 92% 40%;
 
+  --app-sidebar: 240 13% 97%;
+  --app-sidebar-control: 240 10% 94%;
+  --app-sidebar-selected: 204 70% 94%;
+  --app-surface-raised: 240 20% 99%;
+  --app-shadow-card:
+    0 0 0 1px hsl(var(--border) / 0.78), 0 1px 2px hsl(240 10% 6% / 0.04),
+    0 8px 20px -18px hsl(240 10% 6% / 0.18);
+  --app-shadow-popover:
+    0 0 0 1px hsl(var(--border) / 0.86), 0 1px 2px hsl(240 10% 6% / 0.08),
+    0 10px 30px -12px hsl(240 10% 6% / 0.22);
+
   color-scheme: light;
 }
 
 .dark {
   --background: 220 14% 6%;
   --foreground: 0 0% 96%;
-  --card: 220 14% 6%;
+  --card: 220 13% 7.6%;
   --card-foreground: 0 0% 96%;
-  --popover: 220 14% 6%;
+  --popover: 220 12% 8.6%;
   --popover-foreground: 0 0% 96%;
   --primary: 0 0% 96%;
   --primary-foreground: 220 14% 6%;
@@ -107,7 +118,7 @@
   --warning-border: 38 75% 35%;
   --warning-foreground: 38 92% 74%;
   --warning-muted: 38 62% 14%;
-  --border: 220 8% 14%;
+  --border: 220 9% 16%;
   --input: 220 10% 13%;
   --ring: 220 8% 40%;
 
@@ -116,6 +127,17 @@
   --diff-modified: 217 91% 65%;
   --diff-renamed: 38 92% 60%;
 
+  --app-sidebar: 220 13% 7%;
+  --app-sidebar-control: 220 11% 10%;
+  --app-sidebar-selected: 204 44% 15%;
+  --app-surface-raised: 220 12% 8.2%;
+  --app-shadow-card:
+    inset 0 1px 0 hsl(0 0% 100% / 0.025), 0 0 0 1px hsl(var(--border) / 0.82),
+    0 8px 18px -16px hsl(0 0% 0% / 0.75);
+  --app-shadow-popover:
+    inset 0 1px 0 hsl(0 0% 100% / 0.045), 0 0 0 1px hsl(var(--border) / 0.9),
+    0 10px 24px -18px hsl(0 0% 0% / 0.86), 0 18px 42px -30px hsl(0 0% 0% / 0.9);
+
   color-scheme: dark;
 }
 
@@ -123,9 +145,9 @@
   :root:not(.light) {
     --background: 220 14% 6%;
     --foreground: 0 0% 96%;
-    --card: 220 14% 6%;
+    --card: 220 13% 7.6%;
     --card-foreground: 0 0% 96%;
-    --popover: 220 14% 6%;
+    --popover: 220 12% 8.6%;
     --popover-foreground: 0 0% 96%;
     --primary: 0 0% 96%;
     --primary-foreground: 220 14% 6%;
@@ -145,7 +167,7 @@
     --warning-border: 38 75% 35%;
     --warning-foreground: 38 92% 74%;
     --warning-muted: 38 62% 14%;
-    --border: 220 8% 14%;
+    --border: 220 9% 16%;
     --input: 220 10% 13%;
     --ring: 220 8% 40%;
 
@@ -153,6 +175,18 @@
     --diff-deleted: 0 78% 65%;
     --diff-modified: 217 91% 65%;
     --diff-renamed: 38 92% 60%;
+
+    --app-sidebar: 220 13% 7%;
+    --app-sidebar-control: 220 11% 10%;
+    --app-sidebar-selected: 204 44% 15%;
+    --app-surface-raised: 220 12% 8.2%;
+    --app-shadow-card:
+      inset 0 1px 0 hsl(0 0% 100% / 0.025), 0 0 0 1px hsl(var(--border) / 0.82),
+      0 8px 18px -16px hsl(0 0% 0% / 0.75);
+    --app-shadow-popover:
+      inset 0 1px 0 hsl(0 0% 100% / 0.045), 0 0 0 1px hsl(var(--border) / 0.9),
+      0 10px 24px -18px hsl(0 0% 0% / 0.86),
+      0 18px 42px -30px hsl(0 0% 0% / 0.9);
 
     color-scheme: dark;
   }
@@ -324,15 +358,60 @@ kbd {
 }
 
 .app-file-tree {
-  --trees-border-color-override: transparent;
-  --trees-selected-bg-override: hsl(var(--accent));
+  --trees-bg-override: hsl(var(--app-sidebar));
+  --trees-bg-muted-override: hsl(var(--app-sidebar-control));
+  --trees-border-color-override: hsl(var(--border) / 0.64);
   --trees-fg-override: hsl(var(--foreground));
-  --trees-theme-focus-ring: hsl(var(--ring));
+  --trees-fg-muted-override: hsl(var(--muted-foreground));
+  --trees-selected-bg-override: hsl(var(--app-sidebar-selected));
+  --trees-selected-fg-override: hsl(var(--foreground));
+  --trees-selected-focused-border-color-override: hsl(var(--info-border));
+  --trees-search-bg-override: hsl(var(--app-sidebar-control));
+  --trees-search-fg-override: hsl(var(--foreground));
+  --trees-scrollbar-thumb-override: hsl(var(--border));
+  --trees-focus-ring-color-override: hsl(var(--ring));
+  --trees-border-radius-override: 0.375rem;
+  --trees-padding-inline-override: 0.75rem;
+  --trees-item-margin-x-override: 0.125rem;
+  --trees-item-padding-x-override: 0.5rem;
+  --trees-status-added-override: hsl(var(--diff-added));
+  --trees-status-deleted-override: hsl(var(--diff-deleted));
+  --trees-status-modified-override: hsl(var(--diff-modified));
+  --trees-status-renamed-override: hsl(var(--diff-renamed));
+  --trees-git-added-color-override: hsl(var(--diff-added));
+  --trees-git-deleted-color-override: hsl(var(--diff-deleted));
+  --trees-git-modified-color-override: hsl(var(--diff-modified));
+  --trees-git-renamed-color-override: hsl(var(--diff-renamed));
+  --trees-git-untracked-color-override: hsl(var(--diff-added));
   font-size: 0.8125rem;
 }
 
 .app-sidebar {
-  background: hsl(var(--card));
+  background: hsl(var(--app-sidebar));
+}
+
+.app-sidebar-header {
+  box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.62);
+}
+
+.app-sidebar-footer {
+  background: hsl(var(--app-sidebar));
+  box-shadow: inset 0 1px 0 hsl(var(--border) / 0.7);
+}
+
+.app-sidebar-action {
+  background: hsl(var(--app-sidebar-control));
+  box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.62);
+}
+
+.app-sidebar-action:hover:not(:disabled) {
+  background: hsl(var(--accent));
+}
+
+.app-count-badge {
+  background: hsl(var(--app-sidebar-control));
+  color: hsl(var(--muted-foreground));
+  box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.5);
 }
 
 [data-diffs-header] {
@@ -340,10 +419,43 @@ kbd {
   top: 0;
   z-index: 1;
   background: hsl(var(--card));
+  box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.72);
 }
 
 .app-file-card {
+  --diffs-light-bg: hsl(var(--card));
+  --diffs-dark-bg: hsl(var(--card));
+  --diffs-fg-number-override: hsl(var(--muted-foreground));
+  --diffs-bg-buffer-override: hsl(var(--muted) / 0.34);
+  --diffs-bg-context-override: hsl(var(--card));
+  --diffs-bg-separator-override: hsl(var(--muted) / 0.5);
+  --diffs-gap-style: 1px solid hsl(var(--border) / 0.65);
+  --diffs-addition-color-override: hsl(var(--diff-added));
+  --diffs-deletion-color-override: hsl(var(--diff-deleted));
+  --diffs-modified-color-override: hsl(var(--diff-modified));
+  background: hsl(var(--card));
   background-clip: padding-box;
+  box-shadow: var(--app-shadow-card);
+}
+
+.app-file-header {
+  min-height: 2.5rem;
+  background: hsl(var(--card));
+}
+
+.app-file-header-open {
+  box-shadow: inset 0 -1px 0 hsl(var(--border) / 0.72);
+}
+
+.app-diff-state {
+  min-height: 7rem;
+  background: hsl(var(--muted) / 0.36);
+}
+
+.app-diff-state-error {
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
+  box-shadow: inset 0 0 0 1px hsl(var(--destructive) / 0.28);
 }
 
 .app-chip {
@@ -399,52 +511,38 @@ kbd {
 }
 
 .app-control-grid {
-  background: hsl(var(--muted) / 0.55);
-  box-shadow: inset 0 0 0 0.5px hsl(var(--border) / 0.7);
-}
-
-.dark .app-control-grid {
-  background: hsl(0 0% 0% / 0.32);
-  box-shadow: inset 0 0 0 0.5px hsl(var(--border));
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) .app-control-grid {
-    background: hsl(0 0% 0% / 0.32);
-    box-shadow: inset 0 0 0 0.5px hsl(var(--border));
-  }
+  background: hsl(var(--app-sidebar-control));
+  box-shadow: inset 0 0 0 1px hsl(var(--border) / 0.62);
 }
 
 .app-option-button-active {
-  background: hsl(var(--background));
+  background: hsl(var(--app-surface-raised));
   box-shadow:
-    0 1px 0 hsl(var(--foreground) / 0.04),
-    0 1px 3px hsl(var(--foreground) / 0.1),
-    inset 0 0 0 1px hsl(var(--border) / 0.5);
+    0 1px 0 hsl(var(--foreground) / 0.035),
+    0 1px 2px hsl(var(--foreground) / 0.08),
+    inset 0 0 0 1px hsl(var(--border) / 0.62);
 }
 
-.dark .app-option-button-active {
-  background: hsl(220 9% 18%);
-  box-shadow:
-    0 1px 0 hsl(0 0% 0% / 0.4),
-    0 1px 2px hsl(0 0% 0% / 0.5),
-    inset 0 0 0 1px hsl(220 8% 26%);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) .app-option-button-active {
-    background: hsl(220 9% 18%);
-    box-shadow:
-      0 1px 0 hsl(0 0% 0% / 0.4),
-      0 1px 2px hsl(0 0% 0% / 0.5),
-      inset 0 0 0 1px hsl(220 8% 26%);
-  }
+.app-comment-card {
+  background: hsl(var(--card));
+  box-shadow: var(--app-shadow-card);
 }
 
 .app-settings-popover {
   animation: popover-enter 140ms cubic-bezier(0.16, 1, 0.3, 1);
   scrollbar-gutter: stable;
+  box-shadow: var(--app-shadow-popover);
   transform-origin: bottom left;
+}
+
+.app-resize-handle {
+  background: hsl(var(--border) / 0.72);
+  transition: background-color 150ms ease;
+}
+
+.app-resize-handle[data-resize-handle-state="hover"],
+.app-resize-handle[data-resize-handle-state="drag"] {
+  background: hsl(var(--ring));
 }
 
 @media (prefers-reduced-motion: reduce) {

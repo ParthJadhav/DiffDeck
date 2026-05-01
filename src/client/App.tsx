@@ -229,7 +229,7 @@ export function App() {
             <Panel defaultSize="20%" minSize="12%" maxSize="45%" className="min-h-0">
               <Sidebar {...sidebarProps} footer={sidebarFooter} />
             </Panel>
-            <PanelResizeHandle className="group relative w-px bg-border/60 transition-colors data-[resize-handle-state=hover]:bg-ring data-[resize-handle-state=drag]:bg-ring">
+            <PanelResizeHandle className="app-resize-handle group relative w-px">
               <span className="absolute inset-y-0 -left-1 -right-1" />
             </PanelResizeHandle>
             <Panel minSize="30%" className="min-h-0">
@@ -255,9 +255,9 @@ function SidebarFooter({
   controlsProps: DiffControlsProps;
 }) {
   return (
-    <div className="flex w-full flex-col gap-2">
-      <CopyCommentsButton comments={comments} />
+    <div className="flex w-full items-center gap-2">
       <DiffControls {...controlsProps} />
+      <CopyCommentsButton comments={comments} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
   };
 
   return (
-    <div className="space-y-1">
+    <div className="min-w-0 flex-1">
       <Button
         type="button"
         variant="outline"
@@ -35,11 +35,11 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
         onClick={handleCopy}
         disabled={commentCount === 0}
         title={commentCount === 0 ? "No comments to copy" : "Copy all comments with context"}
-        className="h-9 w-full justify-start px-2.5 text-[12px]"
+        className="app-sidebar-action h-10 w-full justify-start px-2.5 text-[12px]"
       >
         <CopyIcon />
         <span className="min-w-0 flex-1 truncate text-left">Copy all comments</span>
-        <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-muted px-1.5 text-[10.5px] font-semibold tabular-nums text-muted-foreground">
+        <span className="app-count-badge inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums">
           {copyStatus === "copied" ? "copied" : copyStatus === "failed" ? "error" : commentCount}
         </span>
       </Button>

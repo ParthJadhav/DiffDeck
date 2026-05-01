@@ -160,7 +160,7 @@ function OptionGrid<T extends string>({
   return (
     <div
       className={cn(
-        "app-control-grid grid gap-0.5 rounded-[9px] p-0.5",
+        "app-control-grid grid gap-0.5 rounded-lg p-0.5",
         columns === 2 && "grid-cols-2",
         columns === 3 && "grid-cols-3",
         columns === 4 && "grid-cols-4",
@@ -471,7 +471,7 @@ export function DiffControls(props: DiffControlsProps) {
   }, [open]);
 
   return (
-    <div ref={containerRef} className="flex w-full flex-col gap-2">
+    <div ref={containerRef} className="flex shrink-0 flex-col gap-2">
       {open ? (
         <div
           role="dialog"
@@ -479,7 +479,7 @@ export function DiffControls(props: DiffControlsProps) {
           aria-labelledby={titleId}
           id={panelId}
           style={{ ...panelStyle, overscrollBehavior: "contain" }}
-          className="app-settings-popover z-50 overflow-y-auto overflow-x-hidden rounded-[14px] bg-popover p-2.5 text-popover-foreground shadow-[0_0_0_0.5px_hsl(var(--border)/0.85),0_1px_2px_hsl(var(--foreground)/0.06),0_8px_24px_-4px_hsl(var(--foreground)/0.18),0_24px_56px_-12px_hsl(var(--foreground)/0.28)]"
+          className="app-settings-popover z-50 overflow-y-auto overflow-x-hidden rounded-xl bg-popover p-2 text-popover-foreground"
         >
           <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
             <div
@@ -549,7 +549,7 @@ export function DiffControls(props: DiffControlsProps) {
             </ControlSection>
 
             <ControlSection label="Options">
-              <div className="app-control-grid grid grid-cols-2 gap-x-1 gap-y-0 rounded-[9px] p-1">
+              <div className="app-control-grid grid grid-cols-2 gap-x-1 gap-y-0 rounded-lg p-1">
                 <CheckLabel checked={showLineNumbers} onChange={onShowLineNumbersChange}>
                   Line nums
                 </CheckLabel>
@@ -578,7 +578,7 @@ export function DiffControls(props: DiffControlsProps) {
           aria-haspopup="dialog"
           onClick={() => setOpen((prev) => !prev)}
           className={cn(
-            "inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             open && "bg-accent text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]",
           )}
         >

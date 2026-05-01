@@ -32,8 +32,8 @@ export function CustomFileHeader({
   return (
     <div
       className={cn(
-        "flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1.5",
-        !collapsed && "border-b border-border/70",
+        "app-file-header flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1.5",
+        !collapsed && "app-file-header-open",
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -55,7 +55,7 @@ export function CustomFileHeader({
           {fileDiff.name}
         </span>
         {hasMergeConflicts ? (
-          <span className="inline-flex shrink-0 items-center rounded-md border border-warning-border bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-warning-foreground">
+          <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-warning-foreground shadow-[inset_0_0_0_1px_hsl(var(--warning-border)/0.8)]">
             Conflict
           </span>
         ) : null}
@@ -98,9 +98,9 @@ function FileIcon() {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3rem] border border-info text-info"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_hsl(var(--info-border)/0.75)]"
     >
-      <span className="h-1.5 w-1.5 rounded-sm bg-info" />
+      <span className="h-1.5 w-1.5 rounded-[2px] bg-info" />
     </span>
   );
 }
@@ -121,10 +121,10 @@ function ViewedButton({
       aria-pressed={viewed}
       onClick={onClick}
       className={cn(
-        "ml-1 inline-flex h-7 items-center gap-1.5 rounded-[0.55rem] border px-2 font-sans text-xs font-medium transition-[background-color,border-color,color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "ml-1 inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 font-sans text-xs font-medium transition-[background-color,border-color,color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         viewed
-          ? "border-info-border bg-info-muted text-info-foreground hover:bg-info-muted/80"
-          : "border-border/90 bg-secondary/50 text-muted-foreground hover:border-muted-foreground/50 hover:bg-accent/60 hover:text-foreground",
+          ? "border-info-border/80 bg-info-muted text-info-foreground hover:border-info-border hover:bg-info-muted/80"
+          : "border-border/70 bg-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground",
       )}
     >
       <ViewedIcon checked={viewed} />

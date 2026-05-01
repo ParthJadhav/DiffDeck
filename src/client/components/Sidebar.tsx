@@ -14,13 +14,13 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
   const headerLabel = buildHeader(diffArgs);
 
   return (
-    <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_hsl(var(--border)/0.6)] lg:shadow-[inset_-1px_0_0_hsl(var(--border)/0.6)]">
-      <div className="flex h-11 items-center gap-2 px-3 shadow-[inset_0_-1px_0_hsl(var(--border)/0.45)]">
+    <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_hsl(var(--border)/0.7)] lg:shadow-none">
+      <div className="app-sidebar-header flex h-11 items-center gap-2 px-3">
         <span className="font-mono text-[12px] font-semibold tracking-tight text-foreground">
           cli-diff
         </span>
         <span
-          className="ml-auto inline-flex h-5 items-center rounded-full bg-muted/55 px-2 text-[11px] font-medium tabular-nums text-muted-foreground"
+          className="app-count-badge ml-auto inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tabular-nums"
           title={headerLabel}
           aria-label={`${fileCount} ${fileCount === 1 ? "file" : "files"} in diff`}
         >
@@ -45,14 +45,12 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
         ) : (
           <FileTree
             model={treeModel}
-            className="app-file-tree h-full w-full overflow-hidden"
+            className="app-file-tree h-full w-full overflow-hidden pt-1.5"
             style={{ height: "100%" }}
           />
         )}
       </div>
-      {footer != null ? (
-        <div className="px-3 py-2 shadow-[inset_0_1px_0_hsl(var(--border)/0.6)]">{footer}</div>
-      ) : null}
+      {footer != null ? <div className="app-sidebar-footer px-3 py-2">{footer}</div> : null}
     </aside>
   );
 }

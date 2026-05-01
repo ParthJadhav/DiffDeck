@@ -71,8 +71,17 @@ export function useDiffTree({
       },
       search: true,
       unsafeCSS: `
-        [data-item-button][data-item-selected="true"] {
-          border-radius: 14px;
+        [data-type='item'] {
+          transition: background-color 120ms ease, color 120ms ease;
+        }
+
+        [data-type='item'][data-item-selected='true'] {
+          border-radius: 6px;
+        }
+
+        [data-item-section='decoration'] {
+          font-size: 11px;
+          font-weight: 600;
         }
       `,
       onSelectionChange: (selectedPaths) => {

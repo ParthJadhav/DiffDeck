@@ -300,7 +300,7 @@ function MultiFileScroller(props: {
 
   return (
     <div ref={containerRef} className="h-full overflow-auto">
-      <div className="grid gap-3 p-3">
+      <div className="grid gap-2.5 p-2.5">
         {files.map((file) => (
           <div
             key={file.path}
@@ -312,7 +312,7 @@ function MultiFileScroller(props: {
                 sectionRefs.current.set(file.path, node);
               }
             }}
-            className="scroll-mt-3 overflow-hidden rounded-xl border border-border/70 bg-background"
+            className="app-file-card scroll-mt-2.5 overflow-hidden rounded-lg"
           >
             <FileDiffSection
               collapsed={collapsedFilePaths.has(file.path)}
@@ -487,7 +487,7 @@ function FileDiffSection({
       return (
         <div
           role="alert"
-          className="grid place-items-center rounded-md border border-destructive/40 p-6 text-xs text-destructive"
+          className="app-diff-state app-diff-state-error grid place-items-center p-6 text-xs"
         >
           <span className="inline-flex items-center gap-2">
             <span className="font-mono" translate="no">
@@ -505,7 +505,7 @@ function FileDiffSection({
           role="status"
           aria-live="polite"
           aria-busy="true"
-          className="grid place-items-center rounded-md border border-border/40 p-6 text-xs text-muted-foreground"
+          className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
         >
           <span className="inline-flex items-center gap-2">
             <span className="font-mono text-foreground/70" translate="no">
@@ -563,7 +563,7 @@ function FileDiffSection({
         role="status"
         aria-live="polite"
         aria-busy="true"
-        className="grid place-items-center rounded-md border border-border/40 p-6 text-xs text-muted-foreground"
+        className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
       >
         <span className="inline-flex items-center gap-2">
           <span className="font-mono text-foreground/70" translate="no">
