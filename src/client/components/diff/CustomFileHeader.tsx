@@ -55,7 +55,7 @@ export function CustomFileHeader({
           {fileDiff.name}
         </span>
         {hasMergeConflicts ? (
-          <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-warning-foreground shadow-[inset_0_0_0_1px_hsl(var(--warning-border)/0.8)]">
+          <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-foreground shadow-[inset_0_0_0_1px_hsl(var(--warning-border)/0.8)]">
             Conflict
           </span>
         ) : null}
@@ -87,7 +87,10 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cn("h-3.5 w-3.5 transition-transform duration-150", expanded && "rotate-90")}
+      className={cn(
+        "h-3.5 w-3.5 transition-transform duration-150 ease-out",
+        expanded && "rotate-90",
+      )}
     >
       <path d="M6 4l4 4-4 4" />
     </svg>
@@ -121,10 +124,10 @@ function ViewedButton({
       aria-pressed={viewed}
       onClick={onClick}
       className={cn(
-        "ml-1 inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 font-sans text-xs font-medium transition-[background-color,border-color,color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "app-viewed-button ml-1 inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 font-sans text-xs font-medium transition-[background-color,box-shadow,color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         viewed
-          ? "border-info-border/80 bg-info-muted text-info-foreground hover:border-info-border hover:bg-info-muted/80"
-          : "border-border/70 bg-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground",
+          ? "bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_hsl(var(--info-border)/0.8)] hover:bg-info-muted/80 hover:shadow-[inset_0_0_0_1px_hsl(var(--info-border))]"
+          : "bg-transparent text-muted-foreground shadow-[inset_0_0_0_1px_hsl(var(--border)/0.7)] hover:bg-accent hover:text-foreground hover:shadow-[inset_0_0_0_1px_hsl(var(--border))]",
       )}
     >
       <ViewedIcon checked={viewed} />
@@ -135,7 +138,7 @@ function ViewedButton({
 
 function ViewedIcon({ checked }: { checked: boolean }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0">
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 shrink-0">
       <rect
         x="1.75"
         y="1.75"
@@ -145,15 +148,13 @@ function ViewedIcon({ checked }: { checked: boolean }) {
         className={checked ? "fill-info stroke-info" : "stroke-current"}
         strokeWidth="1.6"
       />
-      {checked ? (
-        <path
-          d="M5 8.1l2.05 2.05L11.25 5.8"
-          className="stroke-background"
-          strokeWidth="1.65"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ) : null}
+      <path
+        d="M5 8.1l2.05 2.05L11.25 5.8"
+        className={cn("app-viewed-check stroke-background", checked && "app-viewed-check-visible")}
+        strokeWidth="1.65"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

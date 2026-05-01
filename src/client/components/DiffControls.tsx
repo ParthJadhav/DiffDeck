@@ -37,7 +37,7 @@ function CheckLabel({
   children: React.ReactNode;
 }) {
   return (
-    <label className="app-check-label group flex h-7 cursor-pointer select-none items-center gap-2 rounded-[6px] px-1.5 text-[12px] leading-none text-foreground/90 transition-[background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground">
+    <label className="app-check-label group flex h-10 cursor-pointer select-none items-center gap-2 rounded-[6px] px-1.5 text-[12px] leading-none text-foreground/90 transition-[background-color,box-shadow,color,scale] duration-150 ease-out hover:bg-accent hover:text-foreground active:scale-[0.98] active:duration-75 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-popover">
       <span
         className={cn(
           "app-check-box relative inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-[3.5px] transition-[background-color,box-shadow] duration-150 ease-out",
@@ -84,15 +84,26 @@ const themeLabels: Record<ThemeChoice, string> = {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-0.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground/80">
+    <div className="px-0.5 text-[10px] font-semibold uppercase text-muted-foreground/80">
       {children}
     </div>
   );
 }
 
-function ControlSection({ children, label }: { children: React.ReactNode; label: string }) {
+function ControlSection({
+  children,
+  index,
+  label,
+}: {
+  children: React.ReactNode;
+  index: number;
+  label: string;
+}) {
   return (
-    <section className="space-y-1">
+    <section
+      className="app-settings-section space-y-1"
+      style={{ "--settings-section-index": index } as CSSProperties}
+    >
       <SectionLabel>{label}</SectionLabel>
       {children}
     </section>
@@ -121,7 +132,7 @@ function OptionButton<T extends string>({
       title={description}
       onClick={() => onClick(value)}
       className={cn(
-        "app-option-button group flex h-7 min-w-0 items-center justify-center gap-1.5 rounded-[6px] px-2 text-left text-[11.5px] transition-[background-color,color,box-shadow,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
+        "app-option-button group flex h-10 min-w-0 items-center justify-center gap-1.5 rounded-[6px] px-2 text-left text-[11.5px] transition-[background-color,color,box-shadow,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
         active
           ? "app-option-button-active text-foreground"
           : "bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -135,7 +146,7 @@ function OptionButton<T extends string>({
       >
         {icon}
       </span>
-      <span className="min-w-0 truncate font-medium tracking-tight">{children}</span>
+      <span className="min-w-0 truncate font-medium">{children}</span>
     </button>
   );
 }
@@ -411,10 +422,13 @@ export function DiffControls(props: DiffControlsProps) {
   } = props;
 
   const [open, setOpen] = useState(false);
+  const [panelMounted, setPanelMounted] = useState(false);
+  const [panelState, setPanelState] = useState<"closed" | "open">("closed");
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
   const panelId = useId();
   const titleId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const updatePanelPosition = useCallback(() => {
@@ -448,8 +462,22 @@ export function DiffControls(props: DiffControlsProps) {
   }, [open, updatePanelPosition]);
 
   useEffect(() => {
-    if (!open) return;
-    const node = containerRef.current?.querySelector<HTMLElement>("button, input");
+    if (open) {
+      setPanelMounted(true);
+      const frame = window.requestAnimationFrame(() => setPanelState("open"));
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    setPanelState("closed");
+    if (!panelMounted) return;
+
+    const timer = window.setTimeout(() => setPanelMounted(false), 140);
+    return () => window.clearTimeout(timer);
+  }, [open, panelMounted]);
+
+  useEffect(() => {
+    if (!open || !panelMounted) return;
+    const node = panelRef.current?.querySelector<HTMLElement>("button, input");
     node?.focus();
     const onPointerDown = (event: MouseEvent) => {
       if (containerRef.current != null && !containerRef.current.contains(event.target as Node)) {
@@ -468,38 +496,40 @@ export function DiffControls(props: DiffControlsProps) {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open]);
+  }, [open, panelMounted]);
 
   return (
     <div ref={containerRef} className="flex shrink-0 flex-col gap-2">
-      {open ? (
+      {panelMounted ? (
         <div
+          ref={panelRef}
           role="dialog"
           aria-modal="false"
           aria-labelledby={titleId}
+          data-state={panelState}
           id={panelId}
           style={{ ...panelStyle, overscrollBehavior: "contain" }}
-          className="app-settings-popover z-50 overflow-y-auto overflow-x-hidden rounded-xl bg-popover p-2 text-popover-foreground"
+          className="app-settings-popover z-50 overflow-y-auto overflow-x-hidden rounded-2xl bg-popover p-2 text-popover-foreground"
         >
-          <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-            <div
-              id={titleId}
-              className="text-[12.5px] font-semibold leading-none tracking-[-0.01em] text-foreground"
-            >
+          <div
+            className="app-settings-section mb-2 flex items-center justify-between gap-2 px-0.5"
+            style={{ "--settings-section-index": 0 } as CSSProperties}
+          >
+            <div id={titleId} className="text-[12.5px] font-semibold leading-none text-foreground">
               Diff settings
             </div>
             <button
               type="button"
               aria-label="Close diff settings"
               onClick={() => setOpen(false)}
-              className="app-icon-btn h-6 w-6"
+              className="app-icon-btn h-7 w-7"
             >
               <MiniIcon name="none" />
             </button>
           </div>
 
           <div className="space-y-2">
-            <ControlSection label="Layout">
+            <ControlSection label="Layout" index={1}>
               <OptionGrid
                 labels={{ split: "Split", unified: "Unified" }}
                 descriptions={{
@@ -516,7 +546,7 @@ export function DiffControls(props: DiffControlsProps) {
               />
             </ControlSection>
 
-            <ControlSection label="Flow">
+            <ControlSection label="Flow" index={2}>
               <OptionGrid
                 labels={overflowLabels}
                 descriptions={{
@@ -533,7 +563,7 @@ export function DiffControls(props: DiffControlsProps) {
               />
             </ControlSection>
 
-            <ControlSection label="Theme">
+            <ControlSection label="Theme" index={3}>
               <OptionGrid
                 labels={themeLabels}
                 icons={{
@@ -548,8 +578,8 @@ export function DiffControls(props: DiffControlsProps) {
               />
             </ControlSection>
 
-            <ControlSection label="Options">
-              <div className="app-control-grid grid grid-cols-2 gap-x-1 gap-y-0 rounded-lg p-1">
+            <ControlSection label="Options" index={4}>
+              <div className="app-control-grid grid grid-cols-2 gap-x-1 gap-y-0 rounded-[10px] p-1">
                 <CheckLabel checked={showLineNumbers} onChange={onShowLineNumbersChange}>
                   Line nums
                 </CheckLabel>

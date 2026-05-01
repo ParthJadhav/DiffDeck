@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatCommentExport, type CommentExportRecord } from "../lib/commentExport.js";
+import { cn } from "../lib/cn.js";
 import { Button } from "./ui/button.js";
 
 type CopyStatus = "idle" | "copied" | "failed";
@@ -30,17 +31,48 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
     <div className="min-w-0 flex-1">
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="sm"
         onClick={handleCopy}
         disabled={commentCount === 0}
+        aria-label={
+          commentCount === 0
+            ? "No comments to copy"
+            : `Copy ${commentCount} ${commentCount === 1 ? "comment" : "comments"} with context`
+        }
         title={commentCount === 0 ? "No comments to copy" : "Copy all comments with context"}
         className="app-sidebar-action h-10 w-full justify-start px-2.5 text-[12px]"
       >
         <CopyIcon />
         <span className="min-w-0 flex-1 truncate text-left">Copy all comments</span>
-        <span className="app-count-badge inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums">
-          {copyStatus === "copied" ? "copied" : copyStatus === "failed" ? "error" : commentCount}
+        <span
+          className="app-count-badge app-copy-status inline-grid h-5 w-12 shrink-0 place-items-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums"
+          aria-hidden="true"
+        >
+          <span
+            className={cn(
+              "app-copy-status-item",
+              copyStatus === "idle" && "app-copy-status-item-visible",
+            )}
+          >
+            {commentCount}
+          </span>
+          <span
+            className={cn(
+              "app-copy-status-item",
+              copyStatus === "copied" && "app-copy-status-item-visible",
+            )}
+          >
+            copied
+          </span>
+          <span
+            className={cn(
+              "app-copy-status-item",
+              copyStatus === "failed" && "app-copy-status-item-visible",
+            )}
+          >
+            error
+          </span>
         </span>
       </Button>
       <span className="sr-only" role="status" aria-live="polite">

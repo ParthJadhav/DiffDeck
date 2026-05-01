@@ -101,9 +101,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       >
         <div className="grid flex-1 place-items-center p-8 text-center">
           <div className="max-w-sm space-y-3">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">
-              No diff to render
-            </h1>
+            <h1 className="text-xl font-semibold text-foreground">No diff to render</h1>
             <p className="text-sm leading-relaxed text-muted-foreground">
               Run the CLI inside a repository with pending changes, or pass{" "}
               <code className="font-mono text-foreground/80" translate="no">
