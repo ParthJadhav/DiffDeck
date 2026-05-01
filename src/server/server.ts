@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { DiffSession } from "./types.js";
+import { buildCacheKey } from "./cacheKey.js";
 
 export interface RunningServer {
   url: string;
@@ -33,7 +34,6 @@ export async function startServer(
       repoRoot: session.repoRoot,
       currentDirectory: session.currentDirectory,
       diffArgs: session.diffArgs,
-      rawDiffAvailable: session.rawDiff.length > 0,
       files: session.files,
     });
   });
@@ -70,12 +70,8 @@ export async function startServer(
     response.json({
       name: path,
       contents,
-      cacheKey: `cli-diff:unresolved:${path}`,
+      cacheKey: buildCacheKey("unresolved", path, contents),
     });
-  });
-
-  app.get("/api/raw-diff", (_request, response) => {
-    response.type("text/plain").send(session.rawDiff);
   });
 
   app.use(express.static(clientDir));

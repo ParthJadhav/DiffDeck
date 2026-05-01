@@ -15,6 +15,5 @@ export interface SessionPayload {
   repoRoot: string;
   currentDirectory: string;
   diffArgs: string[];
-  rawDiffAvailable: boolean;
   files: DiffFileSummary[];
 }

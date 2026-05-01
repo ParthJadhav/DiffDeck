@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [".agents/**", ".claude/**", ".factory/**", ".kiro/**", ".rovodev/**"],
   "plugins": ["typescript", "unicorn", "oxc", "react"],
   "categories": {
     "correctness": "error",

@@ -15,17 +15,8 @@ export const highlighterLangs = [
   "markdown",
 ] as const;
 
-export const virtualizerConfig = {
-  intersectionObserverMargin: 4000,
-  overscrollSize: 1200,
-  resizeDebugging: false,
-} as const;
-
-export const diffViews = ["file", "snippet", "patch"] as const;
 export const themeChoices = ["system", "light", "dark"] as const;
 export const diffLayouts = ["split", "unified"] as const;
-export const diffIndicatorModes = ["bars", "classic", "none"] as const;
-export const diffLineModes = ["word", "word-alt", "char", "none"] as const;
 export const hunkSeparatorModes = [
   "line-info",
   "line-info-basic",
@@ -35,25 +26,12 @@ export const hunkSeparatorModes = [
 ] as const;
 export const overflowModes = ["scroll", "wrap"] as const;
 
-export const diffIndicatorLabels = {
-  bars: "Bars",
-  classic: "Classic +/-",
-  none: "None",
-} as const;
-
-export const hunkSeparatorLabels = {
-  "line-info": "Line Info",
-  "line-info-basic": "Line Info Basic",
-  metadata: "Metadata",
-  simple: "Simple",
-  custom: "Custom CSS",
-} as const;
-
 export const customHunkSeparatorCSS = `
 [data-separator="line-info-basic"] {
-  height: 24px;
-  background: var(--diffs-bg);
+  height: 30px;
+  background: color-mix(in lab, var(--diffs-fg-number) 6%, var(--diffs-bg));
   position: relative;
+  border-block: 1px solid color-mix(in lab, var(--diffs-fg-number) 18%, transparent);
 }
 
 [data-diff-type="single"] [data-gutter] [data-separator-wrapper],
@@ -62,13 +40,14 @@ export const customHunkSeparatorCSS = `
   left: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: max-content;
   margin-left: calc(-2ch - 2px);
   background: transparent;
-  color: var(--diffs-fg-number);
+  color: color-mix(in lab, var(--diffs-fg) 78%, var(--diffs-fg-number));
   font-family: var(--diffs-header-font-family, var(--diffs-header-font-fallback));
-  font-size: 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 [data-separator="line-info-basic"] [data-separator-content] {
@@ -92,16 +71,18 @@ export const customHunkSeparatorCSS = `
   align-self: unset;
   min-width: unset;
   min-height: unset;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid color-mix(in lab, var(--diffs-fg-number) 32%, transparent);
-  border-radius: 5px;
+  border: 1px solid color-mix(in lab, var(--diffs-fg-number) 55%, transparent);
+  border-radius: 6px;
   background: var(--diffs-bg);
-  color: inherit;
+  color: var(--diffs-fg);
   font: inherit;
+  font-weight: 600;
   line-height: 1;
   flex: 0 0 auto;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 [data-diff-type="single"] [data-gutter] [data-expand-down]::before,
@@ -135,6 +116,7 @@ export const customHunkSeparatorCSS = `
   padding-inline: 0;
   cursor: pointer;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 [data-diff-type="single"] [data-gutter] [data-expand-all-button],
@@ -142,32 +124,31 @@ export const customHunkSeparatorCSS = `
   position: relative;
   display: inline-grid;
   width: auto;
+  height: 22px;
   min-width: max-content;
-  margin-left: 6px;
-  padding-inline: 6px;
+  margin-left: 10px;
+  padding-inline: 10px;
+  border: 1px solid color-mix(in lab, var(--diffs-fg-number) 55%, transparent);
+  border-radius: 999px;
+  background: var(--diffs-bg);
   text-transform: lowercase;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 [data-diff-type="single"] [data-gutter] [data-expand-all-button]::before,
 [data-diff-type="split"] [data-deletions] [data-gutter] [data-expand-all-button]::before {
-  content: "";
-  display: block;
-  position: absolute;
-  top: 50%;
-  left: -8px;
-  width: 3px;
-  height: 3px;
-  margin-top: -1px;
-  border-radius: 2px;
-  background-color: var(--diffs-fg-number);
-  pointer-events: none;
+  content: none;
 }
 
 [data-diff-type="single"] [data-gutter] [data-separator-content]:hover,
 [data-diff-type="single"] [data-gutter] [data-expand-button]:hover,
+[data-diff-type="single"] [data-gutter] [data-expand-all-button]:hover,
 [data-diff-type="split"] [data-deletions] [data-gutter] [data-separator-content]:hover,
-[data-diff-type="split"] [data-deletions] [data-gutter] [data-expand-button]:hover {
+[data-diff-type="split"] [data-deletions] [data-gutter] [data-expand-button]:hover,
+[data-diff-type="split"] [data-deletions] [data-gutter] [data-expand-all-button]:hover {
   color: var(--diffs-fg);
+  border-color: color-mix(in lab, var(--diffs-fg-number) 90%, transparent);
+  background: color-mix(in lab, var(--diffs-fg-number) 14%, var(--diffs-bg));
 }
 `;

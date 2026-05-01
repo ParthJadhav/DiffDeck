@@ -8,7 +8,6 @@ export function ShellState({
   children: React.ReactNode;
   variant?: "default" | "error";
 }) {
-  // Trailing ellipsis signals an in-progress state — animate it.
   const text = childrenToString(children);
   const isLoading = variant === "default" && /…\s*$/.test(text);
   const stripped = isLoading ? text.replace(/…\s*$/, "") : text;
@@ -38,14 +37,6 @@ export function ShellState({
           children
         )}
       </div>
-    </div>
-  );
-}
-
-export function InlineShellState({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid place-items-center p-8 text-center text-sm text-muted-foreground">
-      {children}
     </div>
   );
 }

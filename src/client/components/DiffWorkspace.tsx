@@ -2,159 +2,40 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDiff,
   UnresolvedFile,
-  MultiFileDiff,
-  PatchDiff,
   type FileContents,
-  Virtualizer,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
-import type {
-  AnnotationSide,
-  DiffLineAnnotation,
-  ExpansionDirections,
-  SelectedLineRange,
-} from "@pierre/diffs";
-import { customHunkSeparatorCSS, virtualizerConfig } from "../lib/constants.js";
+import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
+import { customHunkSeparatorCSS } from "../lib/constants.js";
 import { fetchJson } from "../lib/api.js";
-import { buildSnippetCompare } from "../lib/diff.js";
-import type {
-  DiffIndicatorMode,
-  DiffLayout,
-  DiffLineMode,
-  DiffView,
-  HunkSeparatorMode,
-  OverflowMode,
-  ThemeChoice,
-} from "../lib/uiTypes.js";
+import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
+import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffFileSummary } from "../types.js";
-import { renderHeaderMetadata } from "./Annotations.js";
-import { Button } from "./ui/button.js";
-
-type CommentAnnotationMetadata =
-  | {
-      id: string;
-      kind: "comment-form";
-    }
-  | {
-      body: string;
-      id: string;
-      kind: "comment";
-    };
-
-type CommentAnnotation = DiffLineAnnotation<CommentAnnotationMetadata>;
-
-type HunkExpansionInstance = {
-  expandHunk: (
-    hunkIndex: number,
-    direction: ExpansionDirections,
-    expansionLineCountOverride?: number,
-  ) => void;
-};
-
-const hunkExpansionFallbackNodes = new WeakSet<HTMLElement>();
-const hunkExpansionFallbackRoots = new WeakSet<EventTarget>();
-const hunkExpansionFallbackInstances = new WeakMap<HTMLElement, HunkExpansionInstance>();
-
-function installHunkExpansionFallback(node: HTMLElement, instance: HunkExpansionInstance) {
-  hunkExpansionFallbackInstances.set(node, instance);
-  if (!hunkExpansionFallbackNodes.has(node)) {
-    hunkExpansionFallbackNodes.add(node);
-    addHunkExpansionFallbackRoot(node);
-  }
-  if (node.shadowRoot != null) {
-    addHunkExpansionFallbackRoot(node.shadowRoot);
-  }
-}
-
-function addHunkExpansionFallbackRoot(root: EventTarget) {
-  if (hunkExpansionFallbackRoots.has(root)) return;
-  hunkExpansionFallbackRoots.add(root);
-  root.addEventListener("click", handleHunkExpansionFallback, {
-    capture: true,
-  });
-}
-
-function handleHunkExpansionFallback(event: Event) {
-  const currentTarget = event.currentTarget;
-  const node = currentTarget instanceof ShadowRoot ? currentTarget.host : currentTarget;
-  if (!(node instanceof HTMLElement)) return;
-  const instance = hunkExpansionFallbackInstances.get(node);
-  if (instance == null) return;
-
-  let direction: ExpansionDirections = "both";
-  let expandAll = false;
-  let foundExpandable = false;
-  let hunkIndex: number | null = null;
-
-  for (const target of event.composedPath()) {
-    if (!(target instanceof HTMLElement)) continue;
-    if (target === node) break;
-
-    if (
-      !foundExpandable &&
-      (target.hasAttribute("data-expand-button") || target.hasAttribute("data-unmodified-lines"))
-    ) {
-      foundExpandable = true;
-      expandAll = target.hasAttribute("data-expand-all-button");
-      if (target.hasAttribute("data-expand-up")) {
-        direction = "up";
-      } else if (target.hasAttribute("data-expand-down")) {
-        direction = "down";
-      }
-    }
-
-    if (foundExpandable && target.hasAttribute("data-expand-index")) {
-      const parsed = Number.parseInt(target.getAttribute("data-expand-index") ?? "", 10);
-      if (Number.isFinite(parsed)) hunkIndex = parsed;
-      break;
-    }
-  }
-
-  if (hunkIndex == null) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const shouldExpandAll = expandAll || (event instanceof MouseEvent && event.shiftKey);
-  instance.expandHunk(
-    hunkIndex,
-    shouldExpandAll ? "both" : direction,
-    shouldExpandAll ? Number.POSITIVE_INFINITY : undefined,
-  );
-}
+import {
+  CommentAnnotationView,
+  createCommentAnnotation,
+  type CommentAnnotation,
+} from "./diff/CommentAnnotation.js";
+import { CustomFileHeader } from "./diff/CustomFileHeader.js";
+import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
 
 export interface DiffWorkspaceProps {
-  collapsed: boolean;
   collapsedFilePaths: ReadonlySet<string>;
-  diffIndicators: DiffIndicatorMode;
   diffStyle: DiffLayout;
-  diffView: DiffView;
   disableBackground: boolean;
   expandUnchanged: boolean;
   files: DiffFileSummary[];
   fileDiffs: Record<string, FileDiffMetadata>;
   hunkSeparators: HunkSeparatorMode;
-  lineDiffType: DiffLineMode;
-  onCollapsedChange: (value: boolean) => void;
   onCollapsedFileChange: (path: string, value: boolean) => void;
-  onDiffStyleChange: (value: DiffLayout) => void;
-  onDiffViewChange: (value: DiffView) => void;
-  onExpandUnchangedChange: (value: boolean) => void;
-  onHunkSeparatorsChange: (value: HunkSeparatorMode) => void;
-  onLineDiffTypeChange: (value: DiffLineMode) => void;
-  onOverflowChange: (value: OverflowMode) => void;
+  onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
-  onSelectionChange: (range: SelectedLineRange | null) => void;
-  onShowLineNumbersChange: (value: boolean) => void;
-  onThemeTypeChange: (value: ThemeChoice) => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
   overflow: OverflowMode;
-  rawDiff: string | null;
-  rawDiffLoading: boolean;
   scrollSignal: number;
-  selectedDiff: FileDiffMetadata | null;
   selectedFile: DiffFileSummary | null;
   selectedPath: string | null;
-  selection: SelectedLineRange | null;
   showLineNumbers: boolean;
   themeType: ThemeChoice;
   viewedFilePaths: ReadonlySet<string>;
@@ -162,26 +43,20 @@ export interface DiffWorkspaceProps {
 
 export function DiffWorkspace(props: DiffWorkspaceProps) {
   const {
-    collapsed,
     collapsedFilePaths,
-    diffIndicators,
     diffStyle,
-    diffView,
     disableBackground,
     expandUnchanged,
     files,
     fileDiffs,
     hunkSeparators,
-    onRequestFileDiff,
-    onSelectionChange,
     onCollapsedFileChange,
+    onCommentSaved,
+    onRequestFileDiff,
     onViewedFileChange,
     onVisiblePathChange,
     overflow,
-    rawDiff,
-    rawDiffLoading,
     scrollSignal,
-    selectedDiff,
     selectedFile,
     selectedPath,
     showLineNumbers,
@@ -189,16 +64,9 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     viewedFilePaths,
   } = props;
 
-  const snippetCompare = useMemo(
-    () => (selectedDiff == null ? null : buildSnippetCompare(selectedDiff)),
-    [selectedDiff],
-  );
-
   const diffOptions = useMemo(
     () => ({
-      collapsed,
       collapsedContextThreshold: 1,
-      diffIndicators,
       diffStyle,
       disableBackground,
       disableLineNumbers: !showLineNumbers,
@@ -209,22 +77,15 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       unsafeCSS: hunkSeparators === "custom" ? customHunkSeparatorCSS : undefined,
       expansionLineCount: hunkSeparators === "custom" ? 5 : 100,
       lineHoverHighlight: "both" as const,
-      onLineSelected: onSelectionChange,
       onPostRender: installHunkExpansionFallback,
       overflow,
       themeType,
-      // Note: `theme`, `lineDiffType`, and `tokenizeMaxLineLength` are ignored
-      // when the worker pool is active (controlled by WorkerPoolManager).
-      // `themeType` remains a per-component concern.
     }),
     [
-      collapsed,
-      diffIndicators,
       diffStyle,
       disableBackground,
       expandUnchanged,
       hunkSeparators,
-      onSelectionChange,
       overflow,
       showLineNumbers,
       themeType,
@@ -263,69 +124,20 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none"
     >
       <section className="min-h-0 min-w-0 flex-1">
-        {diffView === "file" ? (
-          <MultiFileScroller
-            diffOptions={diffOptions}
-            collapsedFilePaths={collapsedFilePaths}
-            fileDiffs={fileDiffs}
-            files={files}
-            onCollapsedFileChange={onCollapsedFileChange}
-            onRequestFileDiff={onRequestFileDiff}
-            onViewedFileChange={onViewedFileChange}
-            onVisiblePathChange={onVisiblePathChange}
-            scrollSignal={scrollSignal}
-            selectedPath={selectedPath}
-            viewedFilePaths={viewedFilePaths}
-          />
-        ) : null}
-        <Virtualizer
-          className={`h-full overflow-auto ${diffView === "file" ? "hidden" : ""}`}
-          contentClassName="grid gap-4"
-          config={virtualizerConfig}
-        >
-          {diffView === "snippet" && snippetCompare != null ? (
-            <MultiFileDiff
-              oldFile={snippetCompare.oldFile}
-              newFile={snippetCompare.newFile}
-              options={{ ...diffOptions, expandUnchanged: false }}
-              renderHeaderMetadata={renderHeaderMetadata}
-            />
-          ) : null}
-          {diffView === "patch" ? (
-            rawDiffLoading ? (
-              <div
-                role="status"
-                aria-live="polite"
-                aria-busy="true"
-                className="grid place-items-center p-8 text-sm text-muted-foreground"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span>Loading patch diff…</span>
-                  <span aria-hidden="true" className="inline-flex items-end gap-0.5">
-                    <span className="shell-loading-dot" />
-                    <span className="shell-loading-dot" />
-                    <span className="shell-loading-dot" />
-                  </span>
-                </span>
-              </div>
-            ) : rawDiff != null ? (
-              <PatchDiff
-                patch={rawDiff}
-                options={diffOptions}
-                renderHeaderMetadata={renderHeaderMetadata}
-              />
-            ) : (
-              <div className="grid place-items-center p-8 text-center text-sm text-muted-foreground">
-                <div className="space-y-1.5">
-                  <p className="font-medium text-foreground">No patch data available</p>
-                  <p className="text-xs leading-relaxed">
-                    Switch to the File or Snippet view, or rerun the CLI with raw diff enabled.
-                  </p>
-                </div>
-              </div>
-            )
-          ) : null}
-        </Virtualizer>
+        <MultiFileScroller
+          diffOptions={diffOptions}
+          collapsedFilePaths={collapsedFilePaths}
+          fileDiffs={fileDiffs}
+          files={files}
+          onCollapsedFileChange={onCollapsedFileChange}
+          onCommentSaved={onCommentSaved}
+          onRequestFileDiff={onRequestFileDiff}
+          onViewedFileChange={onViewedFileChange}
+          onVisiblePathChange={onVisiblePathChange}
+          scrollSignal={scrollSignal}
+          selectedPath={selectedPath}
+          viewedFilePaths={viewedFilePaths}
+        />
       </section>
     </main>
   );
@@ -337,6 +149,7 @@ function MultiFileScroller(props: {
   fileDiffs: Record<string, FileDiffMetadata>;
   files: DiffFileSummary[];
   onCollapsedFileChange: (path: string, value: boolean) => void;
+  onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
@@ -350,6 +163,7 @@ function MultiFileScroller(props: {
     fileDiffs,
     files,
     onCollapsedFileChange,
+    onCommentSaved,
     onRequestFileDiff,
     onViewedFileChange,
     onVisiblePathChange,
@@ -366,8 +180,8 @@ function MultiFileScroller(props: {
   onVisiblePathChangeRef.current = onVisiblePathChange;
   const onRequestFileDiffRef = useRef(onRequestFileDiff);
   onRequestFileDiffRef.current = onRequestFileDiff;
+  const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
 
-  // Eager-load observer: trigger a fetch whenever a section is near the viewport.
   useEffect(() => {
     const root = containerRef.current;
     if (root == null) return;
@@ -376,7 +190,7 @@ function MultiFileScroller(props: {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           const path = (entry.target as HTMLElement).dataset.filePath;
-          const file = files.find((candidate) => candidate.path === path);
+          const file = path == null ? null : filesByPath.get(path);
           if (path != null && file?.hasMergeConflicts !== true) {
             onRequestFileDiffRef.current(path);
           }
@@ -388,9 +202,8 @@ function MultiFileScroller(props: {
       observer.observe(node);
     }
     return () => observer.disconnect();
-  }, [files]);
+  }, [filesByPath]);
 
-  // Visibility observer: track the topmost section in the viewport.
   useEffect(() => {
     const root = containerRef.current;
     if (root == null) return;
@@ -409,8 +222,6 @@ function MultiFileScroller(props: {
         if (performance.now() < suppressObserverUntilRef.current) {
           return;
         }
-        // If a click pinned a path and it's still visible, keep it selected
-        // even if its section can't reach the viewport top (clamped scroll).
         if (pinnedPathRef.current != null && visibility.has(pinnedPathRef.current)) {
           if (lastReportedPathRef.current !== pinnedPathRef.current) {
             lastReportedPathRef.current = pinnedPathRef.current;
@@ -419,9 +230,6 @@ function MultiFileScroller(props: {
           return;
         }
         pinnedPathRef.current = null;
-        // Pick the file most-recently scrolled past (largest top among those
-        // at/above the viewport top). If none yet, fall back to the topmost
-        // section currently below the viewport top.
         const ABOVE_THRESHOLD = 24;
         const rootTop = root.getBoundingClientRect().top;
         let above: { path: string; top: number } | null = null;
@@ -452,7 +260,6 @@ function MultiFileScroller(props: {
 
   const didInitialScrollRef = useRef(false);
 
-  // Imperatively scroll when the sidebar requests a path change.
   useEffect(() => {
     if (scrollSignal === 0 && didInitialScrollRef.current) return;
     didInitialScrollRef.current = true;
@@ -463,8 +270,6 @@ function MultiFileScroller(props: {
     pinnedPathRef.current = selectedPath;
     suppressObserverUntilRef.current = performance.now() + 350;
     node.scrollIntoView({ block: "start", behavior: "auto" });
-    // Release the pin once the user scrolls or after a grace period,
-    // whichever comes first.
     const root = containerRef.current;
     if (root == null) return;
     let released = false;
@@ -486,17 +291,16 @@ function MultiFileScroller(props: {
     };
   }, [scrollSignal, selectedPath]);
 
-  // Make sure the initial selection's diff is requested.
   useEffect(() => {
-    const selectedFile = files.find((file) => file.path === selectedPath);
+    const selectedFile = selectedPath == null ? null : filesByPath.get(selectedPath);
     if (selectedPath != null && selectedFile?.hasMergeConflicts !== true) {
       onRequestFileDiffRef.current(selectedPath);
     }
-  }, [files, selectedPath]);
+  }, [filesByPath, selectedPath]);
 
   return (
     <div ref={containerRef} className="h-full overflow-auto">
-      <div className="grid gap-4 p-1">
+      <div className="grid gap-3 p-3">
         {files.map((file) => (
           <div
             key={file.path}
@@ -508,7 +312,7 @@ function MultiFileScroller(props: {
                 sectionRefs.current.set(file.path, node);
               }
             }}
-            className="scroll-mt-2"
+            className="scroll-mt-3 overflow-hidden rounded-xl border border-border/70 bg-background"
           >
             <FileDiffSection
               collapsed={collapsedFilePaths.has(file.path)}
@@ -516,6 +320,7 @@ function MultiFileScroller(props: {
               file={file}
               fileDiff={fileDiffs[file.path] ?? null}
               onCollapsedChange={onCollapsedFileChange}
+              onCommentSaved={onCommentSaved}
               onViewedChange={onViewedFileChange}
               viewed={viewedFilePaths.has(file.path)}
             />
@@ -532,6 +337,7 @@ function FileDiffSection({
   file,
   fileDiff,
   onCollapsedChange,
+  onCommentSaved,
   onViewedChange,
   viewed,
 }: {
@@ -540,12 +346,14 @@ function FileDiffSection({
   file: DiffFileSummary;
   fileDiff: FileDiffMetadata | null;
   onCollapsedChange: (path: string, value: boolean) => void;
+  onCommentSaved: (comment: CommentExportRecord) => void;
   onViewedChange: (path: string, value: boolean) => void;
   viewed: boolean;
 }) {
   const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotation[]>([]);
   const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
   const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(null);
+  const [unresolvedError, setUnresolvedError] = useState<string | null>(null);
   const [unresolvedLoading, setUnresolvedLoading] = useState(false);
 
   useEffect(() => {
@@ -553,9 +361,15 @@ function FileDiffSection({
     const params = new URLSearchParams({ path: file.path });
     let cancelled = false;
     setUnresolvedLoading(true);
+    setUnresolvedError(null);
     void fetchJson<FileContents>(`/api/unresolved-file?${params.toString()}`)
       .then((contents) => {
         if (!cancelled) setUnresolvedFile(contents);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setUnresolvedError(error instanceof Error ? error.message : String(error));
+        }
       })
       .finally(() => {
         if (!cancelled) setUnresolvedLoading(false);
@@ -577,17 +391,7 @@ function FileDiffSection({
       ) {
         return current;
       }
-      return [
-        ...current,
-        {
-          side,
-          lineNumber,
-          metadata: {
-            id: `${side}-${lineNumber}-${Date.now()}`,
-            kind: "comment-form",
-          },
-        },
-      ];
+      return [...current, createCommentAnnotation(side, lineNumber)];
     });
   }, []);
 
@@ -617,6 +421,10 @@ function FileDiffSection({
 
   const handleCommentSubmit = useCallback(
     (id: string, body: string) => {
+      const submittedAnnotation = commentAnnotations.find((item) => item.metadata.id === id);
+      if (submittedAnnotation == null) return;
+
+      const normalizedBody = body.trim().length > 0 ? body.trim() : "Needs review before merging.";
       setCommentAnnotations((current) =>
         current.map((annotation) =>
           annotation.metadata.id === id
@@ -624,35 +432,73 @@ function FileDiffSection({
                 ...annotation,
                 metadata: {
                   ...annotation.metadata,
-                  body: body.trim().length > 0 ? body.trim() : "Needs review before merging.",
+                  body: normalizedBody,
                   kind: "comment",
                 },
               }
             : annotation,
         ),
       );
+      onCommentSaved({
+        body: normalizedBody,
+        contextLines: buildCommentContext({
+          fileDiff: file.hasMergeConflicts === true ? null : fileDiff,
+          lineNumber: submittedAnnotation.lineNumber,
+          side: submittedAnnotation.side,
+          unresolvedFile,
+        }),
+        filePath: file.path,
+        id,
+        lineNumber: submittedAnnotation.lineNumber,
+        side: submittedAnnotation.side,
+      });
       setSelectedLines(null);
       diffOptions?.onLineSelected?.(null);
     },
-    [diffOptions],
+    [
+      commentAnnotations,
+      diffOptions,
+      file.hasMergeConflicts,
+      file.path,
+      fileDiff,
+      onCommentSaved,
+      unresolvedFile,
+    ],
+  );
+
+  const hasOpenCommentForm = useMemo(
+    () => commentAnnotations.some((annotation) => annotation.metadata.kind === "comment-form"),
+    [commentAnnotations],
   );
 
   const fileDiffOptions = useMemo(
     () => ({
       ...diffOptions,
-      collapsed: diffOptions?.collapsed === true || collapsed,
-      enableGutterUtility: !commentAnnotations.some(
-        (annotation) => annotation.metadata.kind === "comment-form",
-      ),
-      enableLineSelection: !commentAnnotations.some(
-        (annotation) => annotation.metadata.kind === "comment-form",
-      ),
+      collapsed,
+      enableGutterUtility: !hasOpenCommentForm,
+      enableLineSelection: !hasOpenCommentForm,
       onLineSelectionEnd: handleLineSelectionEnd,
     }),
-    [collapsed, commentAnnotations, diffOptions, handleLineSelectionEnd],
+    [collapsed, diffOptions, handleLineSelectionEnd, hasOpenCommentForm],
   );
 
   if (file.hasMergeConflicts === true) {
+    if (unresolvedError != null) {
+      return (
+        <div
+          role="alert"
+          className="grid place-items-center rounded-md border border-destructive/40 p-6 text-xs text-destructive"
+        >
+          <span className="inline-flex items-center gap-2">
+            <span className="font-mono" translate="no">
+              {file.path}
+            </span>
+            <span>{unresolvedError}</span>
+          </span>
+        </div>
+      );
+    }
+
     if (unresolvedLoading || unresolvedFile == null) {
       return (
         <div
@@ -756,218 +602,5 @@ function FileDiffSection({
         />
       )}
     />
-  );
-}
-
-function CustomFileHeader({
-  collapsed,
-  fileDiff,
-  hasMergeConflicts = false,
-  onCollapsedChange,
-  onViewedChange,
-  viewed,
-}: {
-  collapsed: boolean;
-  fileDiff: FileDiffMetadata;
-  hasMergeConflicts?: boolean;
-  onCollapsedChange: (next: boolean) => void;
-  onViewedChange: (next: boolean) => void;
-  viewed: boolean;
-}) {
-  const counts = useMemo(
-    () =>
-      fileDiff.hunks.reduce(
-        (total, hunk) => ({
-          additions: total.additions + hunk.additionLines,
-          deletions: total.deletions + hunk.deletionLines,
-        }),
-        { additions: 0, deletions: 0 },
-      ),
-    [fileDiff.hunks],
-  );
-
-  return (
-    <div
-      className={`flex w-full min-w-0 items-center justify-between gap-3 px-3 py-2.5 ${
-        collapsed ? "" : "border-b border-border/70"
-      }`}
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <button
-          type="button"
-          aria-label={collapsed ? `Expand ${fileDiff.name}` : `Collapse ${fileDiff.name}`}
-          aria-pressed={collapsed}
-          onClick={() => onCollapsedChange(!collapsed)}
-          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronIcon expanded={!collapsed} />
-        </button>
-        <FileIcon />
-        <span
-          className="min-w-0 truncate text-sm font-medium text-foreground"
-          translate="no"
-          title={fileDiff.name}
-        >
-          {fileDiff.name}
-        </span>
-        {hasMergeConflicts ? (
-          <span className="inline-flex shrink-0 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-amber-500">
-            Conflict
-          </span>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 items-center gap-2 font-mono text-xs tabular-nums">
-        {counts.deletions > 0 || counts.additions === 0 ? (
-          <span className="text-diff-deleted">-{counts.deletions}</span>
-        ) : null}
-        {counts.additions > 0 || counts.deletions === 0 ? (
-          <span className="text-diff-added">+{counts.additions}</span>
-        ) : null}
-        <ViewedButton
-          filePath={fileDiff.name}
-          viewed={viewed}
-          onClick={() => onViewedChange(!viewed)}
-        />
-      </div>
-    </div>
-  );
-}
-
-function CommentAnnotationView({
-  annotation,
-  onCancel,
-  onSubmit,
-}: {
-  annotation: CommentAnnotation;
-  onCancel: (id: string) => void;
-  onSubmit: (id: string, body: string) => void;
-}) {
-  const [body, setBody] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useEffect(() => {
-    if (annotation.metadata.kind === "comment-form") {
-      textareaRef.current?.focus();
-    }
-  }, [annotation.metadata.kind]);
-
-  if (annotation.metadata.kind === "comment") {
-    return (
-      <div className="my-3 ml-4 max-w-2xl rounded-md border border-border/70 bg-card p-3 shadow-sm">
-        <div className="mb-1 flex items-center gap-2 text-xs">
-          <span className="font-semibold text-foreground">You</span>
-          <span className="text-muted-foreground">now</span>
-        </div>
-        <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-          {annotation.metadata.body}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="my-3 ml-4 max-w-2xl rounded-md border border-border/70 bg-card p-3 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-xs">
-        <span className="font-semibold text-foreground">New comment</span>
-        <span className="font-mono text-muted-foreground">
-          {annotation.side}:{annotation.lineNumber}
-        </span>
-      </div>
-      <textarea
-        ref={textareaRef}
-        value={body}
-        onChange={(event) => setBody(event.target.value)}
-        placeholder="Leave a comment"
-        className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-shadow focus:ring-2 focus:ring-ring"
-      />
-      <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" onClick={() => onSubmit(annotation.metadata.id, body)}>
-          Comment
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => onCancel(annotation.metadata.id)}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`h-3.5 w-3.5 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
-    >
-      <path d="M6 4l4 4-4 4" />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.3rem] border border-sky-500 text-sky-500"
-    >
-      <span className="h-1.5 w-1.5 rounded-sm bg-sky-500" />
-    </span>
-  );
-}
-
-function ViewedButton({
-  filePath,
-  onClick,
-  viewed,
-}: {
-  filePath: string;
-  onClick: () => void;
-  viewed: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={viewed ? `Mark ${filePath} unviewed` : `Mark ${filePath} viewed`}
-      aria-pressed={viewed}
-      onClick={onClick}
-      className={`ml-1 inline-flex h-7 items-center gap-1.5 rounded-[0.55rem] border px-2 font-sans text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        viewed
-          ? "border-sky-500/75 bg-sky-500/10 text-sky-200 hover:bg-sky-500/15"
-          : "border-border/90 bg-black/20 text-muted-foreground hover:border-muted-foreground/50 hover:bg-accent/60 hover:text-foreground"
-      }`}
-    >
-      <ViewedIcon checked={viewed} />
-      <span>Viewed</span>
-    </button>
-  );
-}
-
-function ViewedIcon({ checked }: { checked: boolean }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="h-4 w-4 shrink-0">
-      <rect
-        x="1.75"
-        y="1.75"
-        width="12.5"
-        height="12.5"
-        rx="3.5"
-        className={checked ? "fill-sky-500 stroke-sky-500" : "stroke-current"}
-        strokeWidth="1.6"
-      />
-      {checked ? (
-        <path
-          d="M5 8.1l2.05 2.05L11.25 5.8"
-          stroke="white"
-          strokeWidth="1.65"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ) : null}
-    </svg>
   );
 }

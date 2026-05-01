@@ -5,8 +5,6 @@ import { App } from "./App.js";
 import { highlighterLangs, themeOptions } from "./lib/constants.js";
 import "./styles.css";
 
-// Warm the shared Shiki highlighter so first paint isn't blocked on async
-// theme/language loading. Worker pool inherits this preloaded state.
 void preloadHighlighter({
   langs: [...highlighterLangs],
   themes: Object.values(themeOptions),

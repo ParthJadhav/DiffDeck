@@ -67,10 +67,7 @@ export function useDiffTree({
           };
         }
 
-        return {
-          text: `${summary.additions}/${summary.deletions}`,
-          title: `${summary.additions} additions, ${summary.deletions} deletions`,
-        };
+        return null;
       },
       search: true,
       unsafeCSS: `
@@ -115,6 +112,7 @@ export function useDiffTree({
       return;
     }
     suppressSelectionFireRef.current = true;
+    previousSelectedPathsRef.current = new Set([selectedPath]);
     try {
       for (const path of previous) {
         if (path !== selectedPath) {

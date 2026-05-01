@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
 import type { DiffFileSummary, DiffSession } from "./types.js";
+import { buildCacheKey } from "./cacheKey.js";
 
 function runGit(repo: string, args: string[]): string {
   const result = spawnSync("git", ["-C", repo, ...args], {
@@ -97,7 +98,7 @@ function createFileContents(name: string, contents: string): FileContents {
   return {
     name,
     contents,
-    cacheKey: `cli-diff:contents:${name}`,
+    cacheKey: buildCacheKey("contents", name, contents),
   };
 }
 
@@ -181,12 +182,10 @@ export function buildDiffSession(
     const rawFileDiffs = splitRawDiffFiles(rawDiff);
     const canHydrateFromWorktree = diffArgs.length === 0;
     for (const [index, partialFileDiff] of parsedPatch.files.entries()) {
-      // Stable cacheKey lets the worker pool reuse highlighted output when
-      // navigating back to a previously-viewed file within this session.
       const fileDiff = canHydrateFromWorktree
         ? hydrateFileDiff(repoRoot, rawFileDiffs[index], partialFileDiff)
         : partialFileDiff;
-      fileDiff.cacheKey = `cli-diff:${fileDiff.name}`;
+      fileDiff.cacheKey = buildCacheKey("diff", fileDiff.name, rawFileDiffs[index] ?? rawDiff);
       fileDiffs.set(fileDiff.name, fileDiff);
       const summary = createSummary(fileDiff);
       const contents = readWorktreeFile(repoRoot, fileDiff.name);

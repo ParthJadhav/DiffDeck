@@ -1,50 +1,28 @@
-import { useEffect, useRef, useState } from "react";
-import type { SelectedLineRange } from "@pierre/diffs";
 import {
-  diffIndicatorModes,
-  diffLayouts,
-  diffLineModes,
-  diffViews,
-  hunkSeparatorModes,
-  overflowModes,
-  themeChoices,
-} from "../lib/constants.js";
-import { getSelectionSummary } from "../lib/diff.js";
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
-import type {
-  DiffIndicatorMode,
-  DiffLayout,
-  DiffLineMode,
-  DiffView,
-  HunkSeparatorMode,
-  OverflowMode,
-  ThemeChoice,
-} from "../lib/uiTypes.js";
-import { Tabs, TabsList, TabsTrigger } from "./ui/tabs.js";
+import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import { Checkbox } from "./ui/checkbox.js";
 
 export interface DiffControlsProps {
-  collapsed: boolean;
-  diffIndicators: DiffIndicatorMode;
   diffStyle: DiffLayout;
-  diffView: DiffView;
   disableBackground: boolean;
   expandUnchanged: boolean;
-  hunkSeparators: HunkSeparatorMode;
-  lineDiffType: DiffLineMode;
-  onCollapsedChange: (value: boolean) => void;
-  onDiffIndicatorsChange: (value: DiffIndicatorMode) => void;
   onDiffStyleChange: (value: DiffLayout) => void;
-  onDiffViewChange: (value: DiffView) => void;
   onDisableBackgroundChange: (value: boolean) => void;
   onExpandUnchangedChange: (value: boolean) => void;
-  onHunkSeparatorsChange: (value: HunkSeparatorMode) => void;
-  onLineDiffTypeChange: (value: DiffLineMode) => void;
   onOverflowChange: (value: OverflowMode) => void;
   onShowLineNumbersChange: (value: boolean) => void;
   onThemeTypeChange: (value: ThemeChoice) => void;
   overflow: OverflowMode;
-  selection: SelectedLineRange | null;
   showLineNumbers: boolean;
   themeType: ThemeChoice;
 }
@@ -59,25 +37,39 @@ function CheckLabel({
   children: React.ReactNode;
 }) {
   return (
-    <label className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-1.5 py-1 text-xs text-foreground/85 transition-colors duration-150 hover:bg-accent/60 hover:text-foreground">
-      <Checkbox checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      <span>{children}</span>
+    <label className="app-check-label group flex h-7 cursor-pointer select-none items-center gap-2 rounded-[6px] px-1.5 text-[12px] leading-none text-foreground/90 transition-[background-color,color] duration-150 ease-out hover:bg-accent hover:text-foreground">
+      <span
+        className={cn(
+          "app-check-box relative inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-[3.5px] transition-[background-color,box-shadow] duration-150 ease-out",
+          checked
+            ? "bg-foreground text-background shadow-[inset_0_0_0_1px_hsl(var(--foreground))]"
+            : "bg-transparent shadow-[inset_0_0_0_1px_hsl(var(--border))] group-hover:shadow-[inset_0_0_0_1px_hsl(var(--muted-foreground)/0.7)]",
+        )}
+      >
+        <Checkbox
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        />
+        {checked ? (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 12 12"
+            className="h-[10px] w-[10px]"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M2.5 6.2l2.4 2.4L9.5 3.7" />
+          </svg>
+        ) : null}
+      </span>
+      <span className="min-w-0 truncate font-medium">{children}</span>
     </label>
   );
 }
-
-const viewLabels: Record<DiffView, string> = {
-  file: "File",
-  snippet: "Snippet",
-  patch: "Patch",
-};
-
-const lineLabels: Record<DiffLineMode, string> = {
-  "word-alt": "Smart",
-  word: "Word",
-  char: "Char",
-  none: "Off",
-};
 
 const overflowLabels: Record<OverflowMode, string> = {
   scroll: "Scroll",
@@ -92,7 +84,7 @@ const themeLabels: Record<ThemeChoice, string> = {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[9px] font-medium uppercase tracking-[0.08em] text-muted-foreground/75">
+    <div className="px-0.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground/80">
       {children}
     </div>
   );
@@ -129,21 +121,21 @@ function OptionButton<T extends string>({
       title={description}
       onClick={() => onClick(value)}
       className={cn(
-        "group flex h-7 min-w-0 items-center gap-1 rounded-md px-1.5 text-left text-[10px] transition-[background-color,color,box-shadow,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
+        "app-option-button group flex h-7 min-w-0 items-center justify-center gap-1.5 rounded-[6px] px-2 text-left text-[11.5px] transition-[background-color,color,box-shadow,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
         active
-          ? "bg-primary text-primary-foreground shadow-sm"
-          : "bg-muted/40 text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "app-option-button-active text-foreground"
+          : "bg-transparent text-muted-foreground hover:bg-accent/60 hover:text-foreground",
       )}
     >
       <span
         className={cn(
-          "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded transition-colors",
-          active ? "bg-primary-foreground/15" : "bg-background/70 text-foreground/80",
+          "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center transition-colors",
+          active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
         )}
       >
         {icon}
       </span>
-      <span className="min-w-0 truncate font-medium">{children}</span>
+      <span className="min-w-0 truncate font-medium tracking-tight">{children}</span>
     </button>
   );
 }
@@ -168,7 +160,7 @@ function OptionGrid<T extends string>({
   return (
     <div
       className={cn(
-        "grid gap-1",
+        "app-control-grid grid gap-0.5 rounded-[9px] p-0.5",
         columns === 2 && "grid-cols-2",
         columns === 3 && "grid-cols-3",
         columns === 4 && "grid-cols-4",
@@ -195,88 +187,24 @@ function MiniIcon({
 }: {
   name:
     | "bars"
-    | "char"
-    | "classic"
     | "custom"
     | "dark"
-    | "file"
     | "layout"
     | "light"
     | "metadata"
     | "none"
-    | "patch"
     | "scroll"
     | "simple"
-    | "snippet"
     | "split"
     | "system"
     | "unified"
-    | "word"
     | "wrap";
 }) {
   switch (name) {
-    case "file":
-      return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        >
-          <path d="M4 2.5h5l3 3v8H4z" />
-          <path d="M9 2.5v3h3M6 8h4M6 10.5h3" />
-        </svg>
-      );
-    case "snippet":
-      return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M6 4L2.5 8 6 12M10 4l3.5 4L10 12M7.2 13l1.6-10" />
-        </svg>
-      );
-    case "patch":
-      return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        >
-          <path d="M3 4h10M3 8h10M3 12h10M5 2.5v3M11 10.5v3" />
-        </svg>
-      );
     case "bars":
       return (
         <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
           <path d="M3 2h2v12H3zM7 4h6v2H7zM7 10h6v2H7z" />
-        </svg>
-      );
-    case "classic":
-      return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-        >
-          <path d="M4 5h5M6.5 2.5v5M4 11h5" />
         </svg>
       );
     case "none":
@@ -319,34 +247,6 @@ function MiniIcon({
         >
           <rect x="3" y="3" width="10" height="10" rx="1.5" />
           <path d="M5 6h6M5 8h6M5 10h4" />
-        </svg>
-      );
-    case "word":
-      return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        >
-          <path d="M2.5 5.5h5M9.5 5.5h4M2.5 10.5h4M8.5 10.5h5" />
-        </svg>
-      );
-    case "char":
-      return (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-        >
-          <path d="M5 12l3-8 3 8M6 9.5h4" />
         </svg>
       );
     case "custom":
@@ -496,40 +396,60 @@ function GearIcon() {
 
 export function DiffControls(props: DiffControlsProps) {
   const {
-    collapsed,
-    diffIndicators,
     diffStyle,
-    diffView,
     disableBackground,
     expandUnchanged,
-    hunkSeparators,
-    lineDiffType,
-    onCollapsedChange,
-    onDiffIndicatorsChange,
     onDiffStyleChange,
-    onDiffViewChange,
     onDisableBackgroundChange,
     onExpandUnchangedChange,
-    onHunkSeparatorsChange,
-    onLineDiffTypeChange,
     onOverflowChange,
     onShowLineNumbersChange,
     onThemeTypeChange,
     overflow,
-    selection,
     showLineNumbers,
     themeType,
   } = props;
 
   const [open, setOpen] = useState(false);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
+  const panelId = useId();
+  const titleId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
+  const updatePanelPosition = useCallback(() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect == null) return;
+
+    const margin = 12;
+    const width = Math.min(280, window.innerWidth - margin * 2);
+    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
+    const bottom = 12;
+    const maxHeight = Math.max(240, window.innerHeight - bottom - margin);
+
+    setPanelStyle({
+      bottom,
+      left,
+      maxHeight,
+      position: "fixed",
+      width,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [open, updatePanelPosition]);
+
   useEffect(() => {
     if (!open) return;
-    const node = containerRef.current?.querySelector<HTMLElement>(
-      '[role="tab"][data-state="active"], button, input',
-    );
+    const node = containerRef.current?.querySelector<HTMLElement>("button, input");
     node?.focus();
     const onPointerDown = (event: MouseEvent) => {
       if (containerRef.current != null && !containerRef.current.contains(event.target as Node)) {
@@ -554,43 +474,31 @@ export function DiffControls(props: DiffControlsProps) {
     <div ref={containerRef} className="flex w-full flex-col gap-2">
       {open ? (
         <div
-          role="group"
-          aria-label="Diff settings"
-          style={{ overscrollBehavior: "contain" }}
-          className="max-h-[min(26rem,64vh)] overflow-y-auto overflow-x-hidden rounded-md bg-popover p-2 text-popover-foreground shadow-[0_0_0_1px_hsl(var(--border)/0.72),0_10px_24px_hsl(0_0%_0%/0.16)]"
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby={titleId}
+          id={panelId}
+          style={{ ...panelStyle, overscrollBehavior: "contain" }}
+          className="app-settings-popover z-50 overflow-y-auto overflow-x-hidden rounded-[14px] bg-popover p-2.5 text-popover-foreground shadow-[0_0_0_0.5px_hsl(var(--border)/0.85),0_1px_2px_hsl(var(--foreground)/0.06),0_8px_24px_-4px_hsl(var(--foreground)/0.18),0_24px_56px_-12px_hsl(var(--foreground)/0.28)]"
         >
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold text-foreground">Diff settings</div>
+          <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
+            <div
+              id={titleId}
+              className="text-[12.5px] font-semibold leading-none tracking-[-0.01em] text-foreground"
+            >
+              Diff settings
+            </div>
             <button
               type="button"
               aria-label="Close diff settings"
               onClick={() => setOpen(false)}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="app-icon-btn h-6 w-6"
             >
               <MiniIcon name="none" />
             </button>
           </div>
 
-          <div className="space-y-2.5">
-            <ControlSection label="View">
-              <Tabs value={diffView} onValueChange={(v) => onDiffViewChange(v as DiffView)}>
-                <TabsList className="h-6 w-full rounded-md p-0.5">
-                  {diffViews.map((view) => (
-                    <TabsTrigger
-                      key={view}
-                      value={view}
-                      className="h-5 flex-1 gap-1 px-1.5 text-[10px]"
-                    >
-                      <MiniIcon
-                        name={view === "file" ? "file" : view === "snippet" ? "snippet" : "patch"}
-                      />
-                      {viewLabels[view]}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </ControlSection>
-
+          <div className="space-y-2">
             <ControlSection label="Layout">
               <OptionGrid
                 labels={{ split: "Split", unified: "Unified" }}
@@ -605,78 +513,6 @@ export function DiffControls(props: DiffControlsProps) {
                 options={diffLayouts}
                 value={diffStyle}
                 onChange={onDiffStyleChange}
-              />
-            </ControlSection>
-
-            <ControlSection label="Change style">
-              <OptionGrid
-                labels={{ bars: "Bars", classic: "+/-", none: "None" }}
-                descriptions={{
-                  bars: "Color rail",
-                  classic: "+/- marks",
-                  none: "Clean lines",
-                }}
-                icons={{
-                  bars: <MiniIcon name="bars" />,
-                  classic: <MiniIcon name="classic" />,
-                  none: <MiniIcon name="none" />,
-                }}
-                options={diffIndicatorModes}
-                value={diffIndicators}
-                onChange={onDiffIndicatorsChange}
-                columns={3}
-              />
-            </ControlSection>
-
-            <ControlSection label="Inline diff">
-              <OptionGrid
-                labels={lineLabels}
-                descriptions={{
-                  "word-alt": "Best match",
-                  word: "Words",
-                  char: "Letters",
-                  none: "Line only",
-                }}
-                icons={{
-                  "word-alt": <MiniIcon name="word" />,
-                  word: <MiniIcon name="word" />,
-                  char: <MiniIcon name="char" />,
-                  none: <MiniIcon name="none" />,
-                }}
-                options={diffLineModes}
-                value={lineDiffType}
-                onChange={onLineDiffTypeChange}
-                columns={4}
-              />
-            </ControlSection>
-
-            <ControlSection label="Hunks">
-              <OptionGrid
-                labels={{
-                  "line-info": "Info",
-                  "line-info-basic": "Basic",
-                  metadata: "Meta",
-                  simple: "Simple",
-                  custom: "Custom",
-                }}
-                descriptions={{
-                  "line-info": "Expanded label",
-                  "line-info-basic": "Compact built-in",
-                  metadata: "Patch metadata",
-                  simple: "Spacer only",
-                  custom: "Custom CSS",
-                }}
-                icons={{
-                  "line-info": <MiniIcon name="layout" />,
-                  "line-info-basic": <MiniIcon name="bars" />,
-                  metadata: <MiniIcon name="metadata" />,
-                  simple: <MiniIcon name="simple" />,
-                  custom: <MiniIcon name="custom" />,
-                }}
-                options={hunkSeparatorModes}
-                value={hunkSeparators}
-                onChange={onHunkSeparatorsChange}
-                columns={3}
               />
             </ControlSection>
 
@@ -713,15 +549,12 @@ export function DiffControls(props: DiffControlsProps) {
             </ControlSection>
 
             <ControlSection label="Options">
-              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+              <div className="app-control-grid grid grid-cols-2 gap-x-1 gap-y-0 rounded-[9px] p-1">
                 <CheckLabel checked={showLineNumbers} onChange={onShowLineNumbersChange}>
-                  Line Numbers
+                  Line nums
                 </CheckLabel>
                 <CheckLabel checked={expandUnchanged} onChange={onExpandUnchangedChange}>
-                  Expand Unchanged
-                </CheckLabel>
-                <CheckLabel checked={collapsed} onChange={onCollapsedChange}>
-                  Collapse All
+                  Unchanged
                 </CheckLabel>
                 <CheckLabel
                   checked={!disableBackground}
@@ -741,24 +574,16 @@ export function DiffControls(props: DiffControlsProps) {
           type="button"
           aria-label="Diff settings"
           aria-expanded={open}
+          aria-controls={panelId}
           aria-haspopup="dialog"
           onClick={() => setOpen((prev) => !prev)}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "inline-flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             open && "bg-accent text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]",
           )}
         >
           <GearIcon />
         </button>
-        <span
-          className={cn(
-            "min-w-0 truncate text-right font-mono text-[11px] tabular-nums transition-opacity duration-200",
-            selection != null ? "text-foreground" : "text-muted-foreground",
-          )}
-          aria-live="polite"
-        >
-          {getSelectionSummary(selection)}
-        </span>
       </div>
     </div>
   );
