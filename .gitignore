@@ -2,6 +2,14 @@
 dist/
 node_modules/
 
+.agents/
+.claude/
+.codex/
+.factory/
+.kiro/
+.rovodev/
+skills-lock.json
+
 .DS_Store
 *.log
 *.tgz
