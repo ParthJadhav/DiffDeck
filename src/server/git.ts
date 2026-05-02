@@ -178,7 +178,7 @@ export function buildDiffSession(
     relativeDirectory.length === 0 || relativeDirectory.startsWith("..") ? "." : relativeDirectory;
 
   if (rawDiff.trim().length > 0) {
-    const parsedPatch = processPatch(rawDiff, "cli-diff", true);
+    const parsedPatch = processPatch(rawDiff, "diffdeck", true);
     const rawFileDiffs = splitRawDiffFiles(rawDiff);
     const canHydrateFromWorktree = diffArgs.length === 0;
     for (const [index, partialFileDiff] of parsedPatch.files.entries()) {

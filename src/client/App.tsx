@@ -225,7 +225,7 @@ export function App() {
       <WorkerPoolRenderOptionsSync />
       <div className="h-dvh w-screen overflow-hidden bg-background text-foreground">
         {isDesktopLayout ? (
-          <PanelGroup id="cli-diff-layout" orientation="horizontal" className="flex h-full w-full">
+          <PanelGroup id="diffdeck-layout" orientation="horizontal" className="flex h-full w-full">
             <Panel defaultSize="20%" minSize="12%" maxSize="45%" className="min-h-0">
               <Sidebar {...sidebarProps} footer={sidebarFooter} />
             </Panel>

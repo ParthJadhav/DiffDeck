@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creates a fake git repo at .dev/fake-repo with a diverse set of staged + unstaged
-# changes across multiple folders so cli-diff has interesting content to render.
+# changes across multiple folders so Diffdeck has interesting content to render.
 # Idempotent: safe to re-run; rebuilds the working tree from scratch each time.
 
 set -euo pipefail
@@ -13,8 +13,8 @@ mkdir -p "$REPO_DIR"
 cd "$REPO_DIR"
 
 git init -q -b main
-git config user.email "dev@cli-diff.local"
-git config user.name "cli-diff dev"
+git config user.email "dev@diffdeck.local"
+git config user.name "diffdeck dev"
 
 # --- Initial commit: baseline files ---
 mkdir -p src/components src/utils src/hooks docs
@@ -22,7 +22,7 @@ mkdir -p src/components src/utils src/hooks docs
 cat > README.md <<'EOF'
 # Demo Project
 
-A toy project used to populate cli-diff's dev fake repo.
+A toy project used to populate Diffdeck's dev fake repo.
 EOF
 
 cat > package.json <<'EOF'
@@ -176,7 +176,7 @@ git commit -q -m "Initial commit"
 cat > README.md <<'EOF'
 # Demo Project
 
-A toy project used to populate cli-diff's dev fake repo.
+A toy project used to populate Diffdeck's dev fake repo.
 
 ## Changes
 
@@ -390,7 +390,7 @@ EOF
 rm legacy.txt
 
 # Stage some, leave others unstaged so `git diff` (default) shows interesting output.
-# `cli-diff` defaults to working-tree diff, so we stage half and edit half.
+# `diffdeck` defaults to working-tree diff, so we stage half and edit half.
 git add src/components/Button.tsx src/components/Modal.tsx src/utils/format.ts docs/intro.md
 
 echo "Fake repo ready at $REPO_DIR"

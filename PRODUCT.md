@@ -10,7 +10,7 @@ Developers reviewing Git diffs from a terminal workflow. They use the browser UI
 
 ## Product Purpose
 
-cli-diff opens a local browser interface for Git diff output. It exists to make file-by-file review easier without leaving command-line context. Success means changes are scannable, states are obvious, and controls stay out of the way until needed.
+Diffdeck opens a local browser interface for Git diff output. It exists to make file-by-file review easier without leaving command-line context. Success means changes are scannable, states are obvious, and controls stay out of the way until needed.
 
 ## Brand Personality
 

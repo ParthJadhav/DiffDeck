@@ -1,33 +1,33 @@
-# cli-diff
+# Diffdeck
 
 Open a Git diff in your browser from the terminal.
 
-`cli-diff` starts a local web UI for the diff you ask Git for, then opens it in your browser. It is useful when a terminal diff is too cramped but you still want to stay close to the command line.
+`diffdeck` starts a local web UI for the diff you ask Git for, then opens it in your browser. It is useful when a terminal diff is too cramped but you still want to stay close to the command line.
 
 ## Install
 
 ```sh
-npm install -g @parthjadhav/cli-diff
+npm install -g @parthjadhav/diffdeck
 ```
 
-The npm package is scoped, but the installed command is `cli-diff`.
+The npm package is scoped, but the installed command is `diffdeck`.
 
 ## Usage
 
 ```sh
-cli-diff [options] [git diff args...]
+diffdeck [options] [git diff args...]
 ```
 
 Examples:
 
 ```sh
-cli-diff
-cli-diff --cached
-cli-diff HEAD~1 HEAD
-cli-diff --repo ../my-repo -- -- '*.ts'
+diffdeck
+diffdeck --cached
+diffdeck HEAD~1 HEAD
+diffdeck --repo ../my-repo -- -- '*.ts'
 ```
 
-By default, `cli-diff` runs against the current Git repository and opens a browser tab automatically.
+By default, `diffdeck` runs against the current Git repository and opens a browser tab automatically.
 
 ## Options
 
@@ -39,12 +39,12 @@ By default, `cli-diff` runs against the current Git repository and opens a brows
 --help            Show this help message.
 ```
 
-Everything that is not a `cli-diff` option is passed through as a `git diff` argument.
+Everything that is not a `diffdeck` option is passed through as a `git diff` argument.
 
 Use `--` before pathspecs or arguments that should be reserved for Git:
 
 ```sh
-cli-diff -- -- '*.tsx'
+diffdeck -- -- '*.tsx'
 ```
 
 ## Requirements
@@ -68,7 +68,7 @@ npm run pack:dry-run
 
 ## Publishing
 
-The package is prepared for npm but is not published yet. The unscoped `cli-diff` name is already taken, so this package uses `@parthjadhav/cli-diff` while keeping the binary name `cli-diff`.
+The package is prepared for npm but is not published yet. It uses `@parthjadhav/diffdeck` while keeping the binary name `diffdeck`.
 
 ```sh
 bun run check

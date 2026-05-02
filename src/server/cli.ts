@@ -8,10 +8,10 @@ import { startServer } from "./server.js";
 import type { CliOptions } from "./types.js";
 
 function printHelp(): void {
-  console.log(`cli-diff
+  console.log(`Diffdeck
 
 Usage:
-  cli-diff [options] [git diff args...]
+  diffdeck [options] [git diff args...]
 
 Options:
   --repo <path>     Repository path. Defaults to the current working directory.
@@ -21,10 +21,10 @@ Options:
   --help            Show this help message.
 
 Examples:
-  cli-diff
-  cli-diff --cached
-  cli-diff HEAD~1 HEAD
-  cli-diff --repo ../my-repo -- -- '*.ts'
+  diffdeck
+  diffdeck --cached
+  diffdeck HEAD~1 HEAD
+  diffdeck --repo ../my-repo -- -- '*.ts'
 `);
 }
 
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   const session = buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs);
   const server = await startServer(session, options.port, options.host);
 
-  console.log(`CLI Diff server running at ${server.url}`);
+  console.log(`Diffdeck server running at ${server.url}`);
   console.log(`Repository: ${repoRoot}`);
   if (session.files.length === 0) {
     console.log("Diff is empty for the current arguments.");
@@ -131,6 +131,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`cli-diff failed: ${message}`);
+  console.error(`diffdeck failed: ${message}`);
   process.exit(1);
 });
