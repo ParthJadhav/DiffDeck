@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Diffdeck workflow infographic</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #101828;
+        --muted: #667085;
+        --blue: #2563eb;
+        --green: #16833a;
+        --red: #c1292e;
+        --paper: #f7f8fb;
+        --line: rgba(16, 24, 40, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 1600px;
+        height: 900px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 18% 20%, rgba(37, 99, 235, 0.18), transparent 30%),
+          radial-gradient(circle at 82% 26%, rgba(20, 184, 166, 0.12), transparent 28%),
+          linear-gradient(135deg, #08111f 0%, #111827 48%, #0a101b 100%);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .stage {
+        position: relative;
+        width: 1480px;
+        height: 780px;
+        margin: 60px;
+        overflow: hidden;
+        border-radius: 36px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 249, 252, 0.96)),
+          #fff;
+        box-shadow:
+          0 32px 90px rgba(2, 8, 23, 0.35),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+      }
+
+      .stage::before {
+        content: "";
+        position: absolute;
+        inset: 40px;
+        border: 1px solid rgba(16, 24, 40, 0.09);
+        border-radius: 28px;
+        pointer-events: none;
+      }
+
+      .hero {
+        position: absolute;
+        top: 68px;
+        left: 96px;
+        right: 96px;
+        display: flex;
+        justify-content: space-between;
+        gap: 48px;
+        align-items: flex-start;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        height: 32px;
+        margin-bottom: 18px;
+        padding: 0 14px;
+        border-radius: 999px;
+        color: #1d4ed8;
+        background: #eaf1ff;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .spark {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--blue);
+        box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.13);
+      }
+
+      h1 {
+        max-width: 860px;
+        margin: 0;
+        color: var(--ink);
+        font-size: 41px;
+        line-height: 1.02;
+        letter-spacing: 0;
+        text-wrap: balance;
+      }
+
+      .subtitle {
+        max-width: 720px;
+        margin: 16px 0 0;
+        color: var(--muted);
+        font-size: 19px;
+        line-height: 1.42;
+        font-weight: 650;
+        text-wrap: pretty;
+      }
+
+      .badge-stack {
+        display: flex;
+        gap: 12px;
+        padding-top: 20px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        color: #344054;
+        background: #fff;
+        box-shadow:
+          0 12px 28px rgba(16, 24, 40, 0.08),
+          inset 0 0 0 1px rgba(16, 24, 40, 0.08);
+        font-size: 15px;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .flow {
+        position: absolute;
+        inset: 270px 82px 66px;
+        display: grid;
+        grid-template-columns: 350px 88px 540px 88px 308px;
+        align-items: start;
+      }
+
+      .terminal {
+        position: relative;
+        height: 246px;
+        overflow: hidden;
+        border-radius: 24px;
+        background:
+          linear-gradient(160deg, rgba(255, 255, 255, 0.06), transparent 32%),
+          #111322;
+        box-shadow:
+          0 28px 60px rgba(17, 19, 34, 0.27),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      }
+
+      .terminal::after {
+        content: "";
+        position: absolute;
+        right: -70px;
+        bottom: -70px;
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: rgba(37, 99, 235, 0.16);
+        filter: blur(2px);
+      }
+
+      .window-dots {
+        display: flex;
+        gap: 10px;
+        padding: 28px 30px 0;
+      }
+
+      .window-dots span {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+      }
+
+      .red-dot {
+        background: #ff5f56;
+      }
+
+      .yellow-dot {
+        background: #ffbd2e;
+      }
+
+      .green-dot {
+        background: #27c93f;
+      }
+
+      .terminal-code {
+        position: relative;
+        z-index: 1;
+        margin: 28px 36px 0;
+        color: #f2f4f7;
+        font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+        font-size: 22px;
+        line-height: 1.7;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .terminal-code .prompt {
+        color: #9aa4b2;
+      }
+
+      .terminal-bars {
+        position: relative;
+        z-index: 1;
+        margin: 14px 36px 0;
+        display: grid;
+        gap: 10px;
+      }
+
+      .terminal-bars span {
+        height: 14px;
+        border-radius: 999px;
+        background: #354052;
+      }
+
+      .terminal-bars span:nth-child(1) {
+        width: 72%;
+      }
+
+      .terminal-bars span:nth-child(2) {
+        width: 92%;
+      }
+
+      .terminal-bars span:nth-child(3) {
+        width: 56%;
+      }
+
+      .step {
+        margin-top: 22px;
+        color: var(--ink);
+        font-size: 21px;
+        font-weight: 850;
+        letter-spacing: 0;
+      }
+
+      .step-note {
+        margin-top: 9px;
+        color: var(--muted);
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .arrow {
+        position: relative;
+        height: 4px;
+        margin: 118px 18px 0;
+        border-radius: 999px;
+        background: var(--blue);
+        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.2);
+      }
+
+      .arrow::after {
+        content: "";
+        position: absolute;
+        right: -1px;
+        top: 50%;
+        width: 30px;
+        height: 30px;
+        border-top: 4px solid var(--blue);
+        border-right: 4px solid var(--blue);
+        transform: translateY(-50%) rotate(45deg);
+        border-radius: 2px;
+      }
+
+      .browser-wrap {
+        position: relative;
+      }
+
+      .browser {
+        position: relative;
+        height: 318px;
+        overflow: hidden;
+        border-radius: 25px;
+        background: #fff;
+        box-shadow:
+          0 30px 70px rgba(16, 24, 40, 0.14),
+          inset 0 0 0 1px rgba(16, 24, 40, 0.11);
+      }
+
+      .browser-top {
+        height: 58px;
+        background: #f2f4f8;
+        box-shadow: inset 0 -1px 0 rgba(16, 24, 40, 0.07);
+      }
+
+      .browser-top .window-dots {
+        padding: 22px 28px 0;
+      }
+
+      .browser-top .window-dots span {
+        width: 13px;
+        height: 13px;
+        background: #c3c8d2;
+      }
+
+      .browser-body {
+        display: grid;
+        grid-template-columns: 142px 1fr;
+        gap: 24px;
+        padding: 26px 32px;
+      }
+
+      .sidebar {
+        height: 208px;
+        border-radius: 16px;
+        padding: 26px;
+        background: #f2f4f8;
+      }
+
+      .side-line {
+        display: block;
+        height: 12px;
+        margin-bottom: 22px;
+        border-radius: 999px;
+        background: #c6cbd5;
+      }
+
+      .side-line:nth-child(1) {
+        width: 76px;
+        background: #98a2b3;
+      }
+
+      .side-line:nth-child(2) {
+        width: 58px;
+      }
+
+      .side-line:nth-child(3) {
+        width: 88px;
+      }
+
+      .side-line:nth-child(4) {
+        width: 66px;
+      }
+
+      .diff-file {
+        height: 25px;
+        width: 270px;
+        margin: 4px 0 22px;
+        border-radius: 8px;
+        padding-left: 22px;
+        color: var(--blue);
+        background: #e7eefc;
+        font-size: 17px;
+        line-height: 25px;
+        font-weight: 850;
+      }
+
+      .diff-row {
+        height: 17px;
+        margin-bottom: 17px;
+        border-radius: 999px;
+        padding-left: 18px;
+        font-size: 15px;
+        line-height: 17px;
+        font-weight: 850;
+      }
+
+      .removed {
+        width: 235px;
+        color: var(--red);
+        background: #fee3e4;
+      }
+
+      .added {
+        color: var(--green);
+        background: #d9f8e6;
+      }
+
+      .added.one {
+        width: 285px;
+      }
+
+      .added.two {
+        width: 174px;
+      }
+
+      .neutral {
+        width: 260px;
+        height: 17px;
+        margin-top: 28px;
+        border-radius: 999px;
+        background: #e4e7ec;
+      }
+
+      .inline-comment {
+        position: absolute;
+        right: 22px;
+        bottom: 24px;
+        width: 196px;
+        padding: 15px 17px;
+        border-radius: 18px;
+        color: #7c2d12;
+        background: #fff7ed;
+        box-shadow:
+          0 18px 40px rgba(234, 88, 12, 0.16),
+          inset 0 0 0 1px #fed7aa;
+      }
+
+      .inline-comment::before {
+        content: "";
+        position: absolute;
+        left: -10px;
+        top: 28px;
+        width: 20px;
+        height: 20px;
+        background: #fff7ed;
+        border-left: 1px solid #fed7aa;
+        border-bottom: 1px solid #fed7aa;
+        transform: rotate(45deg);
+      }
+
+      .inline-comment strong {
+        display: block;
+        margin-bottom: 8px;
+        color: #9a3412;
+        font-size: 14px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .inline-comment span {
+        display: block;
+        font-size: 16px;
+        line-height: 1.3;
+        font-weight: 850;
+      }
+
+      .feature-stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .comment-card,
+      .export-card {
+        border-radius: 24px;
+        background: #fff;
+        box-shadow:
+          0 24px 58px rgba(16, 24, 40, 0.12),
+          inset 0 0 0 1px rgba(16, 24, 40, 0.1);
+      }
+
+      .comment-card {
+        display: grid;
+        grid-template-columns: 50px 1fr;
+        gap: 14px;
+        align-items: center;
+        height: 104px;
+        padding: 0 22px;
+      }
+
+      .plus {
+        display: grid;
+        width: 39px;
+        height: 39px;
+        place-items: center;
+        border-radius: 50%;
+        color: var(--blue);
+        background: #dbeafe;
+        font-size: 31px;
+        line-height: 1;
+        font-weight: 600;
+      }
+
+      .card-title {
+        color: var(--ink);
+        font-size: 22px;
+        font-weight: 900;
+      }
+
+      .card-subtitle {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: 16px;
+        font-weight: 750;
+      }
+
+      .export-card {
+        overflow: hidden;
+        padding: 20px;
+        background:
+          linear-gradient(180deg, rgba(239, 246, 255, 0.6), rgba(255, 255, 255, 0.94)),
+          #fff;
+      }
+
+      .export-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        color: var(--ink);
+        font-size: 20px;
+        font-weight: 900;
+      }
+
+      .pill {
+        padding: 6px 10px;
+        border-radius: 999px;
+        color: #1d4ed8;
+        background: #dbeafe;
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .export-lines {
+        display: grid;
+        gap: 10px;
+      }
+
+      .export-lines span {
+        height: 12px;
+        border-radius: 999px;
+        background: #d0d5dd;
+      }
+
+      .export-lines span:nth-child(1) {
+        width: 100%;
+        background: #98a2b3;
+      }
+
+      .export-lines span:nth-child(2) {
+        width: 84%;
+      }
+
+      .export-lines span:nth-child(3) {
+        width: 64%;
+      }
+
+      .export-footer {
+        margin-top: 18px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 38px;
+        padding: 0 14px;
+        border-radius: 12px;
+        color: #fff;
+        background: var(--blue);
+        font-size: 14px;
+        font-weight: 900;
+        box-shadow: 0 12px 28px rgba(37, 99, 235, 0.25);
+      }
+
+      .caption {
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage" aria-label="Diffdeck workflow infographic">
+      <section class="hero">
+        <div>
+          <div class="eyebrow"><span class="spark"></span>Git diff, but readable</div>
+          <h1>Turn terminal diffs into a focused browser review.</h1>
+          <p class="subtitle">
+            Open the diff you already asked Git for, leave line comments, then copy the
+            review with context.
+          </p>
+        </div>
+        <div class="badge-stack" aria-label="Diffdeck highlights">
+          <div class="badge" style="color: #2563eb"><span class="dot"></span>Browser view</div>
+          <div class="badge" style="color: #16a34a"><span class="dot"></span>Line notes</div>
+          <div class="badge" style="color: #ea580c"><span class="dot"></span>Copy context</div>
+        </div>
+      </section>
+
+      <section class="flow">
+        <div>
+          <div class="terminal">
+            <div class="window-dots">
+              <span class="red-dot"></span>
+              <span class="yellow-dot"></span>
+              <span class="green-dot"></span>
+            </div>
+            <div class="terminal-code">
+              <div><span class="prompt">$</span> git diff</div>
+              <div><span class="prompt">$</span> diffdeck</div>
+            </div>
+            <div class="terminal-bars">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <div class="caption">
+            <div class="step">1. Run a diff</div>
+            <div class="step-note">Pass through normal Git args.</div>
+          </div>
+        </div>
+
+        <div class="arrow" aria-hidden="true"></div>
+
+        <div class="browser-wrap">
+          <div class="browser">
+            <div class="browser-top">
+              <div class="window-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+            <div class="browser-body">
+              <div class="sidebar">
+                <span class="side-line"></span>
+                <span class="side-line"></span>
+                <span class="side-line"></span>
+                <span class="side-line"></span>
+              </div>
+              <div>
+                <div class="diff-file">src/app.tsx</div>
+                <div class="diff-row removed">- old handler</div>
+                <div class="diff-row added one">+ review pane</div>
+                <div class="diff-row added two">+ line notes</div>
+                <div class="neutral"></div>
+              </div>
+            </div>
+            <div class="inline-comment">
+              <strong>Comment</strong>
+              <span>Needs a guard before export.</span>
+            </div>
+          </div>
+          <div class="caption">
+            <div class="step">2. Review in browser</div>
+            <div class="step-note">Scan files, hunks, and changed lines.</div>
+          </div>
+        </div>
+
+        <div class="arrow" aria-hidden="true"></div>
+
+        <div class="feature-stack">
+          <div class="comment-card">
+            <div class="plus">+</div>
+            <div>
+              <div class="card-title">Add comments</div>
+              <div class="card-subtitle">Attach notes to exact lines.</div>
+            </div>
+          </div>
+          <div class="export-card">
+            <div class="export-title">Copied review <span class="pill">ready</span></div>
+            <div class="export-lines">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="export-footer">Copy / export</div>
+          </div>
+          <div class="caption">
+            <div class="step">3. Share the review</div>
+            <div class="step-note">Paste comments into PRs, chats, or agent prompts.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

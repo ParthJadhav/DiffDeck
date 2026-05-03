@@ -2,7 +2,7 @@
 
 Open a Git diff in your browser from the terminal.
 
-![Diffdeck shows a terminal diff flowing into a browser review view with comments and a copy button](docs/diffdeck-infographic.svg)
+![Diffdeck shows a terminal diff flowing into a browser review view with comments and a copy button](docs/diffdeck-infographic.png)
 
 `diffdeck` starts a local web UI for the diff you ask Git for, then opens it in your browser. Use it when:
 
