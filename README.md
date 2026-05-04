@@ -2,7 +2,7 @@
 
 Open a Git diff in your browser from the terminal.
 
-![Diffdeck shows a terminal diff flowing into a browser review view with comments and a copy button](docs/diffdeck-infographic.png)
+![Diffdeck opens Git diffs in a local browser review workspace](docs/diffdeck-infographic.png)
 
 `diffdeck` starts a local web UI for the diff you ask Git for, then opens it in your browser. Use it when:
 
@@ -45,7 +45,7 @@ diffdeck HEAD~1 HEAD
 diffdeck -- -- '*.tsx'
 ```
 
-Everything after Diffdeck's own options is passed through to `git diff`.
+Everything after Diffdeck's own options is passed through to `git diff` as long as it still produces plain patch output. Summary-only modes such as `--stat`, `--name-only`, `--raw`, and `--no-patch` are rejected because there is no file patch for the browser to render.
 
 ## Options
 
