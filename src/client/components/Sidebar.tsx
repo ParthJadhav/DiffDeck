@@ -14,7 +14,7 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
   const headerLabel = buildHeader(diffArgs);
 
   return (
-    <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_hsl(var(--border)/0.7)] lg:shadow-none">
+    <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_oklch(var(--border)/0.7)] lg:shadow-none">
       <div className="app-sidebar-header flex h-11 items-center gap-2 px-3">
         <span className="font-mono text-[12px] font-semibold text-foreground">Diffdeck</span>
         <span

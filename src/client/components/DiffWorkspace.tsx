@@ -206,7 +206,7 @@ function MultiFileScroller(props: {
           if (!entry.isIntersecting) continue;
           const path = (entry.target as HTMLElement).dataset.filePath;
           const file = path == null ? null : filesByPath.get(path);
-          if (path != null && file?.hasMergeConflicts !== true) {
+          if (path != null && file?.hasMergeConflicts !== true && file?.isBinary !== true) {
             onRequestFileDiffRef.current(path);
           }
         }
@@ -313,7 +313,11 @@ function MultiFileScroller(props: {
 
   useEffect(() => {
     const selectedFile = selectedPath == null ? null : filesByPath.get(selectedPath);
-    if (selectedPath != null && selectedFile?.hasMergeConflicts !== true) {
+    if (
+      selectedPath != null &&
+      selectedFile?.hasMergeConflicts !== true &&
+      selectedFile?.isBinary !== true
+    ) {
       onRequestFileDiffRef.current(selectedPath);
     }
   }, [filesByPath, selectedPath]);
@@ -596,6 +600,16 @@ const FileDiffSection = memo(function FileDiffSection({
     );
   }
 
+  if (file.isBinary === true) {
+    const headerStub = { name: file.path, hunks: [] } as unknown as FileDiffMetadata;
+    return (
+      <>
+        {renderHeader(headerStub)}
+        {collapsed ? null : <UnsupportedFileBody path={file.path} />}
+      </>
+    );
+  }
+
   if (fileDiff == null) {
     return (
       <div
@@ -635,3 +649,44 @@ const FileDiffSection = memo(function FileDiffSection({
     />
   );
 });
+
+const IMAGE_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "bmp",
+  "ico",
+  "tif",
+  "tiff",
+  "avif",
+  "heic",
+  "heif",
+]);
+
+function getFileExtension(path: string): string {
+  const base = path.slice(path.lastIndexOf("/") + 1);
+  const dot = base.lastIndexOf(".");
+  return dot <= 0 ? "" : base.slice(dot + 1).toLowerCase();
+}
+
+function UnsupportedFileBody({ path }: { path: string }) {
+  const extension = getFileExtension(path);
+  const isImage = IMAGE_EXTENSIONS.has(extension);
+  const label = isImage ? "Image preview not supported" : "Binary file not shown";
+  const description = isImage
+    ? "Image diffs aren't rendered in the viewer yet."
+    : "This file's contents are binary and can't be shown as a text diff.";
+  return (
+    <div
+      role="note"
+      className="app-diff-state grid place-items-center p-6 text-center text-xs text-muted-foreground"
+    >
+      <div className="space-y-1">
+        <p className="font-medium text-foreground">{label}</p>
+        <p className="leading-relaxed">{description}</p>
+      </div>
+    </div>
+  );
+}

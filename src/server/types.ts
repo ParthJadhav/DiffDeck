@@ -9,6 +9,7 @@ export interface DiffFileSummary {
   additions: number;
   deletions: number;
   hasMergeConflicts?: boolean;
+  isBinary?: boolean;
 }
 
 export interface DiffSession {

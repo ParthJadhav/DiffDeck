@@ -7,8 +7,11 @@ type CopyStatus = "idle" | "copied" | "failed";
 
 export function CopyCommentsButton({ comments }: { comments: CommentExportRecord[] }) {
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
-  const copyText = useMemo(() => formatCommentExport(comments), [comments]);
   const commentCount = comments.length;
+  const copyText = useMemo(
+    () => (commentCount === 0 ? "" : formatCommentExport(comments)),
+    [comments, commentCount],
+  );
 
   useEffect(() => {
     if (copyStatus === "idle") return;
@@ -27,26 +30,24 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
     }
   };
 
+  if (commentCount === 0) return null;
+
   return (
-    <div className="min-w-0 flex-1">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6">
       <Button
         type="button"
         variant="ghost"
         size="sm"
         onClick={handleCopy}
-        disabled={commentCount === 0}
-        aria-label={
-          commentCount === 0
-            ? "No comments to copy"
-            : `Copy ${commentCount} ${commentCount === 1 ? "comment" : "comments"} with context`
-        }
-        title={commentCount === 0 ? "No comments to copy" : "Copy all comments with context"}
-        className="app-sidebar-action h-10 w-full justify-start px-2.5 text-[12px]"
+        aria-label={`Copy ${commentCount} ${commentCount === 1 ? "comment" : "comments"} with context`}
+        title="Copy comments with context"
+        className="app-copy-fab pointer-events-auto h-11 gap-2.5 rounded-full px-4 text-[12.5px] font-medium"
       >
         <CopyIcon />
-        <span className="min-w-0 flex-1 truncate text-left">Copy all comments</span>
+        <span>Copy comments</span>
         <span
-          className="app-count-badge app-copy-status inline-grid h-5 w-12 shrink-0 place-items-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums"
+          data-status={copyStatus}
+          className="app-copy-fab-badge app-copy-status inline-grid h-5 min-w-[1.5rem] place-items-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums"
           aria-hidden="true"
         >
           <span
@@ -63,7 +64,7 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
               copyStatus === "copied" && "app-copy-status-item-visible",
             )}
           >
-            copied
+            <CheckIcon />
           </span>
           <span
             className={cn(
@@ -71,7 +72,7 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
               copyStatus === "failed" && "app-copy-status-item-visible",
             )}
           >
-            error
+            <ErrorIcon />
           </span>
         </span>
       </Button>
@@ -123,6 +124,39 @@ function CopyIcon() {
     >
       <rect x="5.5" y="5.5" width="7" height="7" rx="1.4" />
       <path d="M3.5 10.5h-.2A1.3 1.3 0 012 9.2V3.3A1.3 1.3 0 013.3 2h5.9a1.3 1.3 0 011.3 1.3v.2" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 12 12"
+      className="h-2.5 w-2.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 6.4l2.4 2.4L9.5 3.7" />
+    </svg>
+  );
+}
+
+function ErrorIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 12 12"
+      className="h-2.5 w-2.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+    >
+      <path d="M3 3l6 6M9 3l-6 6" />
     </svg>
   );
 }

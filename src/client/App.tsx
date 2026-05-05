@@ -244,9 +244,7 @@ export function App() {
     return <ShellState>No session data available.</ShellState>;
   }
 
-  const sidebarFooter = (
-    <SidebarFooter comments={orderedCommentExports} controlsProps={controlsProps} />
-  );
+  const sidebarFooter = <DiffControls {...controlsProps} />;
 
   return (
     <WorkerPoolContextProvider
@@ -277,23 +275,9 @@ export function App() {
             <DiffWorkspace {...workspaceProps} />
           </div>
         )}
+        <CopyCommentsButton comments={orderedCommentExports} />
       </div>
     </WorkerPoolContextProvider>
-  );
-}
-
-function SidebarFooter({
-  comments,
-  controlsProps,
-}: {
-  comments: CommentExportRecord[];
-  controlsProps: DiffControlsProps;
-}) {
-  return (
-    <div className="flex w-full items-center gap-2">
-      <DiffControls {...controlsProps} />
-      <CopyCommentsButton comments={comments} />
-    </div>
   );
 }
 

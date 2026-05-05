@@ -112,6 +112,11 @@ function createFileContents(name: string, contents: string): FileContents {
   };
 }
 
+function isBinaryFileDiff(rawFileDiff: string | undefined): boolean {
+  if (rawFileDiff == null) return false;
+  return /^(?:GIT binary patch|Binary files .* differ)$/m.test(rawFileDiff);
+}
+
 function splitRawDiffFiles(rawDiff: string): string[] {
   return rawDiff
     .split(/(?=^diff --git)/gm)
@@ -192,13 +197,19 @@ export function buildDiffSession(
     const rawFileDiffs = splitRawDiffFiles(rawDiff);
     const canHydrateFromWorktree = diffArgs.length === 0;
     for (const [index, partialFileDiff] of parsedPatch.files.entries()) {
-      const fileDiff = canHydrateFromWorktree
-        ? hydrateFileDiff(repoRoot, rawFileDiffs[index], partialFileDiff)
-        : partialFileDiff;
-      fileDiff.cacheKey = buildCacheKey("diff", fileDiff.name, rawFileDiffs[index] ?? rawDiff);
+      const rawFileDiff = rawFileDiffs[index];
+      const binary = isBinaryFileDiff(rawFileDiff);
+      const fileDiff =
+        canHydrateFromWorktree && !binary
+          ? hydrateFileDiff(repoRoot, rawFileDiff, partialFileDiff)
+          : partialFileDiff;
+      fileDiff.cacheKey = buildCacheKey("diff", fileDiff.name, rawFileDiff ?? rawDiff);
       fileDiffs.set(fileDiff.name, fileDiff);
       const summary = createSummary(fileDiff);
-      const contents = readWorktreeFile(repoRoot, fileDiff.name);
+      if (binary) {
+        summary.isBinary = true;
+      }
+      const contents = binary ? null : readWorktreeFile(repoRoot, fileDiff.name);
       if (contents != null && hasMergeConflictMarkers(contents)) {
         summary.hasMergeConflicts = true;
         unresolvedFiles.set(fileDiff.name, contents);

@@ -55,7 +55,7 @@ export function CustomFileHeader({
           {fileDiff.name}
         </span>
         {hasMergeConflicts ? (
-          <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-foreground shadow-[inset_0_0_0_1px_hsl(var(--warning-border)/0.8)]">
+          <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-foreground shadow-[inset_0_0_0_1px_oklch(var(--warning-border)/0.8)]">
             Conflict
           </span>
         ) : null}
@@ -101,7 +101,7 @@ function FileIcon() {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_hsl(var(--info-border)/0.75)]"
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_oklch(var(--info-border)/0.75)]"
     >
       <span className="h-1.5 w-1.5 rounded-[2px] bg-info" />
     </span>
@@ -126,8 +126,8 @@ function ViewedButton({
       className={cn(
         "app-viewed-button ml-1 inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 font-sans text-xs font-medium transition-[background-color,box-shadow,color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         viewed
-          ? "bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_hsl(var(--info-border)/0.8)] hover:bg-info-muted/80 hover:shadow-[inset_0_0_0_1px_hsl(var(--info-border))]"
-          : "bg-transparent text-muted-foreground shadow-[inset_0_0_0_1px_hsl(var(--border)/0.7)] hover:bg-accent hover:text-foreground hover:shadow-[inset_0_0_0_1px_hsl(var(--border))]",
+          ? "bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_oklch(var(--info-border)/0.8)] hover:bg-info-muted/80 hover:shadow-[inset_0_0_0_1px_oklch(var(--info-border))]"
+          : "bg-transparent text-muted-foreground shadow-[inset_0_0_0_1px_oklch(var(--border)/0.7)] hover:bg-accent hover:text-foreground hover:shadow-[inset_0_0_0_1px_oklch(var(--border))]",
       )}
     >
       <ViewedIcon checked={viewed} />

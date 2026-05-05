@@ -42,8 +42,8 @@ function CheckLabel({
         className={cn(
           "app-check-box relative inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-[3.5px] transition-[background-color,box-shadow] duration-150 ease-out",
           checked
-            ? "bg-foreground text-background shadow-[inset_0_0_0_1px_hsl(var(--foreground))]"
-            : "bg-transparent shadow-[inset_0_0_0_1px_hsl(var(--border))] group-hover:shadow-[inset_0_0_0_1px_hsl(var(--muted-foreground)/0.7)]",
+            ? "bg-foreground text-background shadow-[inset_0_0_0_1px_oklch(var(--foreground))]"
+            : "bg-transparent shadow-[inset_0_0_0_1px_oklch(var(--border))] group-hover:shadow-[inset_0_0_0_1px_oklch(var(--muted-foreground)/0.7)]",
         )}
       >
         <Checkbox
@@ -598,23 +598,21 @@ export function DiffControls(props: DiffControlsProps) {
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-2">
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-label="Diff settings"
-          aria-expanded={open}
-          aria-controls={panelId}
-          aria-haspopup="dialog"
-          onClick={() => setOpen((prev) => !prev)}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-            open && "bg-accent text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]",
-          )}
-        >
-          <GearIcon />
-        </button>
-      </div>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="Diff settings"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-haspopup="dialog"
+        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          "app-sidebar-action inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,box-shadow,scale] duration-150 hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          open && "text-foreground",
+        )}
+      >
+        <GearIcon />
+      </button>
     </div>
   );
 }
