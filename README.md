@@ -14,6 +14,14 @@ Open a Git diff in your browser from the terminal.
 
 Optionally, you can comment on changed lines and copy all of them at once for your AI to resolve — the surrounding code context goes with them, so the agent has everything it needs to act.
 
+## Agentic Setup
+
+Tell your coding agent (Claude Code, Cursor, etc.):
+
+```
+Install `@parthj/diffdeck` globally with `npm install -g @parthj/diffdeck`, then add `alias gd='diffdeck'` to my shell rc file. Run `gd` whenever I ask you to show me a diff.
+```
+
 ## Install
 
 ```sh
@@ -44,14 +52,6 @@ Then use it like `git diff`:
 gd
 gd --cached
 gd HEAD~1 HEAD
-```
-
-## Agentic Setup
-
-Tell your coding agent (Claude Code, Cursor, etc.):
-
-```
-Install `@parthj/diffdeck` globally with `npm install -g @parthj/diffdeck`, then add `alias gd='diffdeck'` to my shell rc file. Run `gd` whenever I ask you to show me a diff.
 ```
 
 ## Use It Like Git Diff
