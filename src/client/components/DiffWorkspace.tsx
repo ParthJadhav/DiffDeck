@@ -393,6 +393,20 @@ const FileDiffSection = memo(function FileDiffSection({
     [file.path, onCollapsedChange, onViewedChange],
   );
 
+  const renderHeader = useCallback(
+    (metadataFileDiff: FileDiffMetadata) => (
+      <CustomFileHeader
+        collapsed={collapsed}
+        fileDiff={metadataFileDiff}
+        hasMergeConflicts={file.hasMergeConflicts === true}
+        onCollapsedChange={handleHeaderCollapsedChange}
+        onViewedChange={handleHeaderViewedChange}
+        viewed={viewed}
+      />
+    ),
+    [collapsed, file.hasMergeConflicts, handleHeaderCollapsedChange, handleHeaderViewedChange, viewed],
+  );
+
   useEffect(() => {
     if (file.hasMergeConflicts !== true) return;
     const params = new URLSearchParams({ path: file.path });
@@ -576,16 +590,7 @@ const FileDiffSection = memo(function FileDiffSection({
             onSubmit={handleCommentSubmit}
           />
         )}
-        renderCustomHeader={(metadataFileDiff) => (
-          <CustomFileHeader
-            collapsed={collapsed}
-            fileDiff={metadataFileDiff}
-            hasMergeConflicts
-            onCollapsedChange={handleHeaderCollapsedChange}
-            onViewedChange={handleHeaderViewedChange}
-            viewed={viewed}
-          />
-        )}
+        renderCustomHeader={renderHeader}
         disableWorkerPool
       />
     );
@@ -610,22 +615,7 @@ const FileDiffSection = memo(function FileDiffSection({
   }
 
   if (isHeavyFile) {
-    return (
-      <HeavyFileDiff
-        collapsed={collapsed}
-        fileDiff={fileDiff}
-        header={
-          <CustomFileHeader
-            collapsed={collapsed}
-            fileDiff={fileDiff}
-            hasMergeConflicts={file.hasMergeConflicts === true}
-            onCollapsedChange={handleHeaderCollapsedChange}
-            onViewedChange={handleHeaderViewedChange}
-            viewed={viewed}
-          />
-        }
-      />
-    );
+    return <HeavyFileDiff collapsed={collapsed} fileDiff={fileDiff} header={renderHeader(fileDiff)} />;
   }
 
   return (
@@ -641,16 +631,7 @@ const FileDiffSection = memo(function FileDiffSection({
           onSubmit={handleCommentSubmit}
         />
       )}
-      renderCustomHeader={(metadataFileDiff) => (
-        <CustomFileHeader
-          collapsed={collapsed}
-          fileDiff={metadataFileDiff}
-          hasMergeConflicts={file.hasMergeConflicts === true}
-          onCollapsedChange={handleHeaderCollapsedChange}
-          onViewedChange={handleHeaderViewedChange}
-          viewed={viewed}
-        />
-      )}
+      renderCustomHeader={renderHeader}
     />
   );
 });

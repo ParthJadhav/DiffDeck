@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { cleanLastNewline } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 
 const ROW_HEIGHT = 20;
@@ -18,15 +19,23 @@ type Row =
   | { kind: "delete"; text: string; oldNum: number }
   | { kind: "gap"; label: string };
 
-function stripTrailingNewline(line: string | undefined): string {
-  if (line == null) return "";
-  // Pierre keeps the trailing line terminator; we render with `white-space:
-  // pre` inside fixed-height rows so any literal newline would push content
-  // out of the row.
-  if (line.endsWith("\r\n")) return line.slice(0, -2);
-  if (line.endsWith("\n")) return line.slice(0, -1);
-  return line;
-}
+// Pierre keeps the trailing line terminator; we render with `white-space: pre`
+// inside fixed-height rows so any literal newline would push content out.
+const stripNewline = (line: string | undefined) => (line == null ? "" : cleanLastNewline(line));
+
+const ROW_CLASS: Record<Row["kind"], string> = {
+  context: "app-heavy-row",
+  add: "app-heavy-row app-heavy-row-add",
+  delete: "app-heavy-row app-heavy-row-delete",
+  gap: "app-heavy-row app-heavy-row-gap",
+};
+
+const ROW_SIGIL: Record<Row["kind"], string> = {
+  context: " ",
+  add: "+",
+  delete: "-",
+  gap: "",
+};
 
 function buildRows(fileDiff: FileDiffMetadata): Row[] {
   const rows: Row[] = [];
@@ -48,7 +57,7 @@ function buildRows(fileDiff: FileDiffMetadata): Row[] {
         for (let i = 0; i < content.lines; i++) {
           rows.push({
             kind: "context",
-            text: stripTrailingNewline(additionLines[content.additionLineIndex + i]),
+            text: stripNewline(additionLines[content.additionLineIndex + i]),
             oldNum: oldLine + i,
             newNum: newLine + i,
           });
@@ -59,7 +68,7 @@ function buildRows(fileDiff: FileDiffMetadata): Row[] {
         for (let i = 0; i < content.deletions; i++) {
           rows.push({
             kind: "delete",
-            text: stripTrailingNewline(deletionLines[content.deletionLineIndex + i]),
+            text: stripNewline(deletionLines[content.deletionLineIndex + i]),
             oldNum: oldLine + i,
           });
         }
@@ -67,7 +76,7 @@ function buildRows(fileDiff: FileDiffMetadata): Row[] {
         for (let i = 0; i < content.additions; i++) {
           rows.push({
             kind: "add",
-            text: stripTrailingNewline(additionLines[content.additionLineIndex + i]),
+            text: stripNewline(additionLines[content.additionLineIndex + i]),
             newNum: newLine + i,
           });
         }
@@ -79,12 +88,10 @@ function buildRows(fileDiff: FileDiffMetadata): Row[] {
 }
 
 function findScrollParent(el: HTMLElement | null): HTMLElement | null {
-  // Walk up looking for the closest ancestor that *actually* scrolls (i.e.
-  // clientHeight < scrollHeight). The diff workspace nests two `overflow:auto`
-  // wrappers; only the outer one (the flex column with `min-h-0`) is the real
-  // scroll container — the inner `Virtualizer` wrapper sizes itself to its
-  // content height and never scrolls. Fall back to the first overflow:auto
-  // ancestor if nothing has overflowing content yet (initial mount).
+  // The diff workspace nests two `overflow:auto` wrappers; only the outer one
+  // actually scrolls. Prefer the ancestor that's currently overflowing; fall
+  // back to the first overflow:auto for the initial mount before content has
+  // grown past the viewport.
   let node: HTMLElement | null = el?.parentElement ?? null;
   let fallback: HTMLElement | null = null;
   while (node) {
@@ -110,20 +117,20 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
   fileDiff: FileDiffMetadata;
   header: ReactNode;
 }) {
-  // Defer row generation by one paint when transitioning collapsed → expanded
-  // so the header re-paints immediately and the user gets feedback while we
-  // walk the (potentially 24k-line) hunk tree.
-  const [renderRows, setRenderRows] = useState(!collapsed);
+  // Defer row generation by one paint after expand so the header paints
+  // immediately and the user gets feedback while we walk the (potentially
+  // 24k-line) hunk tree. Always start false — initialising from `!collapsed`
+  // would render rows synchronously on mount and skip the deferral.
+  const [renderRows, setRenderRows] = useState(false);
 
   useEffect(() => {
     if (collapsed) {
       setRenderRows(false);
       return;
     }
-    if (renderRows) return;
     const raf = requestAnimationFrame(() => setRenderRows(true));
     return () => cancelAnimationFrame(raf);
-  }, [collapsed, renderRows]);
+  }, [collapsed]);
 
   const rows = useMemo(() => (renderRows ? buildRows(fileDiff) : []), [renderRows, fileDiff]);
 
@@ -231,7 +238,7 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
 function HeavyRow({ row, top }: { row: Row; top: number }) {
   if (row.kind === "gap") {
     return (
-      <div className="app-heavy-row app-heavy-row-gap" style={{ top }}>
+      <div className={ROW_CLASS.gap} style={{ top }}>
         <span className="app-heavy-num" />
         <span className="app-heavy-num" />
         <span className="app-heavy-sigil" />
@@ -242,19 +249,12 @@ function HeavyRow({ row, top }: { row: Row; top: number }) {
 
   const oldNum = row.kind === "delete" || row.kind === "context" ? row.oldNum : null;
   const newNum = row.kind === "add" || row.kind === "context" ? row.newNum : null;
-  const sigil = row.kind === "add" ? "+" : row.kind === "delete" ? "-" : " ";
-  const cls =
-    row.kind === "add"
-      ? "app-heavy-row app-heavy-row-add"
-      : row.kind === "delete"
-        ? "app-heavy-row app-heavy-row-delete"
-        : "app-heavy-row";
 
   return (
-    <div className={cls} style={{ top }}>
+    <div className={ROW_CLASS[row.kind]} style={{ top }}>
       <span className="app-heavy-num">{oldNum ?? ""}</span>
       <span className="app-heavy-num">{newNum ?? ""}</span>
-      <span className="app-heavy-sigil">{sigil}</span>
+      <span className="app-heavy-sigil">{ROW_SIGIL[row.kind]}</span>
       <span className="app-heavy-text">{row.text}</span>
     </div>
   );
