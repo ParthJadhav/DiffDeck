@@ -32,8 +32,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -51,7 +54,5 @@ jobs:
       - name: Typecheck, lint, format check, and build
         run: bun run check
 
-      - name: Publish to npm with provenance
-        run: npm publish --provenance --access public --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm via Trusted Publishing
+        run: npm publish --access public --ignore-scripts

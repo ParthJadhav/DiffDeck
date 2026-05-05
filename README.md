@@ -31,7 +31,7 @@ gd HEAD~1 HEAD
 ## Install
 
 ```sh
-npm install -g @parthjadhav/diffdeck
+npm install -g @parthj/diffdeck
 ```
 
 The package is scoped, but the installed command is `diffdeck`.

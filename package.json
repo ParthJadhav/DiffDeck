@@ -1,5 +1,5 @@
 {
-  "name": "@parthjadhav/diffdeck",
+  "name": "@parthj/diffdeck",
   "version": "0.1.0",
   "description": "View git diffs in the browser with @pierre/diffs and @pierre/trees.",
   "type": "module",
