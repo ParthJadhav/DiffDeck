@@ -10,7 +10,7 @@ Open a Git diff in your browser from the terminal.
 - `git diff` in the terminal is too hard to read.
 - You are SSHed into a server and still want a clean visual review.
 
-You can also leave comments on changed lines and copy all comments with context for a PR, issue, chat, or agent prompt.
+Optionally, you can comment on changed lines and copy all of them at once for your AI to resolve — the surrounding code context goes with them, so the agent has everything it needs to act.
 
 ## Make It A Drop-In
 
@@ -52,7 +52,7 @@ Everything after Diffdeck's own options is passed through to `git diff` as long 
 | Option | What it does |
 | --- | --- |
 | `--repo <path>` | Run against another repository. |
-| `--port <number>` | Bind to a specific port. Defaults to a free one. |
+| `--port <number>` | Bind to a specific port. Defaults to `4321` (falls back to a free port if taken). |
 | `--host <host>` | Bind to a host. Defaults to `127.0.0.1`. |
 | `--no-open` | Start the server without opening a browser. |
 | `--help` | Show CLI help. |

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import { prepareFileTreeInput } from "@pierre/trees";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
@@ -10,6 +10,7 @@ import { ShellState } from "./components/ShellState.js";
 import { useSession } from "./hooks/useSession.js";
 import { useFileDiff } from "./hooks/useFileDiff.js";
 import { useDiffTree } from "./hooks/useDiffTree.js";
+import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useMediaQuery } from "./hooks/useMediaQuery.js";
 import { highlighterLangs, themeOptions } from "./lib/constants.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
@@ -22,14 +23,33 @@ export function App() {
   const { session, loading, error, setError } = useSession();
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [themeType, setThemeType] = useState<ThemeChoice>("system");
-  const [diffStyle, setDiffStyle] = useState<DiffLayout>("split");
+  const [themeType, setThemeType] = useLocalStorage<ThemeChoice>(
+    "diffdeck.settings.themeType",
+    "system",
+  );
+  const [diffStyle, setDiffStyle] = useLocalStorage<DiffLayout>(
+    "diffdeck.settings.diffStyle",
+    "split",
+  );
   const hunkSeparators: HunkSeparatorMode = "custom";
-  const [overflow, setOverflow] = useState<OverflowMode>("scroll");
-  const [disableBackground, setDisableBackground] = useState(false);
-  const [showLineNumbers, setShowLineNumbers] = useState(true);
-  const [expandUnchanged, setExpandUnchanged] = useState(false);
+  const [overflow, setOverflow] = useLocalStorage<OverflowMode>(
+    "diffdeck.settings.overflow",
+    "scroll",
+  );
+  const [disableBackground, setDisableBackground] = useLocalStorage(
+    "diffdeck.settings.disableBackground",
+    false,
+  );
+  const [showLineNumbers, setShowLineNumbers] = useLocalStorage(
+    "diffdeck.settings.showLineNumbers",
+    true,
+  );
+  const [expandUnchanged, setExpandUnchanged] = useLocalStorage(
+    "diffdeck.settings.expandUnchanged",
+    false,
+  );
   const [collapsedFilePaths, setCollapsedFilePaths] = useState<Set<string>>(() => new Set());
+  const autoCollapsedRef = useRef(false);
   const [viewedFilePaths, setViewedFilePaths] = useState<Set<string>>(() => new Set());
   const [commentExports, setCommentExports] = useState<CommentExportRecord[]>([]);
   const isDesktopLayout = useMediaQuery("(min-width: 1024px)");
@@ -71,6 +91,21 @@ export function App() {
       setSelectedPath(orderedFiles[0]?.path ?? null);
     }
   }, [session, selectedPath, orderedFiles]);
+
+  useEffect(() => {
+    if (session == null || autoCollapsedRef.current) return;
+    autoCollapsedRef.current = true;
+    const LARGE_DIFF_LINE_THRESHOLD = 800;
+    const largePaths = orderedFiles
+      .filter((file) => file.additions + file.deletions >= LARGE_DIFF_LINE_THRESHOLD)
+      .map((file) => file.path);
+    if (largePaths.length === 0) return;
+    setCollapsedFilePaths((current) => {
+      const next = new Set(current);
+      for (const path of largePaths) next.add(path);
+      return next;
+    });
+  }, [session, orderedFiles]);
 
   const { fileDiffs, requestPath } = useFileDiff(reportError);
   const [scrollSignal, setScrollSignal] = useState(0);

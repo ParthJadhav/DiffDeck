@@ -6,10 +6,20 @@ import { spawnSync } from "node:child_process";
 import type { DiffFileSummary, DiffSession } from "./types.js";
 import { buildCacheKey } from "./cacheKey.js";
 
+// Node's spawnSync defaults maxBuffer to 1 MB, which is easily exceeded by
+// real-world diffs (huge lockfiles, generated code, binary patches). Allow up
+// to 512 MB so a single oversized file doesn't break the whole session.
+const GIT_MAX_BUFFER = 512 * 1024 * 1024;
+
 function runGit(repo: string, args: string[]): string {
   const result = spawnSync("git", ["-C", repo, ...args], {
     encoding: "utf8",
+    maxBuffer: GIT_MAX_BUFFER,
   });
+
+  if (result.error) {
+    throw result.error;
+  }
 
   if (result.status !== 0) {
     const stderr = result.stderr.trim();

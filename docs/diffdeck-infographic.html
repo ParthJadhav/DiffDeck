@@ -99,7 +99,7 @@
         font-size: 21px;
         line-height: 1.38;
         font-weight: 620;
-        text-wrap: pretty;
+        text-wrap: balance;
       }
 
       .subtitle code {
@@ -255,7 +255,7 @@
       .workspace {
         display: grid;
         grid-template-rows: 56px 1fr;
-        height: 474px;
+        height: 420px;
         min-width: 0;
         overflow: hidden;
       }
@@ -490,6 +490,10 @@
         box-shadow: inset 0 -1px 0 rgba(217, 222, 232, 0.75);
       }
 
+      .diff-row:last-child {
+        box-shadow: none;
+      }
+
       .line-no {
         color: #8a94a6;
         text-align: right;
@@ -539,7 +543,7 @@
       .chips {
         display: flex;
         gap: 12px;
-        margin-top: 34px;
+        margin-top: 26px;
       }
 
       .chip {
@@ -563,7 +567,7 @@
           <p class="kicker">Diffdeck</p>
           <h1>Git diff, in a browser.</h1>
           <p class="subtitle">
-            Run <code>diffdeck</code>. Review files faster. Copy notes when needed.
+            Run <code>diffdeck</code>. Review files faster. Copy comments when needed.
           </p>
         </div>
         <div class="local-badge">
@@ -629,7 +633,7 @@
                 </div>
               </div>
               <div class="copy-button">
-                <span>Copy notes</span>
+                <span>Copy comments</span>
                 <small>2</small>
               </div>
             </aside>
@@ -638,7 +642,7 @@
               <div class="file-head">
                 <span class="file-path">src/client/App.tsx</span>
                 <span class="stats">
-                  <span class="minus">-12</span>
+                  <span class="minus">−12</span>
                   <span class="plus">+28</span>
                 </span>
               </div>
@@ -681,7 +685,7 @@
       <section class="chips" aria-label="Diffdeck highlights">
         <div class="chip">File tree</div>
         <div class="chip">Readable hunks</div>
-        <div class="chip">Copy notes</div>
+        <div class="chip">Copy comments</div>
       </section>
     </main>
   </body>
