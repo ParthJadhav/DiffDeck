@@ -14,6 +14,22 @@ Open a Git diff in your browser from the terminal.
 
 Optionally, you can comment on changed lines and copy all of them at once for your AI to resolve — the surrounding code context goes with them, so the agent has everything it needs to act.
 
+## Install
+
+```sh
+npm install -g @parthj/diffdeck
+```
+
+The package is scoped, but the installed command is `diffdeck`.
+
+To update to the latest version:
+
+```sh
+npm install -g @parthj/diffdeck@latest
+```
+
+(`npm update -g` won't bump globally-installed packages because they're pinned to an exact version at install time.)
+
 ## Make It A Drop-In
 
 Diffdeck accepts the same diff arguments, so the simplest setup is a shell alias:
@@ -30,21 +46,13 @@ gd --cached
 gd HEAD~1 HEAD
 ```
 
-## Install
+## Agentic Setup
 
-```sh
-npm install -g @parthj/diffdeck
+Tell your coding agent (Claude Code, Cursor, etc.):
+
 ```
-
-The package is scoped, but the installed command is `diffdeck`.
-
-To update to the latest version:
-
-```sh
-npm install -g @parthj/diffdeck@latest
+Install `@parthj/diffdeck` globally with `npm install -g @parthj/diffdeck`, then add `alias gd='diffdeck'` to my shell rc file. Run `gd` whenever I ask you to show me a diff.
 ```
-
-(`npm update -g` won't bump globally-installed packages because they're pinned to an exact version at install time.)
 
 ## Use It Like Git Diff
 
