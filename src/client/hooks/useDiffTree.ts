@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { FileTree as TreeModel, prepareFileTreeInput, type GitStatusEntry } from "@pierre/trees";
 import { buildGitStatus } from "../lib/diff.js";
+import { fileTreeShapeOptions } from "../lib/constants.js";
 import type { DiffFileSummary, SessionPayload } from "../types.js";
 
 export interface UseDiffTreeOptions {
@@ -30,7 +31,10 @@ export function useDiffTree({
     [session],
   );
 
-  const preparedInput = useMemo(() => prepareFileTreeInput(filePaths), [filePaths]);
+  const preparedInput = useMemo(
+    () => prepareFileTreeInput(filePaths, fileTreeShapeOptions),
+    [filePaths],
+  );
 
   useEffect(() => {
     fileSummaryRef.current = new Map((session?.files ?? []).map((file) => [file.path, file]));
@@ -51,6 +55,7 @@ export function useDiffTree({
         },
       },
       density: "compact",
+      ...fileTreeShapeOptions,
       gitStatus: [],
       initialExpansion: "open",
       paths: [],
@@ -82,6 +87,67 @@ export function useDiffTree({
         [data-item-section='decoration'] {
           font-size: 11px;
           font-weight: 600;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true'] {
+          display: inline-flex;
+          min-width: 0;
+          max-width: 100%;
+          align-items: center;
+          overflow: hidden;
+          font-size: 0;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem] {
+          display: none;
+          min-width: 0;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-compact-segment] {
+          display: inline-flex;
+          align-items: center;
+          min-width: 0;
+          font-size: var(--trees-font-size);
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-compact-segment] > * {
+          display: none;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-compact-segment]::before {
+          content: attr(data-diffdeck-prefix);
+          flex: 0 0 auto;
+          color: var(--trees-fg-muted);
+          white-space: pre;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-compact-segment]::after {
+          content: attr(data-diffdeck-label);
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          direction: rtl;
+          text-align: left;
+          unicode-bidi: isolate;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-segment-role='root'],
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-segment-role='parent'] {
+          flex: 0 1 auto;
+          max-width: 7rem;
+        }
+
+        [data-item-flattened-subitems][data-diffdeck-compact-path='true']
+          > [data-item-flattened-subitem][data-diffdeck-segment-role='leaf'] {
+          flex: 1 1 auto;
         }
       `,
       onSelectionChange: (selectedPaths) => {

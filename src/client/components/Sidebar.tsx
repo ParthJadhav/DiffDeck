@@ -19,23 +19,27 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
     if (root == null) return;
 
     let shadowObserver: MutationObserver | null = null;
-    const patchSearchInput = () => {
+    const patchTreeInternals = () => {
       const shadowRoot = root.querySelector("file-tree-container")?.shadowRoot;
       if (shadowRoot != null && shadowObserver == null) {
-        shadowObserver = new MutationObserver(patchSearchInput);
+        shadowObserver = new MutationObserver(patchTreeInternals);
         shadowObserver.observe(shadowRoot, { childList: true, subtree: true });
       }
 
       const input = shadowRoot?.querySelector<HTMLInputElement>("[data-file-tree-search-input]");
-      if (input == null) return;
+      if (input != null) {
+        input.id = "diffdeck-file-search";
+        input.name = "diffdeck-file-search";
+        input.setAttribute("aria-label", "Search files");
+      }
 
-      input.id = "diffdeck-file-search";
-      input.name = "diffdeck-file-search";
-      input.setAttribute("aria-label", "Search files");
+      if (shadowRoot != null) {
+        patchFlattenedPathLabels(shadowRoot);
+      }
     };
 
-    patchSearchInput();
-    const observer = new MutationObserver(patchSearchInput);
+    patchTreeInternals();
+    const observer = new MutationObserver(patchTreeInternals);
     observer.observe(root, { childList: true, subtree: true });
     return () => {
       observer.disconnect();
@@ -81,4 +85,54 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
       {footer != null ? <div className="app-sidebar-footer px-3 py-2">{footer}</div> : null}
     </aside>
   );
+}
+
+function patchFlattenedPathLabels(root: ShadowRoot) {
+  for (const container of root.querySelectorAll<HTMLElement>("[data-item-flattened-subitems]")) {
+    const segments = container.querySelectorAll<HTMLElement>("[data-item-flattened-subitem]");
+    if (segments.length === 0) {
+      continue;
+    }
+
+    const basenames: string[] = [];
+    for (const segment of segments) basenames.push(basenameFromSegment(segment));
+
+    const compact = segments.length > 3;
+    const lastIndex = segments.length - 1;
+
+    container.dataset.diffdeckCompactPath = "true";
+    container.title = basenames.join(" / ");
+
+    let visiblePosition = 0;
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index]!;
+      const isVisible = !compact || index === 0 || index === lastIndex - 1 || index === lastIndex;
+      segment.toggleAttribute("data-diffdeck-compact-segment", isVisible);
+
+      if (!isVisible) {
+        segment.removeAttribute("data-diffdeck-prefix");
+        segment.removeAttribute("data-diffdeck-segment-role");
+        segment.removeAttribute("data-diffdeck-label");
+        continue;
+      }
+
+      segment.dataset.diffdeckPrefix = prefixFor(visiblePosition, compact);
+      segment.dataset.diffdeckSegmentRole =
+        index === 0 ? "root" : index === lastIndex ? "leaf" : "parent";
+      segment.dataset.diffdeckLabel = basenames[index]!;
+      visiblePosition += 1;
+    }
+  }
+}
+
+function prefixFor(visiblePosition: number, compact: boolean): string {
+  if (visiblePosition === 0) return "";
+  if (compact && visiblePosition === 1) return " / ... / ";
+  return " / ";
+}
+
+function basenameFromSegment(element: HTMLElement) {
+  const path = element.getAttribute("data-item-flattened-subitem") ?? "";
+  const normalized = path.endsWith("/") ? path.slice(0, -1) : path;
+  return normalized.slice(normalized.lastIndexOf("/") + 1);
 }

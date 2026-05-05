@@ -17,6 +17,7 @@ export const highlighterLangs = [
 
 export const themeChoices = ["system", "light", "dark"] as const;
 export const diffLayouts = ["split", "unified"] as const;
+export const fileTreeShapeOptions = { flattenEmptyDirectories: true } as const;
 export const hunkSeparatorModes = [
   "line-info",
   "line-info-basic",

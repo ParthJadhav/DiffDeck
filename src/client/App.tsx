@@ -12,7 +12,7 @@ import { useFileDiff } from "./hooks/useFileDiff.js";
 import { useDiffTree } from "./hooks/useDiffTree.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useMediaQuery } from "./hooks/useMediaQuery.js";
-import { highlighterLangs, themeOptions } from "./lib/constants.js";
+import { fileTreeShapeOptions, highlighterLangs, themeOptions } from "./lib/constants.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "./lib/uiTypes.js";
 import { workerFactory } from "./workerFactory.js";
@@ -70,7 +70,10 @@ export function App() {
   const orderedFiles = useMemo(() => {
     if (session == null) return [];
     const filesByPath = sessionFilesByPath ?? new Map();
-    const prepared = prepareFileTreeInput(session.files.map((f) => f.path));
+    const prepared = prepareFileTreeInput(
+      session.files.map((f) => f.path),
+      fileTreeShapeOptions,
+    );
     const ordered: typeof session.files = [];
     const orderedPaths = new Set<string>();
     for (const path of prepared.paths) {

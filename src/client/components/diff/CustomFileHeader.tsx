@@ -47,13 +47,7 @@ export function CustomFileHeader({
           <ChevronIcon expanded={!collapsed} />
         </button>
         <FileIcon />
-        <span
-          className="min-w-0 truncate text-sm font-medium text-foreground"
-          translate="no"
-          title={fileDiff.name}
-        >
-          {fileDiff.name}
-        </span>
+        <PathLabel path={fileDiff.name} />
         {hasMergeConflicts ? (
           <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-foreground shadow-[inset_0_0_0_1px_oklch(var(--warning-border)/0.8)]">
             Conflict
@@ -74,6 +68,65 @@ export function CustomFileHeader({
         />
       </div>
     </div>
+  );
+}
+
+type PathToken =
+  | {
+      kind: "ellipsis";
+      label: string;
+    }
+  | {
+      kind: "segment";
+      label: string;
+      role: "leaf" | "parent" | "root";
+    };
+
+function segmentRole(index: number, count: number): "leaf" | "parent" | "root" {
+  if (index === count - 1) return "leaf";
+  if (index === 0) return "root";
+  return "parent";
+}
+
+function createCompactPathTokens(path: string): PathToken[] {
+  const segments = path.split("/").filter(Boolean);
+  if (segments.length <= 3) {
+    return segments.map((segment, index) => ({
+      kind: "segment",
+      label: segment,
+      role: segmentRole(index, segments.length),
+    }));
+  }
+
+  return [
+    { kind: "segment", label: segments[0] ?? "", role: "root" },
+    { kind: "ellipsis", label: "..." },
+    { kind: "segment", label: segments.at(-2) ?? "", role: "parent" },
+    { kind: "segment", label: segments.at(-1) ?? "", role: "leaf" },
+  ];
+}
+
+function PathLabel({ path }: { path: string }) {
+  const tokens = createCompactPathTokens(path);
+  return (
+    <span
+      className="app-path-label text-sm font-medium text-foreground"
+      translate="no"
+      title={path}
+    >
+      {tokens.map((token, index) => {
+        const className =
+          token.kind === "ellipsis"
+            ? "app-path-ellipsis"
+            : `app-path-segment app-path-segment-${token.role}`;
+        return (
+          <span className={className} key={index}>
+            {index > 0 ? <span className="app-path-separator">/</span> : null}
+            <span className="app-path-token">{token.label}</span>
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
