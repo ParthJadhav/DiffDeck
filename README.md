@@ -41,8 +41,10 @@ The package is scoped, but the installed command is `diffdeck`.
 To update to the latest version:
 
 ```sh
-npm update -g @parthj/diffdeck
+npm install -g @parthj/diffdeck@latest
 ```
+
+(`npm update -g` won't bump globally-installed packages because they're pinned to an exact version at install time.)
 
 ## Use It Like Git Diff
 
