@@ -193,7 +193,6 @@ export function useDiffTree({
         }
       }
       treeModel.getItem(selectedPath)?.select();
-      treeModel.focusPath(selectedPath);
     } finally {
       queueMicrotask(() => {
         suppressSelectionFireRef.current = false;

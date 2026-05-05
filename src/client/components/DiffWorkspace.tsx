@@ -351,13 +351,13 @@ function MultiFileScroller(props: {
     };
   }, [scrollerEl]);
 
-  const didInitialScrollRef = useRef(false);
+  const handledScrollSignalRef = useRef<number | null>(null);
   useEffect(() => {
-    if (scrollSignal === 0 && didInitialScrollRef.current) return;
-    didInitialScrollRef.current = true;
     if (selectedPath == null) return;
+    if (handledScrollSignalRef.current === scrollSignal) return;
     const index = fileIndexByPath.get(selectedPath);
     if (index == null) return;
+    handledScrollSignalRef.current = scrollSignal;
     lastReportedPathRef.current = selectedPath;
     pinnedPathRef.current = selectedPath;
     suppressObserverUntilRef.current = performance.now() + 350;
