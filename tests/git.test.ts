@@ -46,6 +46,24 @@ async function createRepoWithQuotedPathDiff(path: string): Promise<string> {
   return repo;
 }
 
+async function createRepoWithModifiedFile(path: string): Promise<string> {
+  const repo = mkdtempSync(join(tmpdir(), "diffdeck-modified-path-"));
+  tempRepos.push(repo);
+
+  runGit(repo, ["init", "-q"]);
+  runGit(repo, ["config", "user.email", "test@example.com"]);
+  runGit(repo, ["config", "user.name", "Test"]);
+
+  const absolutePath = join(repo, path);
+  await mkdir(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, "old\n");
+  runGit(repo, ["add", "."]);
+  runGit(repo, ["commit", "-qm", "initial"]);
+
+  writeFileSync(absolutePath, "new\n");
+  return repo;
+}
+
 describe("buildDiffSession", () => {
   test("normalizes quoted git path headers before parsing", async () => {
     const weirdPath = "dir/weird\ttab\\slash\nline.txt";
@@ -115,5 +133,47 @@ describe("buildDiffSession", () => {
       deletions: 0,
     });
     expect(session.fileDiffs.get("weird\ttab.txt")?.prevName).toBe("plain.txt");
+  });
+
+  test("uses file marker paths when unquoted diff headers contain b/ inside the path", async () => {
+    const weirdPath = "folder b/name.txt";
+    const repo = await createRepoWithModifiedFile(weirdPath);
+    const rawDiff = runGit(repo, [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--find-renames",
+      "--submodule=diff",
+      "--binary",
+      "--no-color",
+      "--no-ext-diff",
+    ]);
+
+    expect(rawDiff).toContain("diff --git a/folder b/name.txt b/folder b/name.txt");
+
+    const session = buildDiffSession(repo, repo, []);
+    expect(session.files).toHaveLength(1);
+    expect(session.files[0]).toMatchObject({
+      path: weirdPath,
+      changeType: "change",
+      gitStatus: "modified",
+      additions: 1,
+      deletions: 1,
+    });
+    expect(session.fileDiffs.get(weirdPath)?.name).toBe(weirdPath);
+  });
+
+  test("debug mode logs line-numbered raw diff context", async () => {
+    const repo = await createRepoWithModifiedFile("src/example.txt");
+    const logs: string[] = [];
+
+    const session = buildDiffSession(repo, repo, [], {
+      debug: true,
+      log: (message) => logs.push(message),
+    });
+
+    expect(session.files).toHaveLength(1);
+    expect(logs.some((line) => line.includes("file 1: lines 1-"))).toBe(true);
+    expect(logs.some((line) => line.includes("header: diff --git a/src/example.txt"))).toBe(true);
   });
 });

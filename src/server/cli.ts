@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { buildDiffSession, resolveRepoRoot } from "./git.js";
 import { startServer } from "./server.js";
 import type { CliOptions } from "./types.js";
+import { formatCliError } from "./errors.js";
 
 const DEFAULT_PORT = 4321;
 
@@ -27,6 +28,7 @@ Options:
   --port <number>   Port to bind. Defaults to ${DEFAULT_PORT} (falls back to a free port if taken).
   --host <host>     Host to bind. Defaults to 127.0.0.1.
   --no-open         Do not open the browser automatically.
+  --debug           Print line-numbered diff parsing logs.
   --version         Print the installed version and exit.
   --help            Show this help message.
 
@@ -44,6 +46,7 @@ function parseCliArgs(argv: string[]): CliOptions {
     port: DEFAULT_PORT,
     host: "127.0.0.1",
     openBrowser: true,
+    debug: process.env.DIFFDECK_DEBUG === "1" || process.env.DIFFDECK_DEBUG === "true",
     diffArgs: [],
   };
 
@@ -99,6 +102,11 @@ function parseCliArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (argument === "--debug") {
+      options.debug = true;
+      continue;
+    }
+
     if (argument === "--") {
       options.diffArgs.push(...argv.slice(index + 1));
       break;
@@ -132,7 +140,9 @@ async function main(): Promise<void> {
   const options = parseCliArgs(process.argv.slice(2));
   const requestedRepoPath = realpathSync(resolve(options.repo));
   const repoRoot = resolveRepoRoot(requestedRepoPath);
-  const session = buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs);
+  const session = buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs, {
+    debug: options.debug,
+  });
   const server = await startServerWithFallback(session, options);
 
   console.log(`Diffdeck server running at ${server.url}`);
@@ -163,7 +173,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`diffdeck failed: ${message}`);
+  const debug =
+    process.argv.includes("--debug") ||
+    process.env.DIFFDECK_DEBUG === "1" ||
+    process.env.DIFFDECK_DEBUG === "true";
+  console.error(formatCliError(error, debug));
   process.exit(1);
 });

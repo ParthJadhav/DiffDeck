@@ -3,7 +3,8 @@ import type { GitStatus } from "@pierre/trees";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
-import type { DiffFileSummary, DiffSession } from "./types.js";
+import { DiffdeckError } from "./errors.js";
+import type { DiffBuildOptions, DiffFileSummary, DiffSession } from "./types.js";
 import { buildCacheKey } from "./cacheKey.js";
 
 // Node's spawnSync defaults maxBuffer to 1 MB, which is easily exceeded by
@@ -25,8 +26,19 @@ type GitPathToken = {
 
 type ParserNormalizedDiff = {
   rawDiff: string;
-  filePaths: GitDiffHeaderPaths[];
+  filePaths: Array<GitDiffHeaderPaths | undefined>;
 };
+
+type RawDiffFileContext = {
+  index: number;
+  startLine: number;
+  endLine: number;
+  header: string;
+  oldPath?: string;
+  newPath?: string;
+};
+
+type DiffLogger = (message: string) => void;
 
 function runGit(repo: string, args: string[]): string {
   const result = spawnSync("git", ["-C", repo, ...args], {
@@ -35,15 +47,25 @@ function runGit(repo: string, args: string[]): string {
   });
 
   if (result.error) {
-    throw result.error;
+    throw new DiffdeckError(
+      "Unable to run git.",
+      [`repo: ${repo}`, `command: git ${args.join(" ")}`],
+      result.error,
+    );
   }
 
   if (result.status !== 0) {
-    const stderr = result.stderr.trim();
-    throw new Error(stderr.length > 0 ? stderr : `git ${args.join(" ")} failed`);
+    const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
+    const message = stderr.length > 0 ? stderr : `git ${args.join(" ")} failed`;
+    throw new DiffdeckError(message, [
+      `repo: ${repo}`,
+      `command: git ${args.join(" ")}`,
+      `exit status: ${result.status ?? "unknown"}`,
+      `signal: ${result.signal ?? "none"}`,
+    ]);
   }
 
-  return result.stdout;
+  return typeof result.stdout === "string" ? result.stdout : "";
 }
 
 export function resolveRepoRoot(startDirectory: string): string {
@@ -203,6 +225,176 @@ function parseGitDiffHeader(line: string): GitDiffHeaderPaths | null {
   };
 }
 
+function parseGitMetadataPath(rawPath: string, side?: "a" | "b"): string | null {
+  if (rawPath === "/dev/null") return null;
+
+  const tokenInput = rawPath.startsWith('"') ? rawPath : rawPath.split("\t", 1)[0];
+  const token = parseGitPathToken(tokenInput, 0);
+  if (token == null) return null;
+
+  return side == null ? token.value : stripGitSidePrefix(token.value, side);
+}
+
+function parseGitFileMarkerPath(line: string, marker: "---" | "+++"): string | null {
+  const prefix = `${marker} `;
+  if (!line.startsWith(prefix)) return null;
+
+  const side = marker === "---" ? "a" : "b";
+  return parseGitMetadataPath(line.slice(prefix.length), side);
+}
+
+function setGitHeaderPath(
+  filePaths: Array<GitDiffHeaderPaths | undefined>,
+  index: number,
+  side: "old" | "new",
+  path: string | null,
+): void {
+  if (path == null) return;
+
+  const existing = filePaths[index] ?? { oldPath: path, newPath: path };
+  if (side === "old") {
+    existing.oldPath = path;
+  } else {
+    existing.newPath = path;
+  }
+  filePaths[index] = existing;
+}
+
+function createLogger(options: DiffBuildOptions | undefined): DiffLogger | undefined {
+  if (options?.debug !== true) return undefined;
+  return options.log ?? ((message) => console.error(`[diffdeck:debug] ${message}`));
+}
+
+function summarizeDiffArgs(diffArgs: string[]): string {
+  return diffArgs.length === 0 ? "(none)" : diffArgs.join(" ");
+}
+
+function countLines(value: string): number {
+  if (value.length === 0) return 0;
+  return value.split(/\r\n|\r|\n/).length;
+}
+
+function describeRawDiffFiles(
+  rawDiff: string,
+  filePaths: Array<GitDiffHeaderPaths | undefined> = [],
+): RawDiffFileContext[] {
+  const lines = rawDiff.split(/\r\n|\r|\n/);
+  const contexts: RawDiffFileContext[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.startsWith(DIFF_GIT_PREFIX)) continue;
+
+    const previous = contexts.at(-1);
+    if (previous != null) {
+      previous.endLine = index;
+    }
+
+    const fileIndex = contexts.length;
+    const parsed = filePaths[fileIndex] ?? parseGitDiffHeader(line) ?? undefined;
+    contexts.push({
+      index: fileIndex,
+      startLine: index + 1,
+      endLine: lines.length,
+      header: line,
+      oldPath: parsed?.oldPath,
+      newPath: parsed?.newPath,
+    });
+  }
+
+  return contexts;
+}
+
+function formatDiffFileContext(context: RawDiffFileContext): string {
+  const path =
+    context.newPath == null
+      ? "path: unknown"
+      : context.oldPath != null && context.oldPath !== context.newPath
+        ? `path: ${context.oldPath} -> ${context.newPath}`
+        : `path: ${context.newPath}`;
+
+  return `file ${context.index + 1}: lines ${context.startLine}-${context.endLine}, ${path}`;
+}
+
+function createLineWindow(rawDiff: string, lineNumber: number, radius = 3): string[] {
+  const lines = rawDiff.split(/\r\n|\r|\n/);
+  const start = Math.max(lineNumber - radius, 1);
+  const end = Math.min(lineNumber + radius, lines.length);
+  const width = String(end).length;
+  const windowLines: string[] = [];
+
+  for (let line = start; line <= end; line += 1) {
+    windowLines.push(`${String(line).padStart(width, " ")} | ${lines[line - 1]}`);
+  }
+
+  return windowLines;
+}
+
+function isUndefinedTrimError(error: unknown): boolean {
+  return error instanceof Error && /undefined.*trim|trim.*undefined/i.test(error.message);
+}
+
+function buildParseErrorDetails(
+  error: unknown,
+  repoRoot: string,
+  currentDirectory: string,
+  diffArgs: string[],
+  rawDiff: string,
+  normalizedDiff: ParserNormalizedDiff,
+): string[] {
+  const rawContexts = describeRawDiffFiles(rawDiff, normalizedDiff.filePaths);
+  const suspiciousHeader =
+    rawContexts.find((context) => context.newPath == null || context.header.includes('"')) ??
+    rawContexts[0];
+  const details = [
+    `repo: ${repoRoot}`,
+    `working directory: ${currentDirectory}`,
+    `git diff args: ${summarizeDiffArgs(diffArgs)}`,
+    `raw diff: ${rawDiff.length} characters, ${countLines(rawDiff)} lines, ${rawContexts.length} file(s)`,
+    `parser input: ${normalizedDiff.rawDiff.length} characters, ${countLines(
+      normalizedDiff.rawDiff,
+    )} lines`,
+  ];
+
+  if (isUndefinedTrimError(error)) {
+    details.push(
+      "likely cause: an unusual git diff header reached the upstream patch parser without a filename group; that parser then called .trim() on the missing filename",
+    );
+  }
+
+  for (const context of rawContexts.slice(0, 5)) {
+    details.push(formatDiffFileContext(context));
+  }
+
+  if (rawContexts.length > 5) {
+    details.push(`... ${rawContexts.length - 5} more file(s) omitted`);
+  }
+
+  if (suspiciousHeader != null) {
+    details.push("nearest raw diff lines:");
+    details.push(...createLineWindow(rawDiff, suspiciousHeader.startLine));
+  }
+
+  return details;
+}
+
+function logRawDiffContext(
+  logger: DiffLogger | undefined,
+  rawDiff: string,
+  normalizedDiff: ParserNormalizedDiff,
+): void {
+  if (logger == null) return;
+
+  const contexts = describeRawDiffFiles(rawDiff, normalizedDiff.filePaths);
+  logger(`raw diff has ${countLines(rawDiff)} line(s), ${rawDiff.length} character(s)`);
+  logger(`normalized parser input has ${countLines(normalizedDiff.rawDiff)} line(s)`);
+
+  for (const context of contexts) {
+    logger(formatDiffFileContext(context));
+    logger(`  header: ${context.header}`);
+  }
+}
+
 function parserPlaceholderPath(fileIndex: number, side: "old" | "new"): string {
   return `${PARSER_PATH_PREFIX}/${fileIndex}-${side}`;
 }
@@ -214,7 +406,7 @@ function splitLineEnding(line: string): { body: string; ending: string } {
 }
 
 function normalizeRawGitDiffForParser(rawDiff: string): ParserNormalizedDiff {
-  const filePaths: GitDiffHeaderPaths[] = [];
+  const filePaths: Array<GitDiffHeaderPaths | undefined> = [];
   let currentFileIndex = -1;
   let inFileHeader = false;
   const rawDiffLines = rawDiff.split(/(?<=\n)/);
@@ -232,6 +424,16 @@ function normalizeRawGitDiffForParser(rawDiff: string): ParserNormalizedDiff {
         )} b/${parserPlaceholderPath(currentFileIndex, "new")}${ending}`;
       }
 
+      if (body.startsWith(DIFF_GIT_PREFIX)) {
+        currentFileIndex = filePaths.length;
+        inFileHeader = true;
+        filePaths.push(undefined);
+        return `${DIFF_GIT_PREFIX}a/${parserPlaceholderPath(
+          currentFileIndex,
+          "old",
+        )} b/${parserPlaceholderPath(currentFileIndex, "new")}${ending}`;
+      }
+
       if (body.startsWith("@@ ")) {
         inFileHeader = false;
       }
@@ -241,15 +443,21 @@ function normalizeRawGitDiffForParser(rawDiff: string): ParserNormalizedDiff {
       const oldPlaceholder = parserPlaceholderPath(currentFileIndex, "old");
       const newPlaceholder = parserPlaceholderPath(currentFileIndex, "new");
       if (body.startsWith("--- ") && body !== "--- /dev/null") {
+        setGitHeaderPath(filePaths, currentFileIndex, "old", parseGitFileMarkerPath(body, "---"));
         return `--- a/${oldPlaceholder}${ending}`;
       }
       if (body.startsWith("+++ ") && body !== "+++ /dev/null") {
+        setGitHeaderPath(filePaths, currentFileIndex, "new", parseGitFileMarkerPath(body, "+++"));
         return `+++ b/${newPlaceholder}${ending}`;
       }
       if (body.startsWith("rename from ")) {
+        const oldPath = parseGitMetadataPath(body.slice("rename from ".length));
+        setGitHeaderPath(filePaths, currentFileIndex, "old", oldPath);
         return `rename from ${oldPlaceholder}${ending}`;
       }
       if (body.startsWith("rename to ")) {
+        const newPath = parseGitMetadataPath(body.slice("rename to ".length));
+        setGitHeaderPath(filePaths, currentFileIndex, "new", newPath);
         return `rename to ${newPlaceholder}${ending}`;
       }
 
@@ -416,7 +624,13 @@ export function buildDiffSession(
   repoRoot: string,
   currentDirectory: string,
   diffArgs: string[],
+  options?: DiffBuildOptions,
 ): DiffSession {
+  const logger = createLogger(options);
+  logger?.(`repo root: ${repoRoot}`);
+  logger?.(`working directory: ${currentDirectory}`);
+  logger?.(`git diff args: ${summarizeDiffArgs(diffArgs)}`);
+
   const rawDiff = getRawDiff(repoRoot, diffArgs);
   const fileDiffs = new Map<string, FileDiffMetadata>();
   const files: DiffFileSummary[] = [];
@@ -427,14 +641,37 @@ export function buildDiffSession(
 
   if (rawDiff.trim().length > 0) {
     const normalizedDiff = normalizeRawGitDiffForParser(rawDiff);
-    const parsedPatch = processPatch(normalizedDiff.rawDiff, "diffdeck", true);
+    logRawDiffContext(logger, rawDiff, normalizedDiff);
+    let parsedPatch: ReturnType<typeof processPatch>;
+    try {
+      parsedPatch = processPatch(normalizedDiff.rawDiff, "diffdeck", true);
+    } catch (error) {
+      throw new DiffdeckError(
+        "Failed to parse git diff output.",
+        buildParseErrorDetails(
+          error,
+          repoRoot,
+          currentDirectory,
+          diffArgs,
+          rawDiff,
+          normalizedDiff,
+        ),
+        error,
+      );
+    }
     const rawFileDiffs = splitRawDiffFiles(rawDiff);
     const parserRawFileDiffs = splitRawDiffFiles(normalizedDiff.rawDiff);
     const canHydrateFromWorktree = diffArgs.length === 0;
+    logger?.(`upstream parser returned ${parsedPatch.files.length} file(s)`);
     for (const [index, partialFileDiff] of parsedPatch.files.entries()) {
       const rawFileDiff = rawFileDiffs[index];
       const parserRawFileDiff = parserRawFileDiffs[index];
       const gitHeaderPaths = normalizedDiff.filePaths[index];
+      logger?.(
+        `processing parsed file ${index + 1}: ${gitHeaderPaths?.oldPath ?? "unknown"} -> ${
+          gitHeaderPaths?.newPath ?? partialFileDiff.name
+        }`,
+      );
       applyGitHeaderPaths(partialFileDiff, gitHeaderPaths);
       const binary = isBinaryFileDiff(rawFileDiff);
       const fileDiff =

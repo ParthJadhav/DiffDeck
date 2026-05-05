@@ -27,5 +27,11 @@ export interface CliOptions {
   port: number;
   host: string;
   openBrowser: boolean;
+  debug: boolean;
   diffArgs: string[];
+}
+
+export interface DiffBuildOptions {
+  debug?: boolean;
+  log?: (message: string) => void;
 }
