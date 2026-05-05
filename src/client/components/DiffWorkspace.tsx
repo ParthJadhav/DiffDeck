@@ -145,9 +145,16 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
 
 const VIRTUOSO_OVERSCAN_PX = 1200;
 const VIRTUOSO_INCREASE_VIEWPORT_PX = 600;
+const VIRTUOSO_MIN_ITEM_HEIGHT_PX = 40;
 const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
 
 const computeItemKey = (_index: number, file: DiffFileSummary) => file.path;
+const measureFileItem = (element: HTMLElement) =>
+  Math.max(
+    element.getBoundingClientRect().height,
+    element.offsetHeight,
+    VIRTUOSO_MIN_ITEM_HEIGHT_PX,
+  );
 
 type CommentAnnotationsByFile = Record<string, CommentAnnotation[]>;
 type SelectedLinesByFile = Record<string, SelectedLineRange | null>;
@@ -419,7 +426,9 @@ function MultiFileScroller(props: {
       data={files}
       itemContent={itemContent}
       computeItemKey={computeItemKey}
+      defaultItemHeight={VIRTUOSO_MIN_ITEM_HEIGHT_PX}
       rangeChanged={handleRangeChanged}
+      itemSize={measureFileItem}
       overscan={VIRTUOSO_OVERSCAN_PX}
       increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_PX}
       scrollerRef={handleScrollerRef}

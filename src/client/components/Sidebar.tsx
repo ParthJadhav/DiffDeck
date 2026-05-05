@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { FileTree } from "@pierre/trees/react";
 import type { FileTree as TreeModel } from "@pierre/trees";
 import { buildHeader } from "../lib/diff.js";
@@ -12,6 +12,36 @@ export interface SidebarProps {
 
 export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps) {
   const headerLabel = buildHeader(diffArgs);
+  const treeHostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const root = treeHostRef.current;
+    if (root == null) return;
+
+    let shadowObserver: MutationObserver | null = null;
+    const patchSearchInput = () => {
+      const shadowRoot = root.querySelector("file-tree-container")?.shadowRoot;
+      if (shadowRoot != null && shadowObserver == null) {
+        shadowObserver = new MutationObserver(patchSearchInput);
+        shadowObserver.observe(shadowRoot, { childList: true, subtree: true });
+      }
+
+      const input = shadowRoot?.querySelector<HTMLInputElement>("[data-file-tree-search-input]");
+      if (input == null) return;
+
+      input.id = "diffdeck-file-search";
+      input.name = "diffdeck-file-search";
+      input.setAttribute("aria-label", "Search files");
+    };
+
+    patchSearchInput();
+    const observer = new MutationObserver(patchSearchInput);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      shadowObserver?.disconnect();
+    };
+  }, [treeModel]);
 
   return (
     <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_oklch(var(--border)/0.7)] lg:shadow-none">
@@ -26,7 +56,7 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div ref={treeHostRef} className="min-h-0 flex-1 overflow-hidden">
         {fileCount === 0 ? (
           <div className="grid h-full place-items-center p-6 text-center">
             <div className="space-y-1.5">
