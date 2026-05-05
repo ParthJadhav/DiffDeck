@@ -1,6 +1,6 @@
 {
   "name": "@parthj/diffdeck",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "View git diffs in the browser with @pierre/diffs and @pierre/trees.",
   "type": "module",
   "packageManager": "bun@1.3.3",
@@ -34,13 +34,13 @@
   ],
   "author": "Parth Jadhav",
   "license": "MIT",
-  "homepage": "https://github.com/ParthJadhav/diffdeck#readme",
+  "homepage": "https://github.com/ParthJadhav/DiffDeck#readme",
   "bugs": {
-    "url": "https://github.com/ParthJadhav/diffdeck/issues"
+    "url": "https://github.com/ParthJadhav/DiffDeck/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ParthJadhav/diffdeck.git"
+    "url": "git+https://github.com/ParthJadhav/DiffDeck.git"
   },
   "publishConfig": {
     "access": "public"
