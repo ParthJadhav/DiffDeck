@@ -1,57 +1,37 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { DiffLineAnnotation } from "@pierre/diffs";
 import type { AnnotationSide } from "@pierre/diffs";
 import { Button } from "../ui/button.js";
 
-export type CommentAnnotationMetadata =
-  | {
-      id: string;
-      kind: "comment-form";
-    }
-  | {
-      body: string;
-      id: string;
-      kind: "comment";
-    };
+export type CommentAnnotationMetadata = {
+  body: string;
+  id: string;
+  kind: "comment-form" | "comment";
+};
 
 export type CommentAnnotation = DiffLineAnnotation<CommentAnnotationMetadata>;
 
 export function CommentAnnotationView({
   annotation,
-  body: controlledBody,
   onBodyChange,
   onCancel,
   onSubmit,
 }: {
   annotation: CommentAnnotation;
-  // When `body` and `onBodyChange` are provided the view is controlled and
-  // the textarea contents survive parent-driven unmount/remount (which is
-  // what virtualization does when a row scrolls out of view). When omitted
-  // the view falls back to its previous internal-state behavior.
-  body?: string;
-  onBodyChange?: (next: string) => void;
+  onBodyChange: (id: string, body: string) => void;
   onCancel: (id: string) => void;
   onSubmit: (id: string, body: string) => void;
 }) {
-  const [internalBody, setInternalBody] = useState("");
-  const isControlled = onBodyChange != null;
-  const body = isControlled ? (controlledBody ?? "") : internalBody;
-  const setBody = (next: string) => {
-    if (isControlled) {
-      onBodyChange(next);
-    } else {
-      setInternalBody(next);
-    }
-  };
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const { body, id, kind } = annotation.metadata;
 
   useEffect(() => {
-    if (annotation.metadata.kind === "comment-form") {
+    if (kind === "comment-form") {
       textareaRef.current?.focus();
     }
-  }, [annotation.metadata.kind]);
+  }, [kind]);
 
-  if (annotation.metadata.kind === "comment") {
+  if (kind === "comment") {
     return (
       <CommentCard>
         <div className="mb-1 flex items-center gap-2 text-xs">
@@ -59,7 +39,7 @@ export function CommentAnnotationView({
           <span className="text-muted-foreground">now</span>
         </div>
         <p className="whitespace-pre-wrap text-pretty text-sm leading-relaxed text-foreground">
-          {annotation.metadata.body}
+          {body}
         </p>
       </CommentCard>
     );
@@ -76,16 +56,16 @@ export function CommentAnnotationView({
       <textarea
         ref={textareaRef}
         value={body}
-        onChange={(event) => setBody(event.target.value)}
+        onChange={(event) => onBodyChange(id, event.target.value)}
         aria-label={`Comment on ${annotation.side} line ${annotation.lineNumber}`}
         placeholder="Leave a comment"
         className="app-comment-textarea min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] duration-150 ease-out focus:border-ring"
       />
       <div className="mt-3 flex items-center gap-1">
-        <Button size="sm" onClick={() => onSubmit(annotation.metadata.id, body)}>
+        <Button size="sm" onClick={() => onSubmit(id, body)}>
           Comment
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => onCancel(annotation.metadata.id)}>
+        <Button size="sm" variant="ghost" onClick={() => onCancel(id)}>
           Cancel
         </Button>
       </div>
@@ -105,6 +85,7 @@ export function createCommentAnnotation(
     side,
     lineNumber,
     metadata: {
+      body: "",
       id: `${side}-${lineNumber}-${Date.now()}`,
       kind: "comment-form",
     },
