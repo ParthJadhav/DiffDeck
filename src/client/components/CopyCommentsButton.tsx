@@ -5,9 +5,17 @@ import { Button } from "./ui/button.js";
 
 type CopyStatus = "idle" | "copied" | "failed";
 
-export function CopyCommentsButton({ comments }: { comments: CommentExportRecord[] }) {
+export function CopyCommentsButton({
+  comments,
+  onClearAll,
+}: {
+  comments: CommentExportRecord[];
+  onClearAll: () => void;
+}) {
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const commentCount = comments.length;
+  const commentLabel = commentCount === 1 ? "comment" : "comments";
   const copyText = useMemo(
     () => (commentCount === 0 ? "" : formatCommentExport(comments)),
     [comments, commentCount],
@@ -18,6 +26,16 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
     const timer = window.setTimeout(() => setCopyStatus("idle"), 1600);
     return () => window.clearTimeout(timer);
   }, [copyStatus]);
+
+  useEffect(() => {
+    if (!confirmingClear) return;
+    const timer = window.setTimeout(() => setConfirmingClear(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [confirmingClear]);
+
+  useEffect(() => {
+    if (commentCount === 0 && confirmingClear) setConfirmingClear(false);
+  }, [commentCount, confirmingClear]);
 
   const handleCopy = async () => {
     if (copyText.length === 0) return;
@@ -30,16 +48,41 @@ export function CopyCommentsButton({ comments }: { comments: CommentExportRecord
     }
   };
 
+  const handleClearClick = () => {
+    if (commentCount === 0) return;
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      return;
+    }
+    onClearAll();
+    setConfirmingClear(false);
+  };
+
   if (commentCount === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-40 sm:bottom-6 sm:right-6">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-40 flex items-center gap-2 sm:bottom-6 sm:right-6">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={handleClearClick}
+        aria-label={`${confirmingClear ? "Confirm clear" : "Clear"} ${commentCount} ${commentLabel}`}
+        title={confirmingClear ? "Click again to confirm" : "Clear all comments"}
+        className={cn(
+          "app-copy-fab pointer-events-auto h-11 min-w-[8.5rem] justify-center gap-2 rounded-full px-4 text-[12.5px] font-medium",
+          confirmingClear && "text-destructive",
+        )}
+      >
+        <TrashIcon />
+        <span>{confirmingClear ? "Click to confirm" : "Clear all"}</span>
+      </Button>
       <Button
         type="button"
         variant="ghost"
         size="sm"
         onClick={handleCopy}
-        aria-label={`Copy ${commentCount} ${commentCount === 1 ? "comment" : "comments"} with context`}
+        aria-label={`Copy ${commentCount} ${commentLabel} with context`}
         title="Copy comments with context"
         className="app-copy-fab pointer-events-auto h-11 gap-2.5 rounded-full px-4 text-[12.5px] font-medium"
       >
@@ -124,6 +167,26 @@ function CopyIcon() {
     >
       <rect x="5.5" y="5.5" width="7" height="7" rx="1.4" />
       <path d="M3.5 10.5h-.2A1.3 1.3 0 012 9.2V3.3A1.3 1.3 0 013.3 2h5.9a1.3 1.3 0 011.3 1.3v.2" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      className="h-3.5 w-3.5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.75 4.25h10.5" />
+      <path d="M6 4.25V3a1 1 0 011-1h2a1 1 0 011 1v1.25" />
+      <path d="M3.75 4.25l.7 8.4a1 1 0 001 .9h5.1a1 1 0 001-.9l.7-8.4" />
+      <path d="M6.5 7v4M9.5 7v4" />
     </svg>
   );
 }

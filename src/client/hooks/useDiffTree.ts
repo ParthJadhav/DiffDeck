@@ -49,9 +49,7 @@ export function useDiffTree({
     treeModelRef.current = new TreeModel({
       composition: {
         contextMenu: {
-          buttonVisibility: "when-needed",
-          enabled: true,
-          triggerMode: "both",
+          enabled: false,
         },
       },
       density: "compact",

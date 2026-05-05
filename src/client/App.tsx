@@ -52,6 +52,7 @@ export function App() {
   const autoCollapsedRef = useRef(false);
   const [viewedFilePaths, setViewedFilePaths] = useState<Set<string>>(() => new Set());
   const [commentExports, setCommentExports] = useState<CommentExportRecord[]>([]);
+  const [clearCommentsSignal, setClearCommentsSignal] = useState(0);
   const isDesktopLayout = useMediaQuery("(min-width: 1024px)");
 
   const reportError = useCallback((message: string) => setError(message), [setError]);
@@ -164,6 +165,15 @@ export function App() {
     });
   }, []);
 
+  const handleCommentDeleted = useCallback((id: string) => {
+    setCommentExports((current) => current.filter((comment) => comment.id !== id));
+  }, []);
+
+  const handleClearAllComments = useCallback(() => {
+    setCommentExports([]);
+    setClearCommentsSignal((n) => n + 1);
+  }, []);
+
   const treeModel = useDiffTree({
     session,
     selectedPath,
@@ -207,13 +217,25 @@ export function App() {
     themeType,
   } satisfies DiffControlsProps;
 
+  const diffTotals = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const file of orderedFiles) {
+      additions += file.additions;
+      deletions += file.deletions;
+    }
+    return { additions, deletions };
+  }, [orderedFiles]);
+
   const sidebarProps = {
     diffArgs: session?.diffArgs ?? [],
     fileCount: session?.files.length ?? 0,
+    totals: diffTotals,
     treeModel,
   } satisfies Omit<SidebarProps, "footer">;
 
   const workspaceProps = {
+    clearCommentsSignal,
     collapsedFilePaths,
     diffStyle,
     disableBackground,
@@ -222,6 +244,7 @@ export function App() {
     files: orderedFiles,
     hunkSeparators,
     onCollapsedFileChange: handleCollapsedFileChange,
+    onCommentDeleted: handleCommentDeleted,
     onCommentSaved: handleCommentSaved,
     onRequestFileDiff: requestPath,
     onViewedFileChange: handleViewedFileChange,
@@ -278,7 +301,7 @@ export function App() {
             <DiffWorkspace {...workspaceProps} />
           </div>
         )}
-        <CopyCommentsButton comments={orderedCommentExports} />
+        <CopyCommentsButton comments={orderedCommentExports} onClearAll={handleClearAllComments} />
       </div>
     </WorkerPoolContextProvider>
   );

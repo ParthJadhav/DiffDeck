@@ -2,15 +2,17 @@ import { type ReactNode, useEffect, useRef } from "react";
 import { FileTree } from "@pierre/trees/react";
 import type { FileTree as TreeModel } from "@pierre/trees";
 import { buildHeader } from "../lib/diff.js";
+import { cn } from "../lib/cn.js";
 
 export interface SidebarProps {
   diffArgs: string[];
   fileCount: number;
   footer?: ReactNode;
+  totals: { additions: number; deletions: number };
   treeModel: TreeModel;
 }
 
-export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps) {
+export function Sidebar({ diffArgs, fileCount, footer, totals, treeModel }: SidebarProps) {
   const headerLabel = buildHeader(diffArgs);
   const treeHostRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,15 +51,21 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
 
   return (
     <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_oklch(var(--border)/0.7)] lg:shadow-none">
-      <div className="app-sidebar-header flex h-11 items-center gap-2 px-3">
+      <div className="app-sidebar-header flex h-11 items-center gap-1.5 px-3">
         <span className="font-mono text-[12px] font-semibold text-foreground">Diffdeck</span>
-        <span
-          className="app-count-badge ml-auto inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tabular-nums"
+        <CountBadge
+          className="ml-auto"
           title={headerLabel}
-          aria-label={`${fileCount} ${fileCount === 1 ? "file" : "files"} in diff`}
+          ariaLabel={`${fileCount} ${fileCount === 1 ? "file" : "files"} in diff`}
         >
           {fileCount} {fileCount === 1 ? "file" : "files"}
-        </span>
+        </CountBadge>
+        <CountBadge tone="added" ariaLabel={`${totals.additions} additions`}>
+          +{totals.additions}
+        </CountBadge>
+        <CountBadge tone="deleted" ariaLabel={`${totals.deletions} deletions`}>
+          −{totals.deletions}
+        </CountBadge>
       </div>
 
       <div ref={treeHostRef} className="min-h-0 flex-1 overflow-hidden">
@@ -84,6 +92,35 @@ export function Sidebar({ diffArgs, fileCount, footer, treeModel }: SidebarProps
       </div>
       {footer != null ? <div className="app-sidebar-footer px-3 py-2">{footer}</div> : null}
     </aside>
+  );
+}
+
+function CountBadge({
+  ariaLabel,
+  children,
+  className,
+  title,
+  tone,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  className?: string;
+  title?: string;
+  tone?: "added" | "deleted";
+}) {
+  return (
+    <span
+      className={cn(
+        "app-count-badge inline-flex h-5 items-center rounded-full px-2 text-[11px] font-medium tabular-nums",
+        tone === "added" && "app-count-badge--added",
+        tone === "deleted" && "app-count-badge--deleted",
+        className,
+      )}
+      title={title}
+      aria-label={ariaLabel}
+    >
+      {children}
+    </span>
   );
 }
 

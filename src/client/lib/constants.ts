@@ -27,6 +27,15 @@ export const hunkSeparatorModes = [
 ] as const;
 export const overflowModes = ["scroll", "wrap"] as const;
 
+export const stickyFileHeaderCSS = `
+[data-diffs-header] {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--diffs-bg);
+}
+`;
+
 export const customHunkSeparatorCSS = `
 [data-separator="line-info-basic"] {
   height: 30px;

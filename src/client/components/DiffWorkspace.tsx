@@ -7,7 +7,7 @@ import {
 } from "@pierre/diffs/react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
-import { customHunkSeparatorCSS } from "../lib/constants.js";
+import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
 import { fetchJson } from "../lib/api.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
@@ -15,6 +15,7 @@ import type { DiffFileSummary } from "../types.js";
 import {
   CommentAnnotationView,
   createCommentAnnotation,
+  patchAnnotationMeta,
   type CommentAnnotation,
 } from "./diff/CommentAnnotation.js";
 import { CustomFileHeader } from "./diff/CustomFileHeader.js";
@@ -22,6 +23,7 @@ import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
 
 export interface DiffWorkspaceProps {
+  clearCommentsSignal: number;
   collapsedFilePaths: ReadonlySet<string>;
   diffStyle: DiffLayout;
   disableBackground: boolean;
@@ -30,6 +32,7 @@ export interface DiffWorkspaceProps {
   fileDiffs: Record<string, FileDiffMetadata>;
   hunkSeparators: HunkSeparatorMode;
   onCollapsedFileChange: (path: string, value: boolean) => void;
+  onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
   onViewedFileChange: (path: string, value: boolean) => void;
@@ -45,6 +48,7 @@ export interface DiffWorkspaceProps {
 
 export function DiffWorkspace(props: DiffWorkspaceProps) {
   const {
+    clearCommentsSignal,
     collapsedFilePaths,
     diffStyle,
     disableBackground,
@@ -53,6 +57,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     fileDiffs,
     hunkSeparators,
     onCollapsedFileChange,
+    onCommentDeleted,
     onCommentSaved,
     onRequestFileDiff,
     onViewedFileChange,
@@ -76,7 +81,9 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       enableLineSelection: true,
       expandUnchanged,
       hunkSeparators: hunkSeparators === "custom" ? "line-info-basic" : hunkSeparators,
-      unsafeCSS: hunkSeparators === "custom" ? customHunkSeparatorCSS : undefined,
+      unsafeCSS: [stickyFileHeaderCSS, hunkSeparators === "custom" && customHunkSeparatorCSS]
+        .filter(Boolean)
+        .join("\n"),
       expansionLineCount: hunkSeparators === "custom" ? 5 : 100,
       lineHoverHighlight: "both" as const,
       onPostRender: installHunkExpansionFallback,
@@ -125,11 +132,13 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     >
       <section className="min-h-0 min-w-0 flex-1">
         <MultiFileScroller
+          clearCommentsSignal={clearCommentsSignal}
           diffOptions={diffOptions}
           collapsedFilePaths={collapsedFilePaths}
           fileDiffs={fileDiffs}
           files={files}
           onCollapsedFileChange={onCollapsedFileChange}
+          onCommentDeleted={onCommentDeleted}
           onCommentSaved={onCommentSaved}
           onRequestFileDiff={onRequestFileDiff}
           onViewedFileChange={onViewedFileChange}
@@ -160,11 +169,13 @@ type CommentAnnotationsByFile = Record<string, CommentAnnotation[]>;
 type SelectedLinesByFile = Record<string, SelectedLineRange | null>;
 
 function MultiFileScroller(props: {
+  clearCommentsSignal: number;
   collapsedFilePaths: ReadonlySet<string>;
   diffOptions: Parameters<typeof FileDiff>[0]["options"];
   fileDiffs: Record<string, FileDiffMetadata>;
   files: DiffFileSummary[];
   onCollapsedFileChange: (path: string, value: boolean) => void;
+  onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
   onViewedFileChange: (path: string, value: boolean) => void;
@@ -174,11 +185,13 @@ function MultiFileScroller(props: {
   viewedFilePaths: ReadonlySet<string>;
 }) {
   const {
+    clearCommentsSignal,
     collapsedFilePaths,
     diffOptions,
     fileDiffs,
     files,
     onCollapsedFileChange,
+    onCommentDeleted,
     onCommentSaved,
     onRequestFileDiff,
     onViewedFileChange,
@@ -247,6 +260,13 @@ function MultiFileScroller(props: {
     setCommentAnnotations((current) => pruneByKey(current, filesByPath));
     setSelectedLines((current) => pruneByKey(current, filesByPath));
   }, [filesByPath]);
+
+  const lastClearSignalRef = useRef(clearCommentsSignal);
+  useEffect(() => {
+    if (lastClearSignalRef.current === clearCommentsSignal) return;
+    lastClearSignalRef.current = clearCommentsSignal;
+    setCommentAnnotations({});
+  }, [clearCommentsSignal]);
 
   const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
     const currentFiles = filesRef.current;
@@ -380,7 +400,7 @@ function MultiFileScroller(props: {
     (_index: number, file: DiffFileSummary) => (
       <div
         data-file-path={file.path}
-        className="app-file-card mx-2.5 mb-2.5 scroll-mt-2.5 overflow-hidden rounded-lg"
+        className="app-file-card m-2.5 scroll-mt-2.5 overflow-clip rounded-lg"
       >
         <FileDiffSection
           collapsed={collapsedFilePaths.has(file.path)}
@@ -390,6 +410,7 @@ function MultiFileScroller(props: {
           fileDiff={fileDiffs[file.path] ?? null}
           onAnnotationsChange={handleAnnotationsChange}
           onCollapsedChange={onCollapsedFileChange}
+          onCommentDeleted={onCommentDeleted}
           onCommentSaved={onCommentSaved}
           onSelectedLinesChange={handleSelectedLinesChange}
           onViewedChange={onViewedFileChange}
@@ -406,6 +427,7 @@ function MultiFileScroller(props: {
       handleAnnotationsChange,
       handleSelectedLinesChange,
       onCollapsedFileChange,
+      onCommentDeleted,
       onCommentSaved,
       onViewedFileChange,
       selectedLines,
@@ -469,6 +491,7 @@ const FileDiffSection = memo(function FileDiffSection({
   fileDiff,
   onAnnotationsChange,
   onCollapsedChange,
+  onCommentDeleted,
   onCommentSaved,
   onSelectedLinesChange,
   onViewedChange,
@@ -485,6 +508,7 @@ const FileDiffSection = memo(function FileDiffSection({
     updater: (current: CommentAnnotation[]) => CommentAnnotation[],
   ) => void;
   onCollapsedChange: (path: string, value: boolean) => void;
+  onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
@@ -591,13 +615,46 @@ const FileDiffSection = memo(function FileDiffSection({
 
   const handleCommentCancel = useCallback(
     (id: string) => {
-      onAnnotationsChange(filePath, (current) =>
-        current.filter((annotation) => annotation.metadata.id !== id),
-      );
+      onAnnotationsChange(filePath, (current) => {
+        const target = current.find((annotation) => annotation.metadata.id === id);
+        const previousBody = target?.metadata.previousBody;
+        if (previousBody !== undefined) {
+          return patchAnnotationMeta(current, id, {
+            body: previousBody,
+            kind: "comment",
+            previousBody: undefined,
+          });
+        }
+        return current.filter((annotation) => annotation.metadata.id !== id);
+      });
       onSelectedLinesChange(filePath, null);
       diffOptions?.onLineSelected?.(null);
     },
     [diffOptions, filePath, onAnnotationsChange, onSelectedLinesChange],
+  );
+
+  const handleCommentEdit = useCallback(
+    (id: string) => {
+      onAnnotationsChange(filePath, (current) => {
+        const target = current.find((annotation) => annotation.metadata.id === id);
+        if (target == null || target.metadata.kind !== "comment") return current;
+        return patchAnnotationMeta(current, id, {
+          kind: "comment-form",
+          previousBody: target.metadata.body,
+        });
+      });
+    },
+    [filePath, onAnnotationsChange],
+  );
+
+  const handleCommentDelete = useCallback(
+    (id: string) => {
+      onAnnotationsChange(filePath, (current) =>
+        current.filter((annotation) => annotation.metadata.id !== id),
+      );
+      onCommentDeleted(id);
+    },
+    [filePath, onAnnotationsChange, onCommentDeleted],
   );
 
   const handleCommentBodyChange = useCallback(
@@ -622,14 +679,11 @@ const FileDiffSection = memo(function FileDiffSection({
 
       const normalizedBody = body.trim().length > 0 ? body.trim() : "Needs review before merging.";
       onAnnotationsChange(filePath, (current) =>
-        current.map((annotation) =>
-          annotation.metadata.id === id
-            ? {
-                ...annotation,
-                metadata: { ...annotation.metadata, body: normalizedBody, kind: "comment" },
-              }
-            : annotation,
-        ),
+        patchAnnotationMeta(current, id, {
+          body: normalizedBody,
+          kind: "comment",
+          previousBody: undefined,
+        }),
       );
       onCommentSaved({
         body: normalizedBody,
@@ -674,6 +728,26 @@ const FileDiffSection = memo(function FileDiffSection({
       onLineSelectionEnd: handleLineSelectionEnd,
     }),
     [collapsed, diffOptions, handleLineSelectionEnd, hasOpenCommentForm],
+  );
+
+  const renderCommentAnnotation = useCallback(
+    (annotation: unknown) => (
+      <CommentAnnotationView
+        annotation={annotation as CommentAnnotation}
+        onBodyChange={handleCommentBodyChange}
+        onCancel={handleCommentCancel}
+        onDelete={handleCommentDelete}
+        onEdit={handleCommentEdit}
+        onSubmit={handleCommentSubmit}
+      />
+    ),
+    [
+      handleCommentBodyChange,
+      handleCommentCancel,
+      handleCommentDelete,
+      handleCommentEdit,
+      handleCommentSubmit,
+    ],
   );
 
   if (file.hasMergeConflicts === true) {
@@ -726,14 +800,7 @@ const FileDiffSection = memo(function FileDiffSection({
         }}
         selectedLines={selectedLines}
         lineAnnotations={commentAnnotations}
-        renderAnnotation={(annotation) => (
-          <CommentAnnotationView
-            annotation={annotation as CommentAnnotation}
-            onBodyChange={handleCommentBodyChange}
-            onCancel={handleCommentCancel}
-            onSubmit={handleCommentSubmit}
-          />
-        )}
+        renderAnnotation={renderCommentAnnotation}
         renderCustomHeader={renderHeader}
         disableWorkerPool
       />
@@ -780,14 +847,7 @@ const FileDiffSection = memo(function FileDiffSection({
       options={fileDiffOptions}
       selectedLines={selectedLines}
       lineAnnotations={commentAnnotations}
-      renderAnnotation={(annotation) => (
-        <CommentAnnotationView
-          annotation={annotation as CommentAnnotation}
-          onBodyChange={handleCommentBodyChange}
-          onCancel={handleCommentCancel}
-          onSubmit={handleCommentSubmit}
-        />
-      )}
+      renderAnnotation={renderCommentAnnotation}
       renderCustomHeader={renderHeader}
     />
   );
