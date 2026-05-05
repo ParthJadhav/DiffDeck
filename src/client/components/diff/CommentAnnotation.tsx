@@ -18,14 +18,31 @@ export type CommentAnnotation = DiffLineAnnotation<CommentAnnotationMetadata>;
 
 export function CommentAnnotationView({
   annotation,
+  body: controlledBody,
+  onBodyChange,
   onCancel,
   onSubmit,
 }: {
   annotation: CommentAnnotation;
+  // When `body` and `onBodyChange` are provided the view is controlled and
+  // the textarea contents survive parent-driven unmount/remount (which is
+  // what virtualization does when a row scrolls out of view). When omitted
+  // the view falls back to its previous internal-state behavior.
+  body?: string;
+  onBodyChange?: (next: string) => void;
   onCancel: (id: string) => void;
   onSubmit: (id: string, body: string) => void;
 }) {
-  const [body, setBody] = useState("");
+  const [internalBody, setInternalBody] = useState("");
+  const isControlled = onBodyChange != null;
+  const body = isControlled ? (controlledBody ?? "") : internalBody;
+  const setBody = (next: string) => {
+    if (isControlled) {
+      onBodyChange(next);
+    } else {
+      setInternalBody(next);
+    }
+  };
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {

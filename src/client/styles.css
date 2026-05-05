@@ -505,13 +505,6 @@ kbd {
   background: oklch(var(--card));
   background-clip: padding-box;
   box-shadow: var(--app-shadow-card);
-  /* The outer Virtualizer keeps every file card mounted, which becomes
-     painful on PRs touching tens of thousands of files. content-visibility
-     lets the browser skip layout/paint for cards outside the viewport, and
-     contain-intrinsic-size provides a placeholder size so the scrollbar
-     and IntersectionObserver still report correct geometry. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 320px;
 }
 
 .app-file-header {

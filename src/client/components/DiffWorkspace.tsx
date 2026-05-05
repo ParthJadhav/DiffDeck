@@ -2,10 +2,15 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDiff,
   UnresolvedFile,
-  Virtualizer,
   type FileContents,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
+// Note: Virtualizer from @pierre/diffs is still used internally by the diff
+// renderers (line-level windowing inside a single file). At the file-list
+// level we use react-virtuoso instead, because @pierre/diffs' Virtualizer
+// renders all of its direct children verbatim — fine for one file's lines,
+// but catastrophic for 23k file cards.
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
 import { customHunkSeparatorCSS } from "../lib/constants.js";
 import { fetchJson } from "../lib/api.js";
@@ -99,7 +104,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       <main
         id="main"
         tabIndex={-1}
-        className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none"
+        className="flex h-full min-h-0 min-w-0 flex-col bg-background focus:outline-none"
       >
         <div className="grid flex-1 place-items-center p-8 text-center">
           <div className="max-w-sm space-y-3">
@@ -121,7 +126,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     <main
       id="main"
       tabIndex={-1}
-      className="flex min-h-0 min-w-0 flex-col bg-background focus:outline-none"
+      className="flex h-full min-h-0 min-w-0 flex-col bg-background focus:outline-none"
     >
       <section className="min-h-0 min-w-0 flex-1">
         <MultiFileScroller
@@ -142,6 +147,17 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     </main>
   );
 }
+
+// react-virtuoso's overscan is in pixels (when given as a number) — we mount
+// roughly one extra viewport above and below so lazy-loaded diffs are ready
+// by the time the user scrolls them into view, and so the visible-path
+// observer never has to consult an unmounted row.
+const VIRTUOSO_OVERSCAN_PX = 1200;
+const VIRTUOSO_INCREASE_VIEWPORT_PX = 600;
+
+type CommentDrafts = Record<string, string>;
+type CommentAnnotationsByFile = Record<string, CommentAnnotation[]>;
+type SelectedLinesByFile = Record<string, SelectedLineRange | null>;
 
 function MultiFileScroller(props: {
   collapsedFilePaths: ReadonlySet<string>;
@@ -171,8 +187,9 @@ function MultiFileScroller(props: {
     selectedPath,
     viewedFilePaths,
   } = props;
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const sectionRefs = useRef(new Map<string, HTMLDivElement>());
+
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null);
   const lastReportedPathRef = useRef<string | null>(null);
   const suppressObserverUntilRef = useRef(0);
   const pinnedPathRef = useRef<string | null>(null);
@@ -181,49 +198,135 @@ function MultiFileScroller(props: {
   const onRequestFileDiffRef = useRef(onRequestFileDiff);
   onRequestFileDiffRef.current = onRequestFileDiff;
   const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
+  const fileIndexByPath = useMemo(
+    () => new Map(files.map((file, index) => [file.path, index])),
+    [files],
+  );
 
-  // Stable callback ref so React doesn't detach + reattach on every parent
-  // render (which used to cascade across all 14 file cards on each click).
-  const sectionRef = useCallback((node: HTMLDivElement | null) => {
-    if (node == null) return;
-    const path = node.dataset.filePath;
-    if (path == null) return;
-    sectionRefs.current.set(path, node);
-    if (containerRef.current == null) {
-      containerRef.current = (node.parentElement?.parentElement as HTMLDivElement | null) ?? null;
-    }
-    return () => {
-      sectionRefs.current.delete(path);
-    };
+  // Lift per-file UI state up so it survives row unmounting by the
+  // virtualizer. Without this, scrolling a file off-screen would discard a
+  // half-typed comment and the user's line selection.
+  const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotationsByFile>({});
+  const [selectedLines, setSelectedLines] = useState<SelectedLinesByFile>({});
+  const [commentDrafts, setCommentDrafts] = useState<CommentDrafts>({});
+
+  const handleAnnotationsChange = useCallback(
+    (path: string, updater: (current: CommentAnnotation[]) => CommentAnnotation[]) => {
+      setCommentAnnotations((current) => {
+        const previous = current[path] ?? [];
+        const next = updater(previous);
+        if (next === previous) return current;
+        if (next.length === 0) {
+          if (!(path in current)) return current;
+          const { [path]: _removed, ...rest } = current;
+          return rest;
+        }
+        return { ...current, [path]: next };
+      });
+    },
+    [],
+  );
+
+  const handleSelectedLinesChange = useCallback((path: string, range: SelectedLineRange | null) => {
+    setSelectedLines((current) => {
+      if (current[path] === range) return current;
+      if (range == null) {
+        if (!(path in current)) return current;
+        const { [path]: _removed, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [path]: range };
+    });
   }, []);
 
+  const handleDraftChange = useCallback((id: string, body: string) => {
+    setCommentDrafts((current) => {
+      if (current[id] === body) return current;
+      if (body.length === 0) {
+        if (!(id in current)) return current;
+        const { [id]: _removed, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [id]: body };
+    });
+  }, []);
+
+  const handleDraftClear = useCallback((id: string) => {
+    setCommentDrafts((current) => {
+      if (!(id in current)) return current;
+      const { [id]: _removed, ...rest } = current;
+      return rest;
+    });
+  }, []);
+
+  // Drop per-file UI state for files that are no longer in the diff. This
+  // matters when the user re-runs `git diff` against a different revision —
+  // stale annotations would otherwise leak indefinitely.
   useEffect(() => {
-    const root = containerRef.current;
-    if (root == null) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const path = (entry.target as HTMLElement).dataset.filePath;
-          const file = path == null ? null : filesByPath.get(path);
-          if (path != null && file?.hasMergeConflicts !== true && file?.isBinary !== true) {
-            onRequestFileDiffRef.current(path);
-          }
+    setCommentAnnotations((current) => {
+      let changed = false;
+      const next: CommentAnnotationsByFile = {};
+      for (const path of Object.keys(current)) {
+        if (filesByPath.has(path)) {
+          next[path] = current[path];
+        } else {
+          changed = true;
         }
-      },
-      { root, rootMargin: "600px 0px 600px 0px" },
-    );
-    for (const node of sectionRefs.current.values()) {
-      observer.observe(node);
-    }
-    return () => observer.disconnect();
+      }
+      return changed ? next : current;
+    });
+    setSelectedLines((current) => {
+      let changed = false;
+      const next: SelectedLinesByFile = {};
+      for (const path of Object.keys(current)) {
+        if (filesByPath.has(path)) {
+          next[path] = current[path];
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
   }, [filesByPath]);
 
+  // Range-based lazy load. Virtuoso reports the index window of mounted rows
+  // (visible + overscan). For each path in that window we ask the parent to
+  // start fetching its diff. The hook in useFileDiff dedupes and queues, so
+  // calling repeatedly is safe.
+  //
+  // We also poke the visible-path observer so it (re)observes any
+  // freshly-mounted DOM nodes. We do this synchronously in a microtask so
+  // the new nodes are guaranteed to be in the DOM by the time we query for
+  // them — Virtuoso reports the range slightly ahead of the actual mount.
+  const observerAdoptRef = useRef<(() => void) | null>(null);
+  const handleRangeChanged = useCallback(
+    (range: { startIndex: number; endIndex: number }) => {
+      for (let i = range.startIndex; i <= range.endIndex; i++) {
+        const file = files[i];
+        if (file == null) continue;
+        if (file.hasMergeConflicts === true || file.isBinary === true) continue;
+        onRequestFileDiffRef.current(file.path);
+      }
+      // Defer past Virtuoso's commit so any newly-mounted [data-file-path]
+      // nodes are queryable by the time we adopt them. queueMicrotask runs
+      // before the commit that adds them, so we use a frame instead.
+      requestAnimationFrame(() => observerAdoptRef.current?.());
+    },
+    [files],
+  );
+
+  // Visible-path tracking. We use a single IntersectionObserver scoped to
+  // Virtuoso's scroller, plus a MutationObserver that auto-observes any
+  // newly-mounted file card the moment it enters the DOM. The mounted set
+  // is bounded by the overscan window (typically a few dozen rows), so the
+  // intersection bookkeeping is cheap even on a 23k-file PR.
   useEffect(() => {
-    const root = containerRef.current;
+    const root = scrollerEl;
     if (root == null) return;
     const visibility = new Map<string, number>();
-    const observer = new IntersectionObserver(
+    const observed = new WeakSet<Element>();
+    const ABOVE_THRESHOLD = 24;
+    const intersectionObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const path = (entry.target as HTMLElement).dataset.filePath;
@@ -245,12 +348,13 @@ function MultiFileScroller(props: {
           return;
         }
         pinnedPathRef.current = null;
-        const ABOVE_THRESHOLD = 24;
         const rootTop = root.getBoundingClientRect().top;
         let above: { path: string; top: number } | null = null;
         let below: { path: string; top: number } | null = null;
         for (const path of visibility.keys()) {
-          const node = sectionRefs.current.get(path);
+          // We rely on a current DOM lookup rather than a cached node so
+          // the math stays correct when virtuoso recycles row positions.
+          const node = root.querySelector<HTMLElement>(`[data-file-path="${cssEscapePath(path)}"]`);
           if (node == null) continue;
           const top = node.getBoundingClientRect().top - rootTop;
           if (top <= ABOVE_THRESHOLD) {
@@ -265,52 +369,82 @@ function MultiFileScroller(props: {
           onVisiblePathChangeRef.current(best.path);
         }
       },
-      // Single threshold (0) is enough: the path-selection logic below relies
-      // on isIntersecting + getBoundingClientRect, not on intersectionRatio.
-      // Multi-threshold observers fire many more callbacks per scroll, which
-      // showed up as the dominant cost on each click after a giant file was
-      // expanded.
       { root, threshold: 0 },
     );
-    for (const node of sectionRefs.current.values()) {
-      observer.observe(node);
-    }
-    return () => observer.disconnect();
-  }, [files]);
+    const adopt = (target: Element) => {
+      const candidates = target.matches?.("[data-file-path]")
+        ? [target]
+        : Array.from(target.querySelectorAll<HTMLElement>("[data-file-path]"));
+      for (const node of candidates) {
+        if (!observed.has(node)) {
+          observed.add(node);
+          intersectionObserver.observe(node);
+        }
+      }
+    };
+    const adoptAll = () => {
+      const nodes = root.querySelectorAll<HTMLElement>("[data-file-path]");
+      for (const node of nodes) {
+        if (!observed.has(node)) {
+          observed.add(node);
+          intersectionObserver.observe(node);
+        }
+      }
+    };
+    observerAdoptRef.current = adoptAll;
+    adoptAll();
+    const mutationObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node instanceof Element) adopt(node);
+        }
+      }
+    });
+    mutationObserver.observe(root, { childList: true, subtree: true });
+    return () => {
+      intersectionObserver.disconnect();
+      mutationObserver.disconnect();
+      observerAdoptRef.current = null;
+    };
+  }, [scrollerEl]);
 
+  // Programmatic scroll to a selected file. With variable-height rows and
+  // not-yet-loaded diffs, Virtuoso's scrollToIndex measures rows on demand
+  // and follows up with corrective scrolls as content loads — exactly what
+  // the previous scrollIntoView call simulated for the small case.
   const didInitialScrollRef = useRef(false);
-
   useEffect(() => {
     if (scrollSignal === 0 && didInitialScrollRef.current) return;
     didInitialScrollRef.current = true;
     if (selectedPath == null) return;
-    const node = sectionRefs.current.get(selectedPath);
-    if (node == null) return;
+    const index = fileIndexByPath.get(selectedPath);
+    if (index == null) return;
     lastReportedPathRef.current = selectedPath;
     pinnedPathRef.current = selectedPath;
     suppressObserverUntilRef.current = performance.now() + 350;
-    node.scrollIntoView({ block: "start", behavior: "auto" });
-    const root = containerRef.current;
-    if (root == null) return;
+    virtuosoRef.current?.scrollToIndex({ index, align: "start" });
+
     let released = false;
     const release = () => {
       if (released) return;
       released = true;
       pinnedPathRef.current = null;
-      root.removeEventListener("wheel", release);
-      root.removeEventListener("touchstart", release);
-      root.removeEventListener("keydown", release);
+      window.removeEventListener("wheel", release);
+      window.removeEventListener("touchstart", release);
+      window.removeEventListener("keydown", release);
     };
-    root.addEventListener("wheel", release, { passive: true, once: true });
-    root.addEventListener("touchstart", release, { passive: true, once: true });
-    root.addEventListener("keydown", release, { once: true });
+    window.addEventListener("wheel", release, { passive: true, once: true });
+    window.addEventListener("touchstart", release, { passive: true, once: true });
+    window.addEventListener("keydown", release, { once: true });
     const timer = window.setTimeout(release, 1500);
     return () => {
       window.clearTimeout(timer);
       release();
     };
-  }, [scrollSignal, selectedPath]);
+  }, [fileIndexByPath, scrollSignal, selectedPath]);
 
+  // Force the selected file to fetch even if it's outside the rendered range
+  // (e.g. user clicked deep in the tree before virtuoso scrolled there).
   useEffect(() => {
     const selectedFile = selectedPath == null ? null : filesByPath.get(selectedPath);
     if (
@@ -322,29 +456,89 @@ function MultiFileScroller(props: {
     }
   }, [filesByPath, selectedPath]);
 
-  return (
-    <Virtualizer className="h-full overflow-auto" contentClassName="grid gap-2.5 p-2.5">
-      {files.map((file) => (
+  const itemContent = useCallback(
+    (index: number, file: DiffFileSummary) => (
+      // The wrapping div restores the inter-card spacing the previous
+      // `grid gap-2.5 p-2.5` layout provided. Padding-bottom gives the
+      // gap; horizontal padding gives the inset from the scroll container.
+      // The last item inherits the same padding-bottom for symmetry.
+      <div className="px-2.5 pb-2.5">
         <div
-          key={file.path}
           data-file-path={file.path}
-          ref={sectionRef}
           className="app-file-card scroll-mt-2.5 overflow-hidden rounded-lg"
         >
           <FileDiffSection
             collapsed={collapsedFilePaths.has(file.path)}
+            commentAnnotations={commentAnnotations[file.path] ?? EMPTY_ANNOTATIONS}
+            commentDrafts={commentDrafts}
             diffOptions={diffOptions}
             file={file}
             fileDiff={fileDiffs[file.path] ?? null}
+            onAnnotationsChange={handleAnnotationsChange}
             onCollapsedChange={onCollapsedFileChange}
             onCommentSaved={onCommentSaved}
+            onDraftChange={handleDraftChange}
+            onDraftClear={handleDraftClear}
+            onSelectedLinesChange={handleSelectedLinesChange}
             onViewedChange={onViewedFileChange}
+            selectedLines={selectedLines[file.path] ?? null}
             viewed={viewedFilePaths.has(file.path)}
           />
         </div>
-      ))}
-    </Virtualizer>
+      </div>
+    ),
+    [
+      collapsedFilePaths,
+      commentAnnotations,
+      commentDrafts,
+      diffOptions,
+      fileDiffs,
+      handleAnnotationsChange,
+      handleDraftChange,
+      handleDraftClear,
+      handleSelectedLinesChange,
+      onCollapsedFileChange,
+      onCommentSaved,
+      onViewedFileChange,
+      selectedLines,
+      viewedFilePaths,
+    ],
   );
+
+  const computeItemKey = useCallback((index: number, file: DiffFileSummary) => file.path, []);
+
+  // Stable callback: Virtuoso re-passes the same scroller element across
+  // renders, but a fresh closure here would null-then-set state on each
+  // render and trigger a render loop with our other effects.
+  const handleScrollerRef = useCallback((ref: HTMLElement | Window | null) => {
+    setScrollerEl(ref instanceof HTMLElement ? ref : null);
+  }, []);
+
+  return (
+    <Virtuoso<DiffFileSummary>
+      ref={virtuosoRef}
+      data={files}
+      itemContent={itemContent}
+      computeItemKey={computeItemKey}
+      rangeChanged={handleRangeChanged}
+      overscan={VIRTUOSO_OVERSCAN_PX}
+      increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_PX}
+      scrollerRef={handleScrollerRef}
+      className="app-virtuoso h-full"
+    />
+  );
+}
+
+const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
+
+// Minimal CSS.escape polyfill for attribute selectors. Some file paths
+// contain quotes, brackets, or other characters that would break a literal
+// `[data-file-path="…"]` selector.
+function cssEscapePath(value: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(value);
+  }
+  return value.replace(/(["\\[\]])/g, "\\$1");
 }
 
 // Files at or above this changed-line count freeze the main thread for several
@@ -357,25 +551,40 @@ const HEAVY_DIFF_LINE_THRESHOLD = 2000;
 
 const FileDiffSection = memo(function FileDiffSection({
   collapsed,
+  commentAnnotations,
+  commentDrafts,
   diffOptions,
   file,
   fileDiff,
+  onAnnotationsChange,
   onCollapsedChange,
   onCommentSaved,
+  onDraftChange,
+  onDraftClear,
+  onSelectedLinesChange,
   onViewedChange,
+  selectedLines,
   viewed,
 }: {
   collapsed: boolean;
+  commentAnnotations: CommentAnnotation[];
+  commentDrafts: CommentDrafts;
   diffOptions: Parameters<typeof FileDiff>[0]["options"];
   file: DiffFileSummary;
   fileDiff: FileDiffMetadata | null;
+  onAnnotationsChange: (
+    path: string,
+    updater: (current: CommentAnnotation[]) => CommentAnnotation[],
+  ) => void;
   onCollapsedChange: (path: string, value: boolean) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
+  onDraftChange: (id: string, body: string) => void;
+  onDraftClear: (id: string) => void;
+  onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
+  selectedLines: SelectedLineRange | null;
   viewed: boolean;
 }) {
-  const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotation[]>([]);
-  const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(null);
   const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(null);
   const [unresolvedError, setUnresolvedError] = useState<string | null>(null);
   const [unresolvedLoading, setUnresolvedLoading] = useState(false);
@@ -440,25 +649,30 @@ const FileDiffSection = memo(function FileDiffSection({
     };
   }, [file.hasMergeConflicts, file.path]);
 
-  const addCommentAtLine = useCallback((side: AnnotationSide, lineNumber: number) => {
-    setCommentAnnotations((current) => {
-      if (
-        current.some(
-          (annotation) =>
-            annotation.side === side &&
-            annotation.lineNumber === lineNumber &&
-            annotation.metadata.kind === "comment-form",
-        )
-      ) {
-        return current;
-      }
-      return [...current, createCommentAnnotation(side, lineNumber)];
-    });
-  }, []);
+  const filePath = file.path;
+
+  const addCommentAtLine = useCallback(
+    (side: AnnotationSide, lineNumber: number) => {
+      onAnnotationsChange(filePath, (current) => {
+        if (
+          current.some(
+            (annotation) =>
+              annotation.side === side &&
+              annotation.lineNumber === lineNumber &&
+              annotation.metadata.kind === "comment-form",
+          )
+        ) {
+          return current;
+        }
+        return [...current, createCommentAnnotation(side, lineNumber)];
+      });
+    },
+    [filePath, onAnnotationsChange],
+  );
 
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
-      setSelectedLines(range);
+      onSelectedLinesChange(filePath, range);
       diffOptions?.onLineSelectionEnd?.(range);
       diffOptions?.onLineSelected?.(range);
       if (range == null) return;
@@ -466,18 +680,19 @@ const FileDiffSection = memo(function FileDiffSection({
         (range.endSide ?? range.side) === "deletions" ? "deletions" : "additions";
       addCommentAtLine(side, Math.max(range.start, range.end));
     },
-    [addCommentAtLine, diffOptions],
+    [addCommentAtLine, diffOptions, filePath, onSelectedLinesChange],
   );
 
   const handleCommentCancel = useCallback(
     (id: string) => {
-      setCommentAnnotations((current) =>
+      onAnnotationsChange(filePath, (current) =>
         current.filter((annotation) => annotation.metadata.id !== id),
       );
-      setSelectedLines(null);
+      onDraftClear(id);
+      onSelectedLinesChange(filePath, null);
       diffOptions?.onLineSelected?.(null);
     },
-    [diffOptions],
+    [diffOptions, filePath, onAnnotationsChange, onDraftClear, onSelectedLinesChange],
   );
 
   const handleCommentSubmit = useCallback(
@@ -486,7 +701,7 @@ const FileDiffSection = memo(function FileDiffSection({
       if (submittedAnnotation == null) return;
 
       const normalizedBody = body.trim().length > 0 ? body.trim() : "Needs review before merging.";
-      setCommentAnnotations((current) =>
+      onAnnotationsChange(filePath, (current) =>
         current.map((annotation) =>
           annotation.metadata.id === id
             ? {
@@ -500,6 +715,7 @@ const FileDiffSection = memo(function FileDiffSection({
             : annotation,
         ),
       );
+      onDraftClear(id);
       onCommentSaved({
         body: normalizedBody,
         contextLines: buildCommentContext({
@@ -508,21 +724,24 @@ const FileDiffSection = memo(function FileDiffSection({
           side: submittedAnnotation.side,
           unresolvedFile,
         }),
-        filePath: file.path,
+        filePath,
         id,
         lineNumber: submittedAnnotation.lineNumber,
         side: submittedAnnotation.side,
       });
-      setSelectedLines(null);
+      onSelectedLinesChange(filePath, null);
       diffOptions?.onLineSelected?.(null);
     },
     [
       commentAnnotations,
       diffOptions,
       file.hasMergeConflicts,
-      file.path,
+      filePath,
       fileDiff,
+      onAnnotationsChange,
       onCommentSaved,
+      onDraftClear,
+      onSelectedLinesChange,
       unresolvedFile,
     ],
   );
@@ -593,13 +812,18 @@ const FileDiffSection = memo(function FileDiffSection({
         }}
         selectedLines={selectedLines}
         lineAnnotations={commentAnnotations}
-        renderAnnotation={(annotation) => (
-          <CommentAnnotationView
-            annotation={annotation as CommentAnnotation}
-            onCancel={handleCommentCancel}
-            onSubmit={handleCommentSubmit}
-          />
-        )}
+        renderAnnotation={(annotation) => {
+          const id = (annotation as CommentAnnotation).metadata.id;
+          return (
+            <CommentAnnotationView
+              annotation={annotation as CommentAnnotation}
+              body={commentDrafts[id] ?? ""}
+              onBodyChange={(next) => onDraftChange(id, next)}
+              onCancel={handleCommentCancel}
+              onSubmit={handleCommentSubmit}
+            />
+          );
+        }}
         renderCustomHeader={renderHeader}
         disableWorkerPool
       />

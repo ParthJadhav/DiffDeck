@@ -55,7 +55,8 @@
     "open": "^10.1.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-resizable-panels": "^4.10.0"
+    "react-resizable-panels": "^4.10.0",
+    "react-virtuoso": "4.14.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13",
