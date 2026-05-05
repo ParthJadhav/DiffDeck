@@ -34,7 +34,14 @@ export function resolveRepoRoot(startDirectory: string): string {
 }
 
 export function getRawDiff(repoRoot: string, diffArgs: string[]): string {
+  // core.quotePath=false keeps non-ASCII paths as raw UTF-8 instead of C-style
+  // octal escapes wrapped in quotes. The downstream patch parser does not
+  // handle the quoted form correctly (the regex matches but the destructured
+  // capture positions are wrong, causing a TypeError that kills parsing for
+  // the whole diff), so we suppress the quoting at the source.
   return runGit(repoRoot, [
+    "-c",
+    "core.quotePath=false",
     "diff",
     "--find-renames",
     "--submodule=diff",
