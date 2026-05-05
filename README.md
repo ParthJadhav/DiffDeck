@@ -1,5 +1,7 @@
 # Diffdeck
 
+[![npm](https://img.shields.io/npm/v/@parthj/diffdeck.svg?label=npm&color=cb3837)](https://www.npmjs.com/package/@parthj/diffdeck)
+
 Open a Git diff in your browser from the terminal.
 
 ![Diffdeck opens Git diffs in a local browser review workspace](docs/diffdeck-infographic.png)
@@ -36,6 +38,12 @@ npm install -g @parthj/diffdeck
 
 The package is scoped, but the installed command is `diffdeck`.
 
+To update to the latest version:
+
+```sh
+npm update -g @parthj/diffdeck
+```
+
 ## Use It Like Git Diff
 
 ```sh
@@ -69,6 +77,14 @@ bun install
 bun run dev
 bun run check
 ```
+
+## Releases
+
+See [GitHub Releases](https://github.com/ParthJadhav/DiffDeck/releases) for the full version history. Highlights:
+
+- **0.2.0** — File-list virtualization for large diffs (23k+ files), survives non-ASCII patches, comment drafts persist across scroll.
+- **0.1.3** — Float copy-comments FAB, render binary file placeholders, oklch theme tokens.
+- **0.1.1** — Initial scoped npm release.
 
 ## License
 
