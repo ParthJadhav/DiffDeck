@@ -1,12 +1,4 @@
-import {
-  memo,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { cleanLastNewline } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 
@@ -105,7 +97,7 @@ function findScrollParent(el: HTMLElement | null): HTMLElement | null {
     }
     node = node.parentElement;
   }
-  return fallback ?? document.scrollingElement as HTMLElement | null;
+  return fallback ?? (document.scrollingElement as HTMLElement | null);
 }
 
 export const HeavyFileDiff = memo(function HeavyFileDiff({

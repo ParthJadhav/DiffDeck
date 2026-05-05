@@ -408,7 +408,13 @@ const FileDiffSection = memo(function FileDiffSection({
         viewed={viewed}
       />
     ),
-    [collapsed, file.hasMergeConflicts, handleHeaderCollapsedChange, handleHeaderViewedChange, viewed],
+    [
+      collapsed,
+      file.hasMergeConflicts,
+      handleHeaderCollapsedChange,
+      handleHeaderViewedChange,
+      viewed,
+    ],
   );
 
   useEffect(() => {
@@ -629,7 +635,9 @@ const FileDiffSection = memo(function FileDiffSection({
   }
 
   if (isHeavyFile) {
-    return <HeavyFileDiff collapsed={collapsed} fileDiff={fileDiff} header={renderHeader(fileDiff)} />;
+    return (
+      <HeavyFileDiff collapsed={collapsed} fileDiff={fileDiff} header={renderHeader(fileDiff)} />
+    );
   }
 
   return (

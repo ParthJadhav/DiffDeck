@@ -77,9 +77,7 @@ export function CommentAnnotationView({
 }
 
 function CommentCard({ children }: { children: ReactNode }) {
-  return (
-    <div className="app-comment-card my-3 ml-4 max-w-2xl rounded-[18px] p-3">{children}</div>
-  );
+  return <div className="app-comment-card my-3 ml-4 max-w-2xl rounded-[18px] p-3">{children}</div>;
 }
 
 export function createCommentAnnotation(
