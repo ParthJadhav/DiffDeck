@@ -503,10 +503,90 @@ kbd {
   background: hsl(var(--muted) / 0.36);
 }
 
+.app-pending-spinner {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 9999px;
+  border: 1.75px solid hsl(var(--muted-foreground) / 0.35);
+  border-top-color: hsl(var(--muted-foreground));
+  animation: app-pending-spin 0.7s linear infinite;
+}
+
+@keyframes app-pending-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 .app-diff-state-error {
   color: hsl(var(--destructive));
   background: hsl(var(--destructive) / 0.08);
   box-shadow: inset 0 0 0 1px hsl(var(--destructive) / 0.28);
+}
+
+.app-heavy-rows {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+  background: hsl(var(--card));
+  contain: strict;
+  overflow-x: auto;
+}
+
+.app-heavy-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  display: grid;
+  grid-template-columns: 3.5rem 3.5rem 1rem minmax(0, 1fr);
+  align-items: center;
+  white-space: pre;
+  contain: layout style paint;
+}
+
+.app-heavy-row-add {
+  background: hsl(var(--diff-added) / 0.14);
+}
+
+.app-heavy-row-add .app-heavy-sigil {
+  color: hsl(var(--diff-added));
+}
+
+.app-heavy-row-delete {
+  background: hsl(var(--diff-deleted) / 0.14);
+}
+
+.app-heavy-row-delete .app-heavy-sigil {
+  color: hsl(var(--diff-deleted));
+}
+
+.app-heavy-row-gap {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+  box-shadow:
+    inset 0 1px 0 hsl(var(--border) / 0.6),
+    inset 0 -1px 0 hsl(var(--border) / 0.6);
+}
+
+.app-heavy-num {
+  text-align: right;
+  padding: 0 0.5rem;
+  color: hsl(var(--muted-foreground));
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-heavy-sigil {
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.app-heavy-text {
+  padding-right: 0.75rem;
+  color: hsl(var(--foreground));
 }
 
 .app-chip {

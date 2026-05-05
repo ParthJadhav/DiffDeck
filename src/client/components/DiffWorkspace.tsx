@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FileDiff,
   UnresolvedFile,
+  Virtualizer,
   type FileContents,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
@@ -17,6 +18,7 @@ import {
   type CommentAnnotation,
 } from "./diff/CommentAnnotation.js";
 import { CustomFileHeader } from "./diff/CustomFileHeader.js";
+import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
 
 export interface DiffWorkspaceProps {
@@ -180,6 +182,21 @@ function MultiFileScroller(props: {
   onRequestFileDiffRef.current = onRequestFileDiff;
   const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
 
+  // Stable callback ref so React doesn't detach + reattach on every parent
+  // render (which used to cascade across all 14 file cards on each click).
+  const sectionRef = useCallback((node: HTMLDivElement | null) => {
+    if (node == null) return;
+    const path = node.dataset.filePath;
+    if (path == null) return;
+    sectionRefs.current.set(path, node);
+    if (containerRef.current == null) {
+      containerRef.current = (node.parentElement?.parentElement as HTMLDivElement | null) ?? null;
+    }
+    return () => {
+      sectionRefs.current.delete(path);
+    };
+  }, []);
+
   useEffect(() => {
     const root = containerRef.current;
     if (root == null) return;
@@ -194,7 +211,7 @@ function MultiFileScroller(props: {
           }
         }
       },
-      { root, rootMargin: "1500px 0px 1500px 0px" },
+      { root, rootMargin: "600px 0px 600px 0px" },
     );
     for (const node of sectionRefs.current.values()) {
       observer.observe(node);
@@ -248,7 +265,12 @@ function MultiFileScroller(props: {
           onVisiblePathChangeRef.current(best.path);
         }
       },
-      { root, threshold: [0, 0.01, 0.5, 1] },
+      // Single threshold (0) is enough: the path-selection logic below relies
+      // on isIntersecting + getBoundingClientRect, not on intersectionRatio.
+      // Multi-threshold observers fire many more callbacks per scroll, which
+      // showed up as the dominant cost on each click after a giant file was
+      // expanded.
+      { root, threshold: 0 },
     );
     for (const node of sectionRefs.current.values()) {
       observer.observe(node);
@@ -297,39 +319,39 @@ function MultiFileScroller(props: {
   }, [filesByPath, selectedPath]);
 
   return (
-    <div ref={containerRef} className="h-full overflow-auto">
-      <div className="grid gap-2.5 p-2.5">
-        {files.map((file) => (
-          <div
-            key={file.path}
-            data-file-path={file.path}
-            ref={(node) => {
-              if (node == null) {
-                sectionRefs.current.delete(file.path);
-              } else {
-                sectionRefs.current.set(file.path, node);
-              }
-            }}
-            className="app-file-card scroll-mt-2.5 overflow-hidden rounded-lg"
-          >
-            <FileDiffSection
-              collapsed={collapsedFilePaths.has(file.path)}
-              diffOptions={diffOptions}
-              file={file}
-              fileDiff={fileDiffs[file.path] ?? null}
-              onCollapsedChange={onCollapsedFileChange}
-              onCommentSaved={onCommentSaved}
-              onViewedChange={onViewedFileChange}
-              viewed={viewedFilePaths.has(file.path)}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
+    <Virtualizer className="h-full overflow-auto" contentClassName="grid gap-2.5 p-2.5">
+      {files.map((file) => (
+        <div
+          key={file.path}
+          data-file-path={file.path}
+          ref={sectionRef}
+          className="app-file-card scroll-mt-2.5 overflow-hidden rounded-lg"
+        >
+          <FileDiffSection
+            collapsed={collapsedFilePaths.has(file.path)}
+            diffOptions={diffOptions}
+            file={file}
+            fileDiff={fileDiffs[file.path] ?? null}
+            onCollapsedChange={onCollapsedFileChange}
+            onCommentSaved={onCommentSaved}
+            onViewedChange={onViewedFileChange}
+            viewed={viewedFilePaths.has(file.path)}
+          />
+        </div>
+      ))}
+    </Virtualizer>
   );
 }
 
-function FileDiffSection({
+// Files at or above this changed-line count freeze the main thread for several
+// seconds inside @pierre/diffs (its virtualizer doesn't actually window the
+// DOM render for these — every line gets a node, e.g. ~84k DOM nodes for a
+// 24k-line yarn.lock diff). For files at this scale we swap in a custom
+// windowed renderer that only mounts the rows currently in view, trading
+// syntax highlighting / line-level features for a responsive UI.
+const HEAVY_DIFF_LINE_THRESHOLD = 2000;
+
+const FileDiffSection = memo(function FileDiffSection({
   collapsed,
   diffOptions,
   file,
@@ -353,6 +375,23 @@ function FileDiffSection({
   const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(null);
   const [unresolvedError, setUnresolvedError] = useState<string | null>(null);
   const [unresolvedLoading, setUnresolvedLoading] = useState(false);
+
+  const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
+
+  const handleHeaderCollapsedChange = useCallback(
+    (next: boolean) => {
+      onCollapsedChange(file.path, next);
+    },
+    [file.path, onCollapsedChange],
+  );
+
+  const handleHeaderViewedChange = useCallback(
+    (next: boolean) => {
+      onViewedChange(file.path, next);
+      onCollapsedChange(file.path, next);
+    },
+    [file.path, onCollapsedChange, onViewedChange],
+  );
 
   useEffect(() => {
     if (file.hasMergeConflicts !== true) return;
@@ -542,11 +581,8 @@ function FileDiffSection({
             collapsed={collapsed}
             fileDiff={metadataFileDiff}
             hasMergeConflicts
-            onCollapsedChange={(next) => onCollapsedChange(file.path, next)}
-            onViewedChange={(next) => {
-              onViewedChange(file.path, next);
-              onCollapsedChange(file.path, next);
-            }}
+            onCollapsedChange={handleHeaderCollapsedChange}
+            onViewedChange={handleHeaderViewedChange}
             viewed={viewed}
           />
         )}
@@ -573,6 +609,25 @@ function FileDiffSection({
     );
   }
 
+  if (isHeavyFile) {
+    return (
+      <HeavyFileDiff
+        collapsed={collapsed}
+        fileDiff={fileDiff}
+        header={
+          <CustomFileHeader
+            collapsed={collapsed}
+            fileDiff={fileDiff}
+            hasMergeConflicts={file.hasMergeConflicts === true}
+            onCollapsedChange={handleHeaderCollapsedChange}
+            onViewedChange={handleHeaderViewedChange}
+            viewed={viewed}
+          />
+        }
+      />
+    );
+  }
+
   return (
     <FileDiff
       fileDiff={fileDiff}
@@ -591,14 +646,11 @@ function FileDiffSection({
           collapsed={collapsed}
           fileDiff={metadataFileDiff}
           hasMergeConflicts={file.hasMergeConflicts === true}
-          onCollapsedChange={(next) => onCollapsedChange(file.path, next)}
-          onViewedChange={(next) => {
-            onViewedChange(file.path, next);
-            onCollapsedChange(file.path, next);
-          }}
+          onCollapsedChange={handleHeaderCollapsedChange}
+          onViewedChange={handleHeaderViewedChange}
           viewed={viewed}
         />
       )}
     />
   );
-}
+});
