@@ -568,15 +568,26 @@ function hydrateFileDiff(
   rawFileDiff: string | undefined,
   partialFileDiff: FileDiffMetadata,
   gitHeaderPaths: GitDiffHeaderPaths | undefined,
+  logger: DiffLogger | undefined,
 ): FileDiffMetadata {
-  if (rawFileDiff == null) return partialFileDiff;
+  if (rawFileDiff == null) {
+    logger?.(`hydrate ${partialFileDiff.name}: skipped — no raw file diff`);
+    return partialFileDiff;
+  }
 
   const oldPath = gitHeaderPaths?.oldPath ?? partialFileDiff.prevName ?? partialFileDiff.name;
   const newPath = gitHeaderPaths?.newPath ?? partialFileDiff.name;
   const oldContents = partialFileDiff.type === "new" ? "" : readIndexFile(repoRoot, oldPath);
   const newContents = partialFileDiff.type === "deleted" ? "" : readWorktreeFile(repoRoot, newPath);
 
-  if (oldContents == null || newContents == null) {
+  if (oldContents == null) {
+    logger?.(
+      `hydrate ${newPath}: failed — readIndexFile returned null for "${oldPath}" (git show :${oldPath})`,
+    );
+    return partialFileDiff;
+  }
+  if (newContents == null) {
+    logger?.(`hydrate ${newPath}: failed — readWorktreeFile returned null for "${newPath}"`);
     return partialFileDiff;
   }
 
@@ -591,7 +602,11 @@ function hydrateFileDiff(
       }) ?? partialFileDiff,
       gitHeaderPaths,
     );
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    logger?.(
+      `hydrate ${newPath}: processFile threw — ${message} (oldLen=${oldContents.length}, newLen=${newContents.length})`,
+    );
     return partialFileDiff;
   }
 }
@@ -676,7 +691,7 @@ export function buildDiffSession(
       const binary = isBinaryFileDiff(rawFileDiff);
       const fileDiff =
         canHydrateFromWorktree && !binary
-          ? hydrateFileDiff(repoRoot, parserRawFileDiff, partialFileDiff, gitHeaderPaths)
+          ? hydrateFileDiff(repoRoot, parserRawFileDiff, partialFileDiff, gitHeaderPaths, logger)
           : partialFileDiff;
       fileDiff.cacheKey = buildCacheKey("diff", fileDiff.name, rawFileDiff ?? rawDiff);
       fileDiffs.set(fileDiff.name, fileDiff);

@@ -270,7 +270,12 @@ export function App() {
     return <ShellState>No session data available.</ShellState>;
   }
 
-  const sidebarFooter = <DiffControls {...controlsProps} />;
+  const sidebarFooter = (
+    <div className="flex flex-col gap-2">
+      <CopyCommentsButton comments={orderedCommentExports} onClearAll={handleClearAllComments} />
+      <DiffControls {...controlsProps} />
+    </div>
+  );
 
   return (
     <WorkerPoolContextProvider
@@ -301,7 +306,6 @@ export function App() {
             <DiffWorkspace {...workspaceProps} />
           </div>
         )}
-        <CopyCommentsButton comments={orderedCommentExports} onClearAll={handleClearAllComments} />
       </div>
     </WorkerPoolContextProvider>
   );

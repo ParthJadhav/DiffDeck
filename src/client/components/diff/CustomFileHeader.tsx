@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { cn } from "../../lib/cn.js";
 
@@ -88,28 +88,132 @@ function segmentRole(index: number, count: number): "leaf" | "parent" | "root" {
   return "parent";
 }
 
-function createCompactPathTokens(path: string): PathToken[] {
-  const segments = path.split("/").filter(Boolean);
-  if (segments.length <= 3) {
-    return segments.map((segment, index) => ({
-      kind: "segment",
-      label: segment,
-      role: segmentRole(index, segments.length),
-    }));
+function buildVariants(segments: string[]): PathToken[][] {
+  const n = segments.length;
+  if (n === 0) return [[]];
+  if (n === 1) {
+    return [[{ kind: "segment", label: segments[0]!, role: "leaf" }]];
   }
 
-  return [
-    { kind: "segment", label: segments[0] ?? "", role: "root" },
+  const variants: PathToken[][] = [];
+
+  variants.push(
+    segments.map((segment, index) => ({
+      kind: "segment",
+      label: segment,
+      role: segmentRole(index, n),
+    })),
+  );
+
+  for (let kept = n - 2; kept >= 1; kept--) {
+    const tokens: PathToken[] = [
+      { kind: "segment", label: segments[0]!, role: "root" },
+      { kind: "ellipsis", label: "..." },
+    ];
+    for (let i = n - kept; i < n; i++) {
+      tokens.push({
+        kind: "segment",
+        label: segments[i]!,
+        role: i === n - 1 ? "leaf" : "parent",
+      });
+    }
+    variants.push(tokens);
+  }
+
+  variants.push([
     { kind: "ellipsis", label: "..." },
-    { kind: "segment", label: segments.at(-2) ?? "", role: "parent" },
-    { kind: "segment", label: segments.at(-1) ?? "", role: "leaf" },
-  ];
+    { kind: "segment", label: segments[n - 1]!, role: "leaf" },
+  ]);
+  variants.push([{ kind: "segment", label: segments[n - 1]!, role: "leaf" }]);
+
+  return variants;
+}
+
+let measureCanvas: HTMLCanvasElement | null = null;
+function getMeasureCtx(): CanvasRenderingContext2D | null {
+  if (typeof document === "undefined") return null;
+  if (!measureCanvas) measureCanvas = document.createElement("canvas");
+  return measureCanvas.getContext("2d");
+}
+
+function getCanvasFont(el: Element): string {
+  const s = getComputedStyle(el);
+  return `${s.fontStyle} ${s.fontVariant} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+}
+
+function measureVariant(
+  tokens: PathToken[],
+  ctx: CanvasRenderingContext2D,
+  separatorPaddingPx: number,
+): number {
+  let width = 0;
+  const slashWidth = ctx.measureText("/").width;
+  for (let i = 0; i < tokens.length; i++) {
+    if (i > 0) width += slashWidth + separatorPaddingPx * 2;
+    width += ctx.measureText(tokens[i]!.label).width;
+  }
+  return width;
+}
+
+function getAvailableWidth(el: HTMLElement): number {
+  const parent = el.parentElement;
+  if (!parent) return Number.POSITIVE_INFINITY;
+  const style = getComputedStyle(parent);
+  const padding =
+    parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
+  const gap = parseFloat(style.columnGap || style.gap || "0");
+  const children = Array.from(parent.children) as HTMLElement[];
+  const visible = children.filter((c) => getComputedStyle(c).display !== "none");
+  let used = 0;
+  for (const child of visible) {
+    if (child === el) continue;
+    used += child.getBoundingClientRect().width;
+  }
+  const totalGaps = Math.max(0, visible.length - 1);
+  return Math.max(0, parent.clientWidth - padding - used - totalGaps * gap);
 }
 
 function PathLabel({ path }: { path: string }) {
-  const tokens = createCompactPathTokens(path);
+  const containerRef = useRef<HTMLSpanElement>(null);
+  const segments = useMemo(() => path.split("/").filter(Boolean), [path]);
+  const variants = useMemo(() => buildVariants(segments), [segments]);
+  const [variantIndex, setVariantIndex] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    const parent = el?.parentElement;
+    if (!el || !parent) return;
+    const ctx = getMeasureCtx();
+    if (!ctx) return;
+
+    const update = () => {
+      ctx.font = getCanvasFont(el);
+      const rootFontSize =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const separatorPaddingPx = rootFontSize * 0.35;
+      const available = getAvailableWidth(el);
+      let chosen = variants.length - 1;
+      for (let i = 0; i < variants.length; i++) {
+        const width = measureVariant(variants[i]!, ctx, separatorPaddingPx);
+        if (width <= available) {
+          chosen = i;
+          break;
+        }
+      }
+      setVariantIndex((prev) => (prev === chosen ? prev : chosen));
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(parent);
+    return () => ro.disconnect();
+  }, [variants]);
+
+  const tokens = variants[Math.min(variantIndex, variants.length - 1)] ?? [];
+
   return (
     <span
+      ref={containerRef}
       className="app-path-label text-sm font-medium text-foreground"
       translate="no"
       title={path}

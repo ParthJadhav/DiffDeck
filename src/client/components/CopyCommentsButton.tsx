@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatCommentExport, type CommentExportRecord } from "../lib/commentExport.js";
 import { cn } from "../lib/cn.js";
-import { Button } from "./ui/button.js";
 
 type CopyStatus = "idle" | "copied" | "failed";
 
@@ -37,6 +36,8 @@ export function CopyCommentsButton({
     if (commentCount === 0 && confirmingClear) setConfirmingClear(false);
   }, [commentCount, confirmingClear]);
 
+  if (commentCount === 0) return null;
+
   const handleCopy = async () => {
     if (copyText.length === 0) return;
 
@@ -58,39 +59,20 @@ export function CopyCommentsButton({
     setConfirmingClear(false);
   };
 
-  if (commentCount === 0) return null;
-
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-40 flex items-center gap-2 sm:bottom-6 sm:right-6">
-      <Button
+    <div className="app-comment-actions flex flex-col gap-1.5" role="group" aria-label="Comment actions">
+      <button
         type="button"
-        variant="ghost"
-        size="sm"
-        onClick={handleClearClick}
-        aria-label={`${confirmingClear ? "Confirm clear" : "Clear"} ${commentCount} ${commentLabel}`}
-        title={confirmingClear ? "Click again to confirm" : "Clear all comments"}
-        className={cn(
-          "app-copy-fab pointer-events-auto h-11 min-w-[8.5rem] justify-center gap-2 rounded-full px-4 text-[12.5px] font-medium",
-          confirmingClear && "text-destructive",
-        )}
-      >
-        <TrashIcon />
-        <span>{confirmingClear ? "Click to confirm" : "Clear all"}</span>
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
         onClick={handleCopy}
         aria-label={`Copy ${commentCount} ${commentLabel} with context`}
         title="Copy comments with context"
-        className="app-copy-fab pointer-events-auto h-11 gap-2.5 rounded-full px-4 text-[12.5px] font-medium"
+        className="app-comment-action app-comment-action--primary group flex h-10 w-full items-center gap-2 rounded-lg px-3 text-[12.5px] font-medium"
       >
         <CopyIcon />
-        <span>Copy comments</span>
+        <span className="min-w-0 flex-1 truncate text-left">Copy comments</span>
         <span
           data-status={copyStatus}
-          className="app-copy-fab-badge app-copy-status inline-grid h-5 min-w-[1.5rem] place-items-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums"
+          className="app-comment-action-badge inline-grid h-5 min-w-[1.5rem] place-items-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums"
           aria-hidden="true"
         >
           <span
@@ -118,7 +100,22 @@ export function CopyCommentsButton({
             <ErrorIcon />
           </span>
         </span>
-      </Button>
+      </button>
+      <button
+        type="button"
+        onClick={handleClearClick}
+        aria-label={`${confirmingClear ? "Confirm clear" : "Clear"} ${commentCount} ${commentLabel}`}
+        title={confirmingClear ? "Click again to confirm" : "Clear all comments"}
+        className={cn(
+          "app-comment-action group flex h-10 w-full items-center gap-2 rounded-lg px-3 text-[12.5px] font-medium",
+          confirmingClear && "app-comment-action--danger",
+        )}
+      >
+        <TrashIcon />
+        <span className="min-w-0 flex-1 truncate text-left">
+          {confirmingClear ? "Click to confirm" : "Clear all"}
+        </span>
+      </button>
       <span className="sr-only" role="status" aria-live="polite">
         {copyStatus === "copied"
           ? "Copied comments"
