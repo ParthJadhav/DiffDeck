@@ -159,8 +159,7 @@ function getAvailableWidth(el: HTMLElement): number {
   const parent = el.parentElement;
   if (!parent) return Number.POSITIVE_INFINITY;
   const style = getComputedStyle(parent);
-  const padding =
-    parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
+  const padding = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
   const gap = parseFloat(style.columnGap || style.gap || "0");
   const children = Array.from(parent.children) as HTMLElement[];
   const visible = children.filter((c) => getComputedStyle(c).display !== "none");
@@ -188,8 +187,7 @@ function PathLabel({ path }: { path: string }) {
 
     const update = () => {
       ctx.font = getCanvasFont(el);
-      const rootFontSize =
-        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       const separatorPaddingPx = rootFontSize * 0.35;
       const available = getAvailableWidth(el);
       let chosen = variants.length - 1;

@@ -60,7 +60,11 @@ export function CopyCommentsButton({
   };
 
   return (
-    <div className="app-comment-actions flex flex-col gap-1.5" role="group" aria-label="Comment actions">
+    <div
+      className="app-comment-actions flex flex-col gap-1.5"
+      role="group"
+      aria-label="Comment actions"
+    >
       <button
         type="button"
         onClick={handleCopy}
