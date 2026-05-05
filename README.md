@@ -63,6 +63,7 @@ Everything after Diffdeck's own options is passed through to `git diff` as long 
 | `--port <number>` | Bind to a specific port. Defaults to `4321` (falls back to a free port if taken). |
 | `--host <host>` | Bind to a host. Defaults to `127.0.0.1`. |
 | `--no-open` | Start the server without opening a browser. |
+| `--version` | Print the installed version and exit. |
 | `--help` | Show CLI help. |
 
 ## Requirements

@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import open from "open";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildDiffSession, resolveRepoRoot } from "./git.js";
 import { startServer } from "./server.js";
 import type { CliOptions } from "./types.js";
 
 const DEFAULT_PORT = 4321;
+
+function readPackageVersion(): string {
+  const packageJsonPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../package.json");
+  const { version } = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version: string };
+  return version;
+}
 
 function printHelp(): void {
   console.log(`Diffdeck
@@ -20,6 +27,7 @@ Options:
   --port <number>   Port to bind. Defaults to ${DEFAULT_PORT} (falls back to a free port if taken).
   --host <host>     Host to bind. Defaults to 127.0.0.1.
   --no-open         Do not open the browser automatically.
+  --version         Print the installed version and exit.
   --help            Show this help message.
 
 Examples:
@@ -44,6 +52,11 @@ function parseCliArgs(argv: string[]): CliOptions {
 
     if (argument === "--help") {
       printHelp();
+      process.exit(0);
+    }
+
+    if (argument === "--version" || argument === "-v") {
+      console.log(readPackageVersion());
       process.exit(0);
     }
 
