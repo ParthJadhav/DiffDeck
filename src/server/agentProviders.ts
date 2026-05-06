@@ -97,7 +97,7 @@ function buildBatchPrompt(comments: CommentExportRecord[], callbackBaseUrl: stri
       .join("\n");
     return [
       `Comment ${index + 1}`,
-      `Comment ID: ${comment.id}`,
+      `ID: ${comment.id}`,
       `File: ${comment.filePath}`,
       `Line: ${comment.lineNumber} (${comment.side})`,
       `Comment: ${comment.body}`,
@@ -105,19 +105,17 @@ function buildBatchPrompt(comments: CommentExportRecord[], callbackBaseUrl: stri
       context.length > 0 ? context : "(none)",
     ].join("\n");
   });
+
+  const callbackInstruction = [
+    "When each comment is addressed, POST a callback (one per comment ID):",
+    `  curl -s -X POST ${callbackBaseUrl}/api/agent-queue/comment/<ID>/complete \\`,
+    `    -H 'Content-Type: application/json' \\`,
+    `    -d '{"response":"<one sentence summary>"}' # or {"error":"..."} on failure`,
+  ].join("\n");
+
   return [
-    "You are handling batched review comments from a local diff review app for one file.",
-    "If comments are code-fix requests, modify files in this repo and keep the patch minimal.",
-    "IMPORTANT: Do not rely on transcript output for status.",
-    "You MUST call callback endpoints per comment ID when each item is complete.",
-    `Callback base URL: ${callbackBaseUrl}`,
-    "Callback format:",
-    "POST <BASE_URL>/api/agent-queue/comment/<COMMENT_ID>/complete",
-    "JSON body: {\"response\":\"<short final message>\"} on success",
-    "JSON body: {\"error\":\"<short error or clarification>\"} on failure/needs-input",
-    "Use a real HTTP call (for example: curl) to send the callback.",
-    "If multiple comments were batched, callback once for EACH comment ID.",
-    "Use concise callback messages (1 sentence).",
+    "Address the following diff review comments. For code-fix requests, edit the files in this repo and keep changes minimal.",
+    callbackInstruction,
     "",
     blocks.join("\n\n---\n\n"),
   ].join("\n");
