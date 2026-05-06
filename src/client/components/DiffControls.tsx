@@ -9,15 +9,23 @@ import {
 } from "react";
 import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
-import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
+import type { AgentType, DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
+import { AGENT_CONFIGS, isAgentType } from "../lib/uiTypes.js";
 import { Checkbox } from "./ui/checkbox.js";
 
+export const EXECUTION_MODES = ["isolated", "shared_session"] as const;
+export type ExecutionMode = (typeof EXECUTION_MODES)[number];
+
 export interface DiffControlsProps {
+  agentType: AgentType;
   diffStyle: DiffLayout;
   disableBackground: boolean;
+  executionMode: ExecutionMode;
   expandUnchanged: boolean;
+  onAgentTypeChange: (value: AgentType) => void;
   onDiffStyleChange: (value: DiffLayout) => void;
   onDisableBackgroundChange: (value: boolean) => void;
+  onExecutionModeChange: (value: ExecutionMode) => void;
   onExpandUnchangedChange: (value: boolean) => void;
   onOverflowChange: (value: OverflowMode) => void;
   onShowLineNumbersChange: (value: boolean) => void;
@@ -407,11 +415,15 @@ function GearIcon() {
 
 export function DiffControls(props: DiffControlsProps) {
   const {
+    agentType,
     diffStyle,
     disableBackground,
+    executionMode,
     expandUnchanged,
+    onAgentTypeChange,
     onDiffStyleChange,
     onDisableBackgroundChange,
+    onExecutionModeChange,
     onExpandUnchangedChange,
     onOverflowChange,
     onShowLineNumbersChange,
@@ -592,6 +604,39 @@ export function DiffControls(props: DiffControlsProps) {
                 >
                   Backgrounds
                 </CheckLabel>
+              </div>
+            </ControlSection>
+            <ControlSection label="Agent Settings" index={5}>
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 text-[12px]">
+                  <span className="font-medium text-foreground/90">Agent</span>
+                  <select
+                    className="ml-auto rounded border border-input bg-background px-1.5 py-1 text-[11px]"
+                    value={agentType}
+                    onChange={(event) => {
+                      if (isAgentType(event.target.value)) {
+                        onAgentTypeChange(event.target.value);
+                      }
+                    }}
+                  >
+                    {AGENT_CONFIGS.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 rounded-[6px] px-1.5 py-1 text-[12px]">
+                  <span className="font-medium text-foreground/90">Mode</span>
+                  <select
+                    className="ml-auto rounded border border-input bg-background px-1.5 py-1 text-[11px]"
+                    value={executionMode}
+                    onChange={(event) => onExecutionModeChange(event.target.value as ExecutionMode)}
+                  >
+                    <option value="shared_session">Shared session</option>
+                    <option value="isolated">Isolated</option>
+                  </select>
+                </label>
               </div>
             </ControlSection>
           </div>

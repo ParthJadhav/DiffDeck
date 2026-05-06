@@ -877,6 +877,22 @@ kbd {
   background: oklch(var(--ring));
 }
 
+@keyframes agent-badge-pulse {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.66 0.16 240 / 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 8px oklch(0.66 0.16 240 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.66 0.16 240 / 0);
+  }
+}
+
+.app-agent-badge-pulse {
+  animation: agent-badge-pulse 1.8s ease-out infinite;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .app-settings-popover[data-state="open"] .app-settings-section {
     animation: settings-section-enter 140ms cubic-bezier(0.16, 1, 0.3, 1) both;

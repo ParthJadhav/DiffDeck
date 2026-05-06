@@ -172,9 +172,11 @@ export function useDiffTree({
     treeModel.setGitStatus(gitStatuses);
   }, [filePaths, gitStatuses, preparedInput, treeModel]);
 
+  // Re-apply git status when viewed paths change so the decoration
+  // (e.g. "viewed" badge) updates without requiring a full paths reset.
   useEffect(() => {
     treeModel.setGitStatus(gitStatuses);
-  }, [gitStatuses, treeModel, viewedPaths]);
+  }, [gitStatuses, treeModel, viewedPaths]); // viewedPaths intentionally included
 
   useEffect(() => {
     if (selectedPath == null) {

@@ -5,6 +5,7 @@ import { fetchJson } from "../lib/api.js";
 export interface UseFileDiffResult {
   fileDiffs: Record<string, FileDiffMetadata>;
   requestPath: (path: string) => void;
+  reset: () => void;
 }
 
 // On very large diffs the IntersectionObserver in DiffWorkspace can enqueue
@@ -60,5 +61,13 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
     [dispatchNext],
   );
 
-  return { fileDiffs, requestPath };
+  const reset = useCallback(() => {
+    inflightRef.current.clear();
+    loadedRef.current.clear();
+    queueRef.current = [];
+    queuedSetRef.current.clear();
+    setFileDiffs({});
+  }, []);
+
+  return { fileDiffs, requestPath, reset };
 }
