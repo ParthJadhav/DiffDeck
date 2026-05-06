@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import stripAnsi from "strip-ansi";
+import { execa } from "execa";
 
 export interface CommentContextLine {
   content: string;
@@ -131,66 +131,53 @@ function parseAgentOutput(output: string): AgentRunResult {
   return { sessionId };
 }
 
-function runCommand(
+async function runCommand(
   command: string,
   args: string[],
   cwd: string,
   signal?: AbortSignal,
   options?: { onPreview?: (chunk: string) => void; previewMode: "json" | "raw" },
 ): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    let stdoutBuffer = "";
+  let stdoutBuffer = "";
+  let stdout = "";
 
-    child.stdout.on("data", (chunk) => {
-      const text = String(chunk);
-      stdout += text;
-      if (options?.previewMode === "json") {
-        stdoutBuffer += text;
-        const lines = stdoutBuffer.split(/\r\n|\n|\r/);
-        stdoutBuffer = lines.pop() ?? "";
-        for (const line of lines) {
-          const preview = extractPreviewFromJsonLine(line);
-          if (preview != null) {
-            options.onPreview?.(preview);
-          }
-        }
-      } else {
-        options?.onPreview?.(extractLivePreview(stdout));
-      }
-    });
-    child.stderr.on("data", (chunk) => {
-      const text = String(chunk);
-      stderr += text;
-    });
-    signal?.addEventListener("abort", () => {
-      child.kill("SIGTERM");
-      reject(new Error(`Agent command canceled: ${command}`));
-    });
-    child.on("error", (error) => {
-      reject(error);
-    });
-    const timeout = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error(`Agent command timed out after 180s: ${command}`));
-    }, 180_000);
-
-    child.on("close", (code) => {
-      clearTimeout(timeout);
-      if (code === 0) {
-        resolve(stdout);
-        return;
-      }
-      reject(
-        new Error(
-          stderr.trim() ||
-            `${command} exited with code ${code ?? -1}. Verify the provider CLI is installed and authenticated.`,
-        ),
-      );
-    });
+  const subprocess = execa(command, args, {
+    cwd,
+    stdin: "ignore",
+    cancelSignal: signal,
+    timeout: 180_000,
+    reject: false,
   });
+
+  subprocess.stdout?.on("data", (chunk: Buffer) => {
+    const text = String(chunk);
+    stdout += text;
+    if (options?.previewMode === "json") {
+      stdoutBuffer += text;
+      const lines = stdoutBuffer.split(/\r\n|\n|\r/);
+      stdoutBuffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const preview = extractPreviewFromJsonLine(line);
+        if (preview != null) options.onPreview?.(preview);
+      }
+    } else {
+      options?.onPreview?.(extractLivePreview(stdout));
+    }
+  });
+
+  const result = await subprocess;
+
+  if (result.isCanceled) {
+    throw new Error(`Agent command canceled: ${command}`);
+  }
+  if (result.failed) {
+    throw new Error(
+      result.stderr.trim() ||
+        `${command} exited with code ${result.exitCode ?? -1}. Verify the provider CLI is installed and authenticated.`,
+    );
+  }
+
+  return result.stdout;
 }
 
 function extractSessionId(text: string): string | null {
