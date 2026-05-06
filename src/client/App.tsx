@@ -302,7 +302,9 @@ export function App() {
 
   const controlsProps = {
     agentType:
-      agentQueue?.agentType === "codex" ? "codex" : "opencode",
+      agentQueue?.agentType === "opencode" || agentQueue?.agentType === "codex"
+        ? agentQueue.agentType
+        : "opencode",
     diffStyle,
     disableBackground,
     executionMode: agentQueue?.executionMode ?? "shared_session",

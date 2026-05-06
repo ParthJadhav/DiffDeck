@@ -13,3 +13,7 @@ skills-lock.json
 .DS_Store
 *.log
 *.tgz
+
+# Runtime state files
+.diffdeck-agent-queue-state.json
+tmp/

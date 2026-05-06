@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CommentExportRecord } from "../lib/commentExport.js";
 import { fetchJson } from "../lib/api.js";
 
+// "none" means agent processing is disabled; the UI offers only "opencode" | "codex".
 export type AgentType = "none" | "opencode" | "codex";
 export type AgentExecutionMode = "shared_session" | "isolated";
 export type QueueStatus = "queued" | "in_progress" | "done" | "error" | "needs_input";
@@ -14,7 +15,7 @@ export interface AgentQueueItem {
   status: QueueStatus;
   response: string | null;
   error: string | null;
-  livePreview?: string | null;
+  livePreview: string | null;
 }
 
 export interface AgentQueueEvent {

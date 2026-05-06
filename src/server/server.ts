@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { DiffSession } from "./types.js";
 import { buildCacheKey } from "./cacheKey.js";
-import { createAgentQueue, type AgentType } from "./agentQueue.js";
+import { createAgentQueue } from "./agentQueue.js";
 import { isAgentProviderId, type AgentExecutionMode } from "./agentProviders.js";
 import { buildDiffSession } from "./git.js";
 
@@ -23,7 +23,8 @@ function getIndexHtml(clientDir: string): string {
   return readFileSync(join(clientDir, "index.html"), "utf8");
 }
 
-function createAgentRefreshedSession(currentSession: DiffSession): DiffSession {
+/** Re-runs git diff to pick up any file changes made by the agent. */
+function refreshDiffSession(currentSession: DiffSession): DiffSession {
   return buildDiffSession(
     currentSession.repoRoot,
     currentSession.repoRoot,
@@ -56,7 +57,7 @@ export async function startServer(
   app.post("/api/session/refresh", (_request, response) => {
     currentSession = {
       ...session,
-      ...createAgentRefreshedSession(currentSession),
+      ...refreshDiffSession(currentSession),
     };
     response.json({
       repoRoot: currentSession.repoRoot,
@@ -177,22 +178,24 @@ export async function startServer(
   });
 
   app.post("/api/agent-queue/agent", (request, response) => {
-    const nextAgentType = request.body?.agentType;
+    const nextAgentType: unknown = request.body?.agentType;
     if (nextAgentType !== "none" && !isAgentProviderId(nextAgentType)) {
       response.status(400).json({ error: "agentType must be none, opencode, or codex." });
       return;
     }
-    agentQueue.setAgentType(nextAgentType as AgentType);
+    // Safe: narrowed to AgentType by the guard above.
+    agentQueue.setAgentType(nextAgentType);
     response.json(agentQueue.getSnapshot());
   });
 
   app.post("/api/agent-queue/execution-mode", (request, response) => {
-    const executionMode = request.body?.executionMode;
+    const executionMode: unknown = request.body?.executionMode;
     if (executionMode !== "shared_session" && executionMode !== "isolated") {
       response.status(400).json({ error: "executionMode must be shared_session or isolated." });
       return;
     }
-    agentQueue.setExecutionMode(executionMode as AgentExecutionMode);
+    // Safe: narrowed to AgentExecutionMode by the guard above.
+    agentQueue.setExecutionMode(executionMode);
     response.json(agentQueue.getSnapshot());
   });
 
@@ -255,7 +258,7 @@ export async function startServer(
   }
 
   const publicHost = host === "0.0.0.0" ? "127.0.0.1" : address.address;
-  const baseUrl = `http://${publicHost}:${(address as AddressInfo).port}`;
+  const baseUrl = `http://${publicHost}:${address.port}`;
   agentQueue.setCallbackBaseUrl(baseUrl);
 
   return {

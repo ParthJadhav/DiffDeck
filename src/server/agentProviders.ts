@@ -17,7 +17,6 @@ export interface CommentExportRecord {
 
 export type AgentExecutionMode = "shared_session" | "isolated";
 export type AgentProviderId = "opencode" | "codex";
-export type AgentRunState = "completed" | "needs_input";
 
 export interface AgentRunResult {
   sessionId: string | null;
@@ -36,7 +35,7 @@ export interface AgentProviderAdapter {
     context: {
       callbackBaseUrl: string;
       executionMode: AgentExecutionMode;
-      onStream?: (chunk: string) => void;
+      onPreview?: (chunk: string) => void;
       repoRoot: string;
       signal?: AbortSignal;
     },
@@ -56,7 +55,7 @@ const providerAdapters: Record<AgentProviderId, AgentProviderAdapter> = {
     },
     async runBatch(comments, context) {
       const prompt = buildBatchPrompt(comments, context.callbackBaseUrl);
-      const args = ["run", prompt];
+      const args = ["run", "--format", "json", prompt];
       if (context.executionMode === "shared_session") {
         args.splice(1, 0, "--continue");
       }
@@ -65,7 +64,7 @@ const providerAdapters: Record<AgentProviderId, AgentProviderAdapter> = {
         args,
         context.repoRoot,
         context.signal,
-        context.onStream,
+        { onPreview: context.onPreview, previewMode: "json" },
       );
       return parseAgentOutput(output);
     },
@@ -91,7 +90,7 @@ const providerAdapters: Record<AgentProviderId, AgentProviderAdapter> = {
         args,
         context.repoRoot,
         context.signal,
-        context.onStream,
+        { onPreview: context.onPreview, previewMode: "raw" },
       );
       return parseAgentOutput(output);
     },
@@ -153,22 +152,34 @@ function runCommand(
   args: string[],
   cwd: string,
   signal?: AbortSignal,
-  onStream?: (chunk: string) => void,
+  options?: { onPreview?: (chunk: string) => void; previewMode: "json" | "raw" },
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
+    let stdoutBuffer = "";
 
     child.stdout.on("data", (chunk) => {
       const text = String(chunk);
       stdout += text;
-      onStream?.(text);
+      if (options?.previewMode === "json") {
+        stdoutBuffer += text;
+        const lines = stdoutBuffer.split(/\r\n|\n|\r/);
+        stdoutBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const preview = extractPreviewFromJsonLine(line);
+          if (preview != null) {
+            options.onPreview?.(preview);
+          }
+        }
+      } else {
+        options?.onPreview?.(extractLivePreview(stdout));
+      }
     });
     child.stderr.on("data", (chunk) => {
       const text = String(chunk);
       stderr += text;
-      onStream?.(text);
     });
     signal?.addEventListener("abort", () => {
       child.kill("SIGTERM");
@@ -199,8 +210,49 @@ function runCommand(
 }
 
 function extractSessionId(text: string): string | null {
+  const opencodeMatch = text.match(/\bses_[A-Za-z0-9]+\b/);
+  if (opencodeMatch?.[0] != null) return opencodeMatch[0];
   const match = text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i);
   return match?.[0] ?? null;
+}
+
+function extractPreviewFromJsonLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (trimmed.length === 0 || trimmed[0] !== "{") return null;
+  try {
+    const parsed = JSON.parse(trimmed) as { part?: { text?: string }; type?: string };
+    if (parsed.type !== "text") return null;
+    const text = parsed.part?.text?.trim() ?? "";
+    if (text.length === 0) return null;
+    return extractLivePreview(text);
+  } catch {
+    return null;
+  }
+}
+
+function extractLivePreview(buffer: string): string {
+  const withoutAnsi = stripTerminalControlSequences(buffer);
+  const lines = withoutAnsi.split(/\r\n|\n|\r/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const candidate = lines[index].trim();
+    if (candidate.length === 0) continue;
+    return candidate.length > 160 ? `${candidate.slice(0, 157)}...` : candidate;
+  }
+  return "";
+}
+
+function stripTerminalControlSequences(value: string): string {
+  const esc = String.fromCharCode(27);
+  return value
+    .replace(new RegExp(`${esc}\\[[0-?]*[ -/]*[@-~]`, "g"), "")
+    .replace(new RegExp(`${esc}[PX^_][^${esc}]*${esc}\\\\`, "g"), "")
+    .replace(new RegExp(`${esc}[@-_]`, "g"), "")
+    .split("")
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code === 9 || code === 10 || code === 13 || code >= 32;
+    })
+    .join("");
 }
 
 function shellQuote(value: string): string {

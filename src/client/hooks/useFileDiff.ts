@@ -5,7 +5,6 @@ import { fetchJson } from "../lib/api.js";
 export interface UseFileDiffResult {
   fileDiffs: Record<string, FileDiffMetadata>;
   requestPath: (path: string) => void;
-  refreshPath: (path: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -62,20 +61,6 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
     [dispatchNext],
   );
 
-  const refreshPath = useCallback(async (path: string) => {
-    if (path == null || path.length === 0) return;
-    const params = new URLSearchParams({ path });
-    try {
-      const fileDiff = await fetchJson<FileDiffMetadata>(`/api/file-diff?${params.toString()}`);
-      loadedRef.current.add(path);
-      setFileDiffs((current) => ({ ...current, [path]: fileDiff }));
-    } catch (requestError) {
-      onErrorRef.current(
-        requestError instanceof Error ? requestError.message : String(requestError),
-      );
-    }
-  }, []);
-
   const reset = useCallback(() => {
     inflightRef.current.clear();
     loadedRef.current.clear();
@@ -84,5 +69,5 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
     setFileDiffs({});
   }, []);
 
-  return { fileDiffs, requestPath, refreshPath, reset };
+  return { fileDiffs, requestPath, reset };
 }

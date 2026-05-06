@@ -10,8 +10,6 @@ import { join } from "node:path";
 export type AgentType = "none" | AgentProviderId;
 export type QueueStatus = "queued" | "in_progress" | "done" | "error" | "needs_input";
 
-const ESC = String.fromCharCode(27);
-
 export interface AgentQueueItem {
   id: string;
   comment: CommentExportRecord;
@@ -20,7 +18,7 @@ export interface AgentQueueItem {
   status: QueueStatus;
   response: string | null;
   error: string | null;
-  livePreview?: string | null;
+  livePreview: string | null;
 }
 
 export interface AgentQueueEvent {
@@ -131,6 +129,7 @@ export function createAgentQueue(options: { workingDirectory: string }) {
         status: "queued",
         response: null,
         error: null,
+        livePreview: null,
       };
       items.set(comment.id, next);
       order.push(comment.id);
@@ -300,28 +299,25 @@ export function createAgentQueue(options: { workingDirectory: string }) {
       const provider = getAgentProviderAdapter(agentType);
       const controller = new AbortController();
       activeRun = { ids: batchIds, cancel: () => controller.abort() };
-      let streamBuffer = "";
       let lastPreview = "";
       const result = await provider.runBatch(
         batchItems.map((item) => item.comment),
         {
-        callbackBaseUrl,
-        executionMode,
-        onStream: (chunk) => {
-          streamBuffer = `${streamBuffer}${chunk}`.slice(-4000);
-          const preview = extractLivePreview(streamBuffer);
-          if (preview.length === 0 || preview === lastPreview) return;
-          lastPreview = preview;
-          for (const id of batchIds) {
-            if (items.get(id)?.status === "in_progress") {
-              previewById.set(id, preview);
+          callbackBaseUrl,
+          executionMode,
+          onPreview: (preview) => {
+            if (preview.length === 0 || preview === lastPreview) return;
+            lastPreview = preview;
+            for (const id of batchIds) {
+              if (items.get(id)?.status === "in_progress") {
+                previewById.set(id, preview);
+              }
             }
-          }
-          emitSnapshot();
+            emitSnapshot();
+          },
+          repoRoot: options.workingDirectory,
+          signal: controller.signal,
         },
-        repoRoot: options.workingDirectory,
-        signal: controller.signal,
-      },
       );
       if (executionMode === "shared_session" && result.sessionId != null) {
         sharedSessionId = result.sessionId;
@@ -428,17 +424,6 @@ export function createAgentQueue(options: { workingDirectory: string }) {
       return item;
     },
   };
-}
-
-function extractLivePreview(buffer: string): string {
-  const withoutAnsi = buffer.replaceAll(ESC, "");
-  const lines = withoutAnsi.split(/\r\n|\n|\r/);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const candidate = lines[index].trim();
-    if (candidate.length === 0) continue;
-    return candidate.length > 160 ? `${candidate.slice(0, 157)}...` : candidate;
-  }
-  return "";
 }
 
 function loadState(path: string):
