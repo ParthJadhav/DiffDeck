@@ -69,30 +69,15 @@ const providerAdapters: Record<AgentProviderId, AgentProviderAdapter> = {
       return parseAgentOutput(output);
     },
   },
+  // TODO: implement Codex provider
   codex: {
     id: "codex",
     label: "Codex",
-    getResumeCommand(context) {
-      if (context.executionMode !== "shared_session") return null;
-      if (context.sessionId != null) {
-        return `codex resume ${context.sessionId}`;
-      }
-      return "codex resume --last";
+    getResumeCommand(_context) {
+      return null;
     },
-    async runBatch(comments, context) {
-      const prompt = buildBatchPrompt(comments, context.callbackBaseUrl);
-      const args = ["exec", prompt];
-      if (context.executionMode === "shared_session") {
-        args.splice(1, 0, "--continue");
-      }
-      const output = await runCommand(
-        "codex",
-        args,
-        context.repoRoot,
-        context.signal,
-        { onPreview: context.onPreview, previewMode: "raw" },
-      );
-      return parseAgentOutput(output);
+    async runBatch(_comments, _context) {
+      throw new Error("Codex provider is not yet implemented.");
     },
   },
 };
