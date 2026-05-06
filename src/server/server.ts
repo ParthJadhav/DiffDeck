@@ -41,7 +41,7 @@ export async function startServer(
   const indexHtml = getIndexHtml(clientDir);
   const app = express();
   app.use(express.json());
-  const agentQueue = createAgentQueue({ workingDirectory: session.currentDirectory });
+  const agentQueue = createAgentQueue({ repoRoot: session.repoRoot });
 
   let currentSession = session;
 

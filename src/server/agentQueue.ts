@@ -40,9 +40,9 @@ export interface AgentQueueSnapshot {
   items: AgentQueueItem[];
 }
 
-export function createAgentQueue(options: { workingDirectory: string }) {
+export function createAgentQueue(options: { repoRoot: string }) {
   const FILE_BATCH_DEBOUNCE_MS = 1200;
-  const statePath = join(options.workingDirectory, ".diffdeck-agent-queue-state.json");
+  const statePath = join(options.repoRoot, ".diffdeck-agent-queue-state.json");
   const loadedState = loadState(statePath);
   const items = new Map<string, AgentQueueItem>();
   const previewById = new Map<string, string>();
@@ -193,7 +193,7 @@ export function createAgentQueue(options: { workingDirectory: string }) {
         ? null
         : getAgentProviderAdapter(agentType).getResumeCommand({
             executionMode,
-            repoRoot: options.workingDirectory,
+            repoRoot: options.repoRoot,
             sessionId: sharedSessionId,
           }),
     sharedSessionId,
@@ -300,7 +300,7 @@ export function createAgentQueue(options: { workingDirectory: string }) {
             }
             emitSnapshot();
           },
-          repoRoot: options.workingDirectory,
+          repoRoot: options.repoRoot,
           signal: controller.signal,
         },
       );
