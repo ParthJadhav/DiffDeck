@@ -40,7 +40,7 @@ export interface DiffWorkspaceProps {
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
   comments: CommentExportRecord[];
-  optimisticQueueingIds?: ReadonlySet<string>;
+  optimisticQueueingIds: ReadonlySet<string>;
   queueItemsByCommentId: ReadonlyMap<string, AgentQueueItem>;
   overflow: OverflowMode;
   scrollSignal: number;
@@ -195,7 +195,7 @@ function MultiFileScroller(props: {
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
   comments: CommentExportRecord[];
-  optimisticQueueingIds?: ReadonlySet<string>;
+  optimisticQueueingIds: ReadonlySet<string>;
   queueItemsByCommentId: ReadonlyMap<string, AgentQueueItem>;
   scrollSignal: number;
   selectedPath: string | null;
@@ -648,7 +648,7 @@ const FileDiffSection = memo(function FileDiffSection({
   onCommentSaved: (comment: CommentExportRecord) => void;
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
-  optimisticQueueingIds?: ReadonlySet<string>;
+  optimisticQueueingIds: ReadonlySet<string>;
   queueItemsByCommentId: ReadonlyMap<string, AgentQueueItem>;
   selectedLines: SelectedLineRange | null;
   viewed: boolean;

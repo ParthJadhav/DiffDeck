@@ -78,18 +78,6 @@ export function createAgentQueue(options: { workingDirectory: string }) {
     if (events.length > 100) events.length = 100;
   };
 
-  const pushUserVisibleEvent = (commentId: string, message: string) => {
-    // Keep notification feed high-signal: avoid noisy lifecycle chatter.
-    if (
-      message === "Comment added to queue." ||
-      message === "Comment updated and re-queued." ||
-      message === "Agent started working."
-    ) {
-      return;
-    }
-    pushEvent(commentId, message);
-  };
-
   const emitSnapshot = () => {
     const snapshot = getSnapshot();
     for (const listener of listeners) {
@@ -134,7 +122,6 @@ export function createAgentQueue(options: { workingDirectory: string }) {
       items.set(comment.id, next);
       order.push(comment.id);
       fileReadyAt.set(comment.filePath, Date.now() + FILE_BATCH_DEBOUNCE_MS);
-      pushUserVisibleEvent(comment.id, "Comment added to queue.");
       persistState();
       return next;
     }
@@ -149,7 +136,6 @@ export function createAgentQueue(options: { workingDirectory: string }) {
     };
     items.set(comment.id, next);
     fileReadyAt.set(comment.filePath, Date.now() + FILE_BATCH_DEBOUNCE_MS);
-    pushUserVisibleEvent(comment.id, "Comment updated and re-queued.");
     persistState();
     return next;
   };
@@ -228,7 +214,7 @@ export function createAgentQueue(options: { workingDirectory: string }) {
       updatedAt: Date.now(),
     });
     previewById.delete(id);
-    pushUserVisibleEvent(id, `Agent completed: ${response ?? "Done."}`);
+    pushEvent(id, `Agent completed: ${response ?? "Done."}`);
     persistState();
   };
 
@@ -242,7 +228,7 @@ export function createAgentQueue(options: { workingDirectory: string }) {
       updatedAt: Date.now(),
     });
     previewById.delete(id);
-    pushUserVisibleEvent(id, `Agent error: ${error}`);
+    pushEvent(id, `Agent error: ${error}`);
     persistState();
   };
 
@@ -257,7 +243,7 @@ export function createAgentQueue(options: { workingDirectory: string }) {
       updatedAt: Date.now(),
     });
     previewById.delete(id);
-    pushUserVisibleEvent(id, `Agent needs clarification: ${response ?? "Question received."}`);
+    pushEvent(id, `Agent needs clarification: ${response ?? "Question received."}`);
     persistState();
   };
 
@@ -292,7 +278,6 @@ export function createAgentQueue(options: { workingDirectory: string }) {
     processing = true;
     for (const item of batchItems) {
       items.set(item.id, { ...item, status: "in_progress", updatedAt: Date.now(), error: null });
-      pushUserVisibleEvent(item.id, "Agent started working.");
     }
     persistState();
     try {

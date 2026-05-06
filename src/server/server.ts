@@ -55,10 +55,7 @@ export async function startServer(
   });
 
   app.post("/api/session/refresh", (_request, response) => {
-    currentSession = {
-      ...session,
-      ...refreshDiffSession(currentSession),
-    };
+    currentSession = refreshDiffSession(currentSession);
     response.json({
       repoRoot: currentSession.repoRoot,
       currentDirectory: currentSession.currentDirectory,
