@@ -6,6 +6,7 @@ export interface UseSessionResult {
   session: SessionPayload | null;
   loading: boolean;
   error: string | null;
+  refreshSession: () => Promise<void>;
   setError: (message: string | null) => void;
 }
 
@@ -14,23 +15,22 @@ export function useSession(): UseSessionResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const refreshSession = async () => {
+    const nextSession = await fetchJson<SessionPayload>("/api/session");
+    setSession(nextSession);
+  };
+
   useEffect(() => {
     let cancelled = false;
 
     async function loadSession() {
       try {
         const nextSession = await fetchJson<SessionPayload>("/api/session");
-        if (!cancelled) {
-          setSession(nextSession);
-        }
+        if (!cancelled) setSession(nextSession);
       } catch (requestError) {
-        if (!cancelled) {
-          setError(requestError instanceof Error ? requestError.message : String(requestError));
-        }
+        if (!cancelled) setError(requestError instanceof Error ? requestError.message : String(requestError));
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     }
 
@@ -41,5 +41,5 @@ export function useSession(): UseSessionResult {
     };
   }, []);
 
-  return { session, loading, error, setError };
+  return { session, loading, error, refreshSession, setError };
 }

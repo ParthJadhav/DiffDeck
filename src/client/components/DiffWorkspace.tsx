@@ -21,6 +21,7 @@ import {
 import { CustomFileHeader } from "./diff/CustomFileHeader.js";
 import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
+import type { AgentQueueItem } from "../hooks/useAgentQueue.js";
 
 export interface DiffWorkspaceProps {
   clearCommentsSignal: number;
@@ -33,10 +34,14 @@ export interface DiffWorkspaceProps {
   hunkSeparators: HunkSeparatorMode;
   onCollapsedFileChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
+  onCommentAgentCancel: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
+  comments: CommentExportRecord[];
+  optimisticQueueingIds?: ReadonlySet<string>;
+  queueItemsByCommentId: ReadonlyMap<string, AgentQueueItem>;
   overflow: OverflowMode;
   scrollSignal: number;
   selectedFile: DiffFileSummary | null;
@@ -58,10 +63,14 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     hunkSeparators,
     onCollapsedFileChange,
     onCommentDeleted,
+    onCommentAgentCancel,
     onCommentSaved,
     onRequestFileDiff,
     onViewedFileChange,
     onVisiblePathChange,
+    comments,
+    optimisticQueueingIds,
+    queueItemsByCommentId,
     overflow,
     scrollSignal,
     selectedFile,
@@ -139,10 +148,14 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
           files={files}
           onCollapsedFileChange={onCollapsedFileChange}
           onCommentDeleted={onCommentDeleted}
+          onCommentAgentCancel={onCommentAgentCancel}
           onCommentSaved={onCommentSaved}
           onRequestFileDiff={onRequestFileDiff}
           onViewedFileChange={onViewedFileChange}
           onVisiblePathChange={onVisiblePathChange}
+          comments={comments}
+          optimisticQueueingIds={optimisticQueueingIds}
+          queueItemsByCommentId={queueItemsByCommentId}
           scrollSignal={scrollSignal}
           selectedPath={selectedPath}
           viewedFilePaths={viewedFilePaths}
@@ -176,10 +189,14 @@ function MultiFileScroller(props: {
   files: DiffFileSummary[];
   onCollapsedFileChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
+  onCommentAgentCancel: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
+  comments: CommentExportRecord[];
+  optimisticQueueingIds?: ReadonlySet<string>;
+  queueItemsByCommentId: ReadonlyMap<string, AgentQueueItem>;
   scrollSignal: number;
   selectedPath: string | null;
   viewedFilePaths: ReadonlySet<string>;
@@ -192,10 +209,14 @@ function MultiFileScroller(props: {
     files,
     onCollapsedFileChange,
     onCommentDeleted,
+    onCommentAgentCancel,
     onCommentSaved,
     onRequestFileDiff,
     onViewedFileChange,
     onVisiblePathChange,
+    comments,
+    optimisticQueueingIds,
+    queueItemsByCommentId,
     scrollSignal,
     selectedPath,
     viewedFilePaths,
@@ -260,6 +281,11 @@ function MultiFileScroller(props: {
     setCommentAnnotations((current) => pruneByKey(current, filesByPath));
     setSelectedLines((current) => pruneByKey(current, filesByPath));
   }, [filesByPath]);
+
+  useEffect(() => {
+    const savedByFile = groupCommentsByFile(comments, filesByPath);
+    setCommentAnnotations((current) => mergeSavedComments(current, savedByFile));
+  }, [comments, filesByPath]);
 
   const lastClearSignalRef = useRef(clearCommentsSignal);
   useEffect(() => {
@@ -411,7 +437,10 @@ function MultiFileScroller(props: {
           onAnnotationsChange={handleAnnotationsChange}
           onCollapsedChange={onCollapsedFileChange}
           onCommentDeleted={onCommentDeleted}
+          onCommentAgentCancel={onCommentAgentCancel}
           onCommentSaved={onCommentSaved}
+          optimisticQueueingIds={optimisticQueueingIds}
+          queueItemsByCommentId={queueItemsByCommentId}
           onSelectedLinesChange={handleSelectedLinesChange}
           onViewedChange={onViewedFileChange}
           selectedLines={selectedLines[file.path] ?? null}
@@ -428,7 +457,10 @@ function MultiFileScroller(props: {
       handleSelectedLinesChange,
       onCollapsedFileChange,
       onCommentDeleted,
+      onCommentAgentCancel,
       onCommentSaved,
+      optimisticQueueingIds,
+      queueItemsByCommentId,
       onViewedFileChange,
       selectedLines,
       viewedFilePaths,
@@ -475,6 +507,106 @@ function pruneByKey<T>(
   return changed ? next : record;
 }
 
+// Group saved comments by file path, skipping files no longer in the diff.
+function groupCommentsByFile(
+  comments: readonly CommentExportRecord[],
+  filesByPath: ReadonlyMap<string, unknown>,
+): Map<string, Map<string, CommentExportRecord>> {
+  const result = new Map<string, Map<string, CommentExportRecord>>();
+  for (const comment of comments) {
+    if (!filesByPath.has(comment.filePath)) continue;
+    let byId = result.get(comment.filePath);
+    if (byId == null) {
+      byId = new Map();
+      result.set(comment.filePath, byId);
+    }
+    byId.set(comment.id, comment);
+  }
+  return result;
+}
+
+// Merge saved comments into a file's annotations. Consumed entries are removed
+// from `savedById` so the caller can append leftovers as new annotations.
+function reconcileFileAnnotations(
+  existing: readonly CommentAnnotation[],
+  savedById: Map<string, CommentExportRecord>,
+): { annotations: CommentAnnotation[]; changed: boolean } {
+  const annotations: CommentAnnotation[] = [];
+  let changed = false;
+
+  for (const annotation of existing) {
+    if (annotation.metadata.kind !== "comment") {
+      annotations.push(annotation);
+      continue;
+    }
+    const saved = savedById.get(annotation.metadata.id);
+    if (saved == null) {
+      changed = true;
+      continue;
+    }
+    const same =
+      annotation.metadata.body === saved.body &&
+      annotation.side === saved.side &&
+      annotation.lineNumber === saved.lineNumber;
+    if (same) {
+      annotations.push(annotation);
+    } else {
+      changed = true;
+      annotations.push({
+        ...annotation,
+        side: saved.side,
+        lineNumber: saved.lineNumber,
+        metadata: {
+          ...annotation.metadata,
+          body: saved.body,
+          kind: "comment",
+          previousBody: undefined,
+        },
+      });
+    }
+    savedById.delete(annotation.metadata.id);
+  }
+
+  for (const saved of savedById.values()) {
+    changed = true;
+    annotations.push({
+      side: saved.side,
+      lineNumber: saved.lineNumber,
+      metadata: {
+        body: saved.body,
+        id: saved.id,
+        kind: "comment",
+      },
+    });
+  }
+
+  return { annotations, changed };
+}
+
+// Merge the saved-comments snapshot into the current per-file annotation map,
+// returning the previous reference when nothing actually changed so React can
+// bail out of the state update.
+function mergeSavedComments(
+  current: CommentAnnotationsByFile,
+  savedByFile: Map<string, Map<string, CommentExportRecord>>,
+): CommentAnnotationsByFile {
+  let changed = false;
+  const next: CommentAnnotationsByFile = {};
+  const allPaths = new Set<string>([...Object.keys(current), ...savedByFile.keys()]);
+
+  for (const path of allPaths) {
+    const existing = current[path] ?? EMPTY_ANNOTATIONS;
+    const savedById = savedByFile.get(path) ?? new Map<string, CommentExportRecord>();
+    const { annotations, changed: fileChanged } = reconcileFileAnnotations(existing, savedById);
+    if (fileChanged) changed = true;
+    if (annotations.length > 0) {
+      next[path] = annotations;
+    }
+  }
+
+  return changed ? next : current;
+}
+
 // Files at or above this changed-line count freeze the main thread for several
 // seconds inside @pierre/diffs (its virtualizer doesn't actually window the
 // DOM render for these — every line gets a node, e.g. ~84k DOM nodes for a
@@ -492,9 +624,12 @@ const FileDiffSection = memo(function FileDiffSection({
   onAnnotationsChange,
   onCollapsedChange,
   onCommentDeleted,
+  onCommentAgentCancel,
   onCommentSaved,
   onSelectedLinesChange,
   onViewedChange,
+  optimisticQueueingIds,
+  queueItemsByCommentId,
   selectedLines,
   viewed,
 }: {
@@ -509,9 +644,12 @@ const FileDiffSection = memo(function FileDiffSection({
   ) => void;
   onCollapsedChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
+  onCommentAgentCancel: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
+  optimisticQueueingIds?: ReadonlySet<string>;
+  queueItemsByCommentId: ReadonlyMap<string, AgentQueueItem>;
   selectedLines: SelectedLineRange | null;
   viewed: boolean;
 }) {
@@ -735,22 +873,37 @@ const FileDiffSection = memo(function FileDiffSection({
   );
 
   const renderCommentAnnotation = useCallback(
-    (annotation: unknown) => (
-      <CommentAnnotationView
-        annotation={annotation as CommentAnnotation}
-        onBodyChange={handleCommentBodyChange}
-        onCancel={handleCommentCancel}
-        onDelete={handleCommentDelete}
-        onEdit={handleCommentEdit}
-        onSubmit={handleCommentSubmit}
-      />
-    ),
+    (annotation: unknown) => {
+      const commentAnnotation = annotation as CommentAnnotation;
+      const queueItem = queueItemsByCommentId.get(commentAnnotation.metadata.id);
+      const isOptimisticallyQueueing =
+        optimisticQueueingIds?.has(commentAnnotation.metadata.id) === true;
+      const agentStatus = queueItem?.status ?? (isOptimisticallyQueueing ? "queueing" : null);
+      return (
+        <CommentAnnotationView
+          annotation={commentAnnotation}
+          agentError={queueItem?.error}
+          agentLivePreview={queueItem?.livePreview}
+          agentResponse={queueItem?.response}
+          agentStatus={agentStatus}
+          onAgentCancel={onCommentAgentCancel}
+          onBodyChange={handleCommentBodyChange}
+          onCancel={handleCommentCancel}
+          onDelete={handleCommentDelete}
+          onEdit={handleCommentEdit}
+          onSubmit={handleCommentSubmit}
+        />
+      );
+    },
     [
       handleCommentBodyChange,
       handleCommentCancel,
       handleCommentDelete,
       handleCommentEdit,
       handleCommentSubmit,
+      onCommentAgentCancel,
+      optimisticQueueingIds,
+      queueItemsByCommentId,
     ],
   );
 

@@ -5,6 +5,8 @@ import { fetchJson } from "../lib/api.js";
 export interface UseFileDiffResult {
   fileDiffs: Record<string, FileDiffMetadata>;
   requestPath: (path: string) => void;
+  refreshPath: (path: string) => Promise<void>;
+  reset: () => void;
 }
 
 // On very large diffs the IntersectionObserver in DiffWorkspace can enqueue
@@ -60,5 +62,27 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
     [dispatchNext],
   );
 
-  return { fileDiffs, requestPath };
+  const refreshPath = useCallback(async (path: string) => {
+    if (path == null || path.length === 0) return;
+    const params = new URLSearchParams({ path });
+    try {
+      const fileDiff = await fetchJson<FileDiffMetadata>(`/api/file-diff?${params.toString()}`);
+      loadedRef.current.add(path);
+      setFileDiffs((current) => ({ ...current, [path]: fileDiff }));
+    } catch (requestError) {
+      onErrorRef.current(
+        requestError instanceof Error ? requestError.message : String(requestError),
+      );
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    inflightRef.current.clear();
+    loadedRef.current.clear();
+    queueRef.current = [];
+    queuedSetRef.current.clear();
+    setFileDiffs({});
+  }, []);
+
+  return { fileDiffs, requestPath, refreshPath, reset };
 }
