@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { memo, useEffect, useRef, type ReactNode } from "react";
 import type { DiffLineAnnotation } from "@pierre/diffs";
 import type { AnnotationSide } from "@pierre/diffs";
 import { Button } from "../ui/button.js";
@@ -26,7 +26,7 @@ export function patchAnnotationMeta(
   );
 }
 
-export function CommentAnnotationView({
+export const CommentAnnotationView = memo(function CommentAnnotationView({
   annotation,
   onBodyChange,
   onCancel,
@@ -118,7 +118,7 @@ export function CommentAnnotationView({
       </div>
     </CommentCard>
   );
-}
+});
 
 function CommentCard({ children, variant }: { children: ReactNode; variant: "saved" | "form" }) {
   return (

@@ -581,6 +581,9 @@ const FileDiffSection = memo(function FileDiffSection({
 
   const filePath = file.path;
 
+  const commentAnnotationsRef = useRef(commentAnnotations);
+  commentAnnotationsRef.current = commentAnnotations;
+
   const addCommentAtLine = useCallback(
     (side: AnnotationSide, lineNumber: number) => {
       onAnnotationsChange(filePath, (current) => {
@@ -674,7 +677,9 @@ const FileDiffSection = memo(function FileDiffSection({
 
   const handleCommentSubmit = useCallback(
     (id: string, body: string) => {
-      const submittedAnnotation = commentAnnotations.find((item) => item.metadata.id === id);
+      const submittedAnnotation = commentAnnotationsRef.current.find(
+        (item) => item.metadata.id === id,
+      );
       if (submittedAnnotation == null) return;
 
       const normalizedBody = body.trim().length > 0 ? body.trim() : "Needs review before merging.";
@@ -702,7 +707,6 @@ const FileDiffSection = memo(function FileDiffSection({
       diffOptions?.onLineSelected?.(null);
     },
     [
-      commentAnnotations,
       diffOptions,
       file.hasMergeConflicts,
       filePath,
