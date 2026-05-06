@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import stripAnsi from "strip-ansi";
 
 export interface CommentContextLine {
   content: string;
@@ -214,8 +215,7 @@ function extractPreviewFromJsonLine(line: string): string | null {
 }
 
 function extractLivePreview(buffer: string): string {
-  const withoutAnsi = stripTerminalControlSequences(buffer);
-  const lines = withoutAnsi.split(/\r\n|\n|\r/);
+  const lines = stripAnsi(buffer).split(/\r\n|\n|\r/);
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     const candidate = lines[index].trim();
     if (candidate.length === 0) continue;
@@ -224,19 +224,6 @@ function extractLivePreview(buffer: string): string {
   return "";
 }
 
-function stripTerminalControlSequences(value: string): string {
-  const esc = String.fromCharCode(27);
-  return value
-    .replace(new RegExp(`${esc}\\[[0-?]*[ -/]*[@-~]`, "g"), "")
-    .replace(new RegExp(`${esc}[PX^_][^${esc}]*${esc}\\\\`, "g"), "")
-    .replace(new RegExp(`${esc}[@-_]`, "g"), "")
-    .split("")
-    .filter((character) => {
-      const code = character.charCodeAt(0);
-      return code === 9 || code === 10 || code === 13 || code >= 32;
-    })
-    .join("");
-}
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
