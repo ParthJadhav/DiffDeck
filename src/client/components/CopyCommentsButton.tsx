@@ -12,9 +12,11 @@ export function CopyCommentsButton({
   onClearAll: () => void;
 }) {
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
-  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [clearConfirmation, setClearConfirmation] = useState({ active: false, commentCount: 0 });
   const commentCount = comments.length;
   const commentLabel = commentCount === 1 ? "comment" : "comments";
+  const isConfirmingClear =
+    clearConfirmation.active && clearConfirmation.commentCount === commentCount;
   const copyText = useMemo(
     () => (commentCount === 0 ? "" : formatCommentExport(comments)),
     [comments, commentCount],
@@ -27,14 +29,13 @@ export function CopyCommentsButton({
   }, [copyStatus]);
 
   useEffect(() => {
-    if (!confirmingClear) return;
-    const timer = window.setTimeout(() => setConfirmingClear(false), 3000);
+    if (!isConfirmingClear) return;
+    const timer = window.setTimeout(
+      () => setClearConfirmation({ active: false, commentCount: 0 }),
+      3000,
+    );
     return () => window.clearTimeout(timer);
-  }, [confirmingClear]);
-
-  useEffect(() => {
-    if (commentCount === 0 && confirmingClear) setConfirmingClear(false);
-  }, [commentCount, confirmingClear]);
+  }, [isConfirmingClear]);
 
   if (commentCount === 0) return null;
 
@@ -51,18 +52,17 @@ export function CopyCommentsButton({
 
   const handleClearClick = () => {
     if (commentCount === 0) return;
-    if (!confirmingClear) {
-      setConfirmingClear(true);
+    if (!isConfirmingClear) {
+      setClearConfirmation({ active: true, commentCount });
       return;
     }
     onClearAll();
-    setConfirmingClear(false);
+    setClearConfirmation({ active: false, commentCount: 0 });
   };
 
   return (
-    <div
-      className="app-comment-actions flex flex-col gap-1.5"
-      role="group"
+    <section
+      className="app-copy-comment-actions flex flex-col gap-1.5"
       aria-label="Comment actions"
     >
       <button
@@ -108,26 +108,26 @@ export function CopyCommentsButton({
       <button
         type="button"
         onClick={handleClearClick}
-        aria-label={`${confirmingClear ? "Confirm clear" : "Clear"} ${commentCount} ${commentLabel}`}
-        title={confirmingClear ? "Click again to confirm" : "Clear all comments"}
+        aria-label={`${isConfirmingClear ? "Confirm clear" : "Clear"} ${commentCount} ${commentLabel}`}
+        title={isConfirmingClear ? "Click again to confirm" : "Clear all comments"}
         className={cn(
           "app-comment-action group flex h-10 w-full items-center gap-2 rounded-lg px-3 text-[12.5px] font-medium",
-          confirmingClear && "app-comment-action--danger",
+          isConfirmingClear && "app-comment-action--danger",
         )}
       >
         <TrashIcon />
         <span className="min-w-0 flex-1 truncate text-left">
-          {confirmingClear ? "Click to confirm" : "Clear all"}
+          {isConfirmingClear ? "Click to confirm" : "Clear all"}
         </span>
       </button>
-      <span className="sr-only" role="status" aria-live="polite">
+      <output className="sr-only" aria-live="polite">
         {copyStatus === "copied"
           ? "Copied comments"
           : copyStatus === "failed"
             ? "Unable to copy comments"
             : ""}
-      </span>
-    </div>
+      </output>
+    </section>
   );
 }
 
@@ -159,7 +159,7 @@ function CopyIcon() {
     <svg
       aria-hidden="true"
       viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0"
+      className="size-3.5 shrink-0"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -177,7 +177,7 @@ function TrashIcon() {
     <svg
       aria-hidden="true"
       viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 shrink-0"
+      className="size-3.5 shrink-0"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -197,7 +197,7 @@ function CheckIcon() {
     <svg
       aria-hidden="true"
       viewBox="0 0 12 12"
-      className="h-2.5 w-2.5"
+      className="size-2.5"
       fill="none"
       stroke="currentColor"
       strokeWidth="2.2"
@@ -214,7 +214,7 @@ function ErrorIcon() {
     <svg
       aria-hidden="true"
       viewBox="0 0 12 12"
-      className="h-2.5 w-2.5"
+      className="size-2.5"
       fill="none"
       stroke="currentColor"
       strokeWidth="2.2"

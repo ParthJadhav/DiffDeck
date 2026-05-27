@@ -42,7 +42,7 @@ export function CustomFileHeader({
           aria-label={collapsed ? `Expand ${fileDiff.name}` : `Collapse ${fileDiff.name}`}
           aria-pressed={collapsed}
           onClick={() => onCollapsedChange(!collapsed)}
-          className="app-icon-btn h-7 w-7"
+          className="app-icon-btn size-7"
         >
           <ChevronIcon expanded={!collapsed} />
         </button>
@@ -73,10 +73,12 @@ export function CustomFileHeader({
 
 type PathToken =
   | {
+      key: string;
       kind: "ellipsis";
       label: string;
     }
   | {
+      key: string;
       kind: "segment";
       label: string;
       role: "leaf" | "parent" | "root";
@@ -92,13 +94,14 @@ function buildVariants(segments: string[]): PathToken[][] {
   const n = segments.length;
   if (n === 0) return [[]];
   if (n === 1) {
-    return [[{ kind: "segment", label: segments[0]!, role: "leaf" }]];
+    return [[{ key: `leaf:${segments[0]}`, kind: "segment", label: segments[0]!, role: "leaf" }]];
   }
 
   const variants: PathToken[][] = [];
 
   variants.push(
     segments.map((segment, index) => ({
+      key: `full:${segments.slice(0, index + 1).join("/")}`,
       kind: "segment",
       label: segment,
       role: segmentRole(index, n),
@@ -107,11 +110,12 @@ function buildVariants(segments: string[]): PathToken[][] {
 
   for (let kept = n - 2; kept >= 1; kept--) {
     const tokens: PathToken[] = [
-      { kind: "segment", label: segments[0]!, role: "root" },
-      { kind: "ellipsis", label: "..." },
+      { key: `root:${segments[0]}`, kind: "segment", label: segments[0]!, role: "root" },
+      { key: `ellipsis:${kept}`, kind: "ellipsis", label: "..." },
     ];
     for (let i = n - kept; i < n; i++) {
       tokens.push({
+        key: `tail:${kept}:${segments.slice(0, i + 1).join("/")}`,
         kind: "segment",
         label: segments[i]!,
         role: i === n - 1 ? "leaf" : "parent",
@@ -121,10 +125,17 @@ function buildVariants(segments: string[]): PathToken[][] {
   }
 
   variants.push([
-    { kind: "ellipsis", label: "..." },
-    { kind: "segment", label: segments[n - 1]!, role: "leaf" },
+    { key: "ellipsis:leaf", kind: "ellipsis", label: "..." },
+    { key: `leaf:${segments.join("/")}`, kind: "segment", label: segments[n - 1]!, role: "leaf" },
   ]);
-  variants.push([{ kind: "segment", label: segments[n - 1]!, role: "leaf" }]);
+  variants.push([
+    {
+      key: `leaf-only:${segments.join("/")}`,
+      kind: "segment",
+      label: segments[n - 1]!,
+      role: "leaf",
+    },
+  ]);
 
   return variants;
 }
@@ -222,7 +233,7 @@ function PathLabel({ path }: { path: string }) {
             ? "app-path-ellipsis"
             : `app-path-segment app-path-segment-${token.role}`;
         return (
-          <span className={className} key={index}>
+          <span className={className} key={token.key}>
             {index > 0 ? <span className="app-path-separator">/</span> : null}
             <span className="app-path-token">{token.label}</span>
           </span>
@@ -242,10 +253,7 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cn(
-        "h-3.5 w-3.5 transition-transform duration-150 ease-out",
-        expanded && "rotate-90",
-      )}
+      className={cn("size-3.5 transition-transform duration-150 ease-out", expanded && "rotate-90")}
     >
       <path d="M6 4l4 4-4 4" />
     </svg>
@@ -256,9 +264,9 @@ function FileIcon() {
   return (
     <span
       aria-hidden="true"
-      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_oklch(var(--info-border)/0.75)]"
+      className="inline-flex size-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_oklch(var(--info-border)/0.75)]"
     >
-      <span className="h-1.5 w-1.5 rounded-[2px] bg-info" />
+      <span className="size-1.5 rounded-[2px] bg-info" />
     </span>
   );
 }
@@ -293,7 +301,7 @@ function ViewedButton({
 
 function ViewedIcon({ checked }: { checked: boolean }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5 shrink-0">
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
       <rect
         x="1.75"
         y="1.75"

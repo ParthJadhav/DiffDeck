@@ -87,7 +87,7 @@ export function Sidebar({
           aria-label={refreshing ? "Refreshing diff" : "Refresh diff"}
           title={refreshing ? "Refreshing diff" : "Refresh diff"}
         >
-          <RefreshIcon className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+          <RefreshIcon className={cn("size-3.5", refreshing && "animate-spin")} />
         </Button>
       </div>
 
@@ -97,7 +97,7 @@ export function Sidebar({
             <div className="space-y-1.5">
               <p className="text-sm font-medium text-foreground">Nothing to diff</p>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                The working tree is clean — or your{" "}
+                The working tree is clean, or your{" "}
                 <code className="font-mono" translate="no">
                   git diff
                 </code>{" "}

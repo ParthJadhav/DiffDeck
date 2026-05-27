@@ -1,4 +1,4 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, Ref } from "react";
 import { cn } from "../../lib/cn.js";
 
 type Variant = "default" | "ghost" | "outline" | "secondary" | "destructive";
@@ -23,18 +23,25 @@ const sizes: Record<Size, string> = {
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  ref?: Ref<HTMLButtonElement>;
   variant?: Variant;
   size?: Size;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "default", size = "default", type = "button", ...props }, ref) => (
+export function Button({
+  className,
+  ref,
+  size = "default",
+  type = "button",
+  variant = "default",
+  ...props
+}: ButtonProps) {
+  return (
     <button
       ref={ref}
       type={type}
       className={cn(base, variants[variant], sizes[size], className)}
       {...props}
     />
-  ),
-);
-Button.displayName = "Button";
+  );
+}

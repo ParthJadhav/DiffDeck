@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   FileDiff,
   UnresolvedFile,
@@ -12,12 +12,12 @@ import { fetchJson } from "../lib/api.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffFileSummary } from "../types.js";
+import { CommentAnnotationView } from "./diff/CommentAnnotation.js";
 import {
-  CommentAnnotationView,
   createCommentAnnotation,
   patchAnnotationMeta,
   type CommentAnnotation,
-} from "./diff/CommentAnnotation.js";
+} from "./diff/commentAnnotationModel.js";
 import { CustomFileHeader } from "./diff/CustomFileHeader.js";
 import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
@@ -134,7 +134,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     >
       <section className="min-h-0 min-w-0 flex-1">
         <MultiFileScroller
-          clearCommentsSignal={clearCommentsSignal}
+          key={`${sessionRevision}:${clearCommentsSignal}`}
           diffOptions={diffOptions}
           collapsedFilePaths={collapsedFilePaths}
           fileDiffs={fileDiffs}
@@ -172,7 +172,6 @@ type CommentAnnotationsByFile = Record<string, CommentAnnotation[]>;
 type SelectedLinesByFile = Record<string, SelectedLineRange | null>;
 
 function MultiFileScroller(props: {
-  clearCommentsSignal: number;
   collapsedFilePaths: ReadonlySet<string>;
   diffOptions: Parameters<typeof FileDiff>[0]["options"];
   fileDiffs: Record<string, FileDiffMetadata>;
@@ -189,7 +188,6 @@ function MultiFileScroller(props: {
   viewedFilePaths: ReadonlySet<string>;
 }) {
   const {
-    clearCommentsSignal,
     collapsedFilePaths,
     diffOptions,
     fileDiffs,
@@ -207,17 +205,10 @@ function MultiFileScroller(props: {
   } = props;
 
   const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  const [scrollerEl, setScrollerEl] = useState<HTMLElement | null>(null);
   const lastReportedPathRef = useRef<string | null>(null);
   const suppressObserverUntilRef = useRef(0);
   const pinnedPathRef = useRef<string | null>(null);
-  const onVisiblePathChangeRef = useRef(onVisiblePathChange);
-  onVisiblePathChangeRef.current = onVisiblePathChange;
-  const onRequestFileDiffRef = useRef(onRequestFileDiff);
-  onRequestFileDiffRef.current = onRequestFileDiff;
-  const filesRef = useRef(files);
-  filesRef.current = files;
-  const filesByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
+  const visibleObserverCleanupRef = useRef<(() => void) | null>(null);
   const fileIndexByPath = useMemo(
     () => new Map(files.map((file, index) => [file.path, index])),
     [files],
@@ -228,7 +219,6 @@ function MultiFileScroller(props: {
   // half-typed comment when it remounts.
   const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotationsByFile>({});
   const [selectedLines, setSelectedLines] = useState<SelectedLinesByFile>({});
-  const previousSessionRevisionRef = useRef(sessionRevision);
 
   const handleAnnotationsChange = useCallback(
     (path: string, updater: (current: CommentAnnotation[]) => CommentAnnotation[]) => {
@@ -259,112 +249,36 @@ function MultiFileScroller(props: {
     });
   }, []);
 
-  // When `files` changes (user re-ran `git diff` against a different
-  // revision) drop UI state for paths that no longer exist; otherwise
-  // stale annotations leak indefinitely.
-  useEffect(() => {
-    setCommentAnnotations((current) => pruneByKey(current, filesByPath));
-    setSelectedLines((current) => pruneByKey(current, filesByPath));
-  }, [filesByPath]);
+  const handleRangeChanged = useCallback(
+    (range: { startIndex: number; endIndex: number }) => {
+      for (let i = range.startIndex; i <= range.endIndex; i++) {
+        const file = files[i];
+        if (file == null) continue;
+        if (file.hasMergeConflicts === true || file.isBinary === true) continue;
+        onRequestFileDiff(file.path);
+      }
+    },
+    [files, onRequestFileDiff],
+  );
+
+  const handleScrollerRef = useCallback(
+    (ref: HTMLElement | Window | null) => {
+      visibleObserverCleanupRef.current?.();
+      visibleObserverCleanupRef.current = null;
+      if (!(ref instanceof HTMLElement)) return;
+      visibleObserverCleanupRef.current = installVisiblePathObserver(ref, {
+        lastReportedPathRef,
+        onVisiblePathChange,
+        pinnedPathRef,
+        suppressObserverUntilRef,
+      });
+    },
+    [onVisiblePathChange],
+  );
 
   useEffect(() => {
-    if (previousSessionRevisionRef.current === sessionRevision) return;
-    previousSessionRevisionRef.current = sessionRevision;
-    setCommentAnnotations({});
-    setSelectedLines({});
-    lastReportedPathRef.current = null;
-    pinnedPathRef.current = null;
-  }, [sessionRevision]);
-
-  const lastClearSignalRef = useRef(clearCommentsSignal);
-  useEffect(() => {
-    if (lastClearSignalRef.current === clearCommentsSignal) return;
-    lastClearSignalRef.current = clearCommentsSignal;
-    setCommentAnnotations({});
-  }, [clearCommentsSignal]);
-
-  const handleRangeChanged = useCallback((range: { startIndex: number; endIndex: number }) => {
-    const currentFiles = filesRef.current;
-    for (let i = range.startIndex; i <= range.endIndex; i++) {
-      const file = currentFiles[i];
-      if (file == null) continue;
-      if (file.hasMergeConflicts === true || file.isBinary === true) continue;
-      onRequestFileDiffRef.current(file.path);
-    }
+    return cleanupVisibleObserver(visibleObserverCleanupRef);
   }, []);
-
-  useEffect(() => {
-    const root = scrollerEl;
-    if (root == null) return;
-    const visibility = new Map<string, Element>();
-    const observed = new WeakSet<Element>();
-    const ABOVE_THRESHOLD = 24;
-    const intersectionObserver = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const path = (entry.target as HTMLElement).dataset.filePath;
-          if (path == null) continue;
-          if (entry.isIntersecting) {
-            visibility.set(path, entry.target);
-          } else {
-            visibility.delete(path);
-          }
-        }
-        if (performance.now() < suppressObserverUntilRef.current) {
-          return;
-        }
-        if (pinnedPathRef.current != null && visibility.has(pinnedPathRef.current)) {
-          if (lastReportedPathRef.current !== pinnedPathRef.current) {
-            lastReportedPathRef.current = pinnedPathRef.current;
-            onVisiblePathChangeRef.current(pinnedPathRef.current);
-          }
-          return;
-        }
-        pinnedPathRef.current = null;
-        const rootTop = root.getBoundingClientRect().top;
-        let above: { path: string; top: number } | null = null;
-        let below: { path: string; top: number } | null = null;
-        for (const [path, node] of visibility) {
-          const top = node.getBoundingClientRect().top - rootTop;
-          if (top <= ABOVE_THRESHOLD) {
-            if (above == null || top > above.top) above = { path, top };
-          } else {
-            if (below == null || top < below.top) below = { path, top };
-          }
-        }
-        const best = above ?? below;
-        if (best != null && best.path !== lastReportedPathRef.current) {
-          lastReportedPathRef.current = best.path;
-          onVisiblePathChangeRef.current(best.path);
-        }
-      },
-      { root, threshold: 0 },
-    );
-    const adopt = (target: Element) => {
-      const candidates = target.matches?.("[data-file-path]")
-        ? [target]
-        : Array.from(target.querySelectorAll<HTMLElement>("[data-file-path]"));
-      for (const node of candidates) {
-        if (!observed.has(node)) {
-          observed.add(node);
-          intersectionObserver.observe(node);
-        }
-      }
-    };
-    adopt(root);
-    const mutationObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node instanceof Element) adopt(node);
-        }
-      }
-    });
-    mutationObserver.observe(root, { childList: true, subtree: true });
-    return () => {
-      intersectionObserver.disconnect();
-      mutationObserver.disconnect();
-    };
-  }, [scrollerEl]);
 
   const handledScrollSignalRef = useRef<number | null>(null);
   useEffect(() => {
@@ -396,20 +310,6 @@ function MultiFileScroller(props: {
       release();
     };
   }, [fileIndexByPath, scrollSignal, selectedPath]);
-
-  // The selected file may sit outside the rendered range (e.g. user clicked
-  // deep in the sidebar before Virtuoso has scrolled there), so kick off the
-  // fetch regardless of mount state.
-  useEffect(() => {
-    const selectedFile = selectedPath == null ? null : filesByPath.get(selectedPath);
-    if (
-      selectedPath != null &&
-      selectedFile?.hasMergeConflicts !== true &&
-      selectedFile?.isBinary !== true
-    ) {
-      onRequestFileDiffRef.current(selectedPath);
-    }
-  }, [filesByPath, selectedPath]);
 
   const itemContent = useCallback(
     (_index: number, file: DiffFileSummary) => (
@@ -452,13 +352,6 @@ function MultiFileScroller(props: {
     ],
   );
 
-  // Virtuoso re-passes the same scroller element across renders; without
-  // memoizing this callback the scrollerEl state would null-then-set on each
-  // render and feedback-loop with the visible-path observer effect.
-  const handleScrollerRef = useCallback((ref: HTMLElement | Window | null) => {
-    setScrollerEl(ref instanceof HTMLElement ? ref : null);
-  }, []);
-
   return (
     <Virtuoso<DiffFileSummary>
       ref={virtuosoRef}
@@ -476,20 +369,93 @@ function MultiFileScroller(props: {
   );
 }
 
-function pruneByKey<T>(
-  record: Record<string, T>,
-  keep: ReadonlyMap<string, unknown>,
-): Record<string, T> {
-  let changed = false;
-  const next: Record<string, T> = {};
-  for (const path of Object.keys(record)) {
-    if (keep.has(path)) {
-      next[path] = record[path];
-    } else {
-      changed = true;
+function installVisiblePathObserver(
+  root: HTMLElement,
+  refs: {
+    lastReportedPathRef: { current: string | null };
+    onVisiblePathChange: (path: string) => void;
+    pinnedPathRef: { current: string | null };
+    suppressObserverUntilRef: { current: number };
+  },
+): () => void {
+  const visibility = new Map<string, Element>();
+  const observed = new WeakSet<Element>();
+  const ABOVE_THRESHOLD = 24;
+  const intersectionObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const path = (entry.target as HTMLElement).dataset.filePath;
+        if (path == null) continue;
+        if (entry.isIntersecting) {
+          visibility.set(path, entry.target);
+        } else {
+          visibility.delete(path);
+        }
+      }
+      if (performance.now() < refs.suppressObserverUntilRef.current) {
+        return;
+      }
+      if (refs.pinnedPathRef.current != null && visibility.has(refs.pinnedPathRef.current)) {
+        if (refs.lastReportedPathRef.current !== refs.pinnedPathRef.current) {
+          refs.lastReportedPathRef.current = refs.pinnedPathRef.current;
+          refs.onVisiblePathChange(refs.pinnedPathRef.current);
+        }
+        return;
+      }
+      refs.pinnedPathRef.current = null;
+      const rootTop = root.getBoundingClientRect().top;
+      let above: { path: string; top: number } | null = null;
+      let below: { path: string; top: number } | null = null;
+      for (const [path, node] of visibility) {
+        const top = node.getBoundingClientRect().top - rootTop;
+        if (top <= ABOVE_THRESHOLD) {
+          if (above == null || top > above.top) above = { path, top };
+        } else if (below == null || top < below.top) {
+          below = { path, top };
+        }
+      }
+      const best = above ?? below;
+      if (best != null && best.path !== refs.lastReportedPathRef.current) {
+        refs.lastReportedPathRef.current = best.path;
+        refs.onVisiblePathChange(best.path);
+      }
+    },
+    { root, threshold: 0 },
+  );
+  const adopt = (target: Element) => {
+    const candidates = target.matches?.("[data-file-path]")
+      ? [target]
+      : Array.from(target.querySelectorAll<HTMLElement>("[data-file-path]"));
+    for (const node of candidates) {
+      if (!observed.has(node)) {
+        observed.add(node);
+        intersectionObserver.observe(node);
+      }
     }
-  }
-  return changed ? next : record;
+  };
+  adopt(root);
+  const mutationObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node instanceof Element) adopt(node);
+      }
+    }
+  });
+  mutationObserver.observe(root, { childList: true, subtree: true });
+  return () => {
+    intersectionObserver.disconnect();
+    mutationObserver.disconnect();
+  };
+}
+
+function cleanupVisibleObserver(ref: { current: (() => void) | null }) {
+  const cleanup = ref.current;
+  return () => {
+    cleanup?.();
+    if (ref.current === cleanup) {
+      ref.current = null;
+    }
+  };
 }
 
 // Files at or above this changed-line count freeze the main thread for several
@@ -499,6 +465,18 @@ function pruneByKey<T>(
 // windowed renderer that only mounts the rows currently in view, trading
 // syntax highlighting / line-level features for a responsive UI.
 const HEAVY_DIFF_LINE_THRESHOLD = 2000;
+
+type UnresolvedFileState = {
+  error: string | null;
+  file: FileContents | null;
+  loading: boolean;
+};
+
+const idleUnresolvedFileState: UnresolvedFileState = {
+  error: null,
+  file: null,
+  loading: false,
+};
 
 const FileDiffSection = memo(function FileDiffSection({
   collapsed,
@@ -534,9 +512,10 @@ const FileDiffSection = memo(function FileDiffSection({
   sessionRevision: number;
   viewed: boolean;
 }) {
-  const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(null);
-  const [unresolvedError, setUnresolvedError] = useState<string | null>(null);
-  const [unresolvedLoading, setUnresolvedLoading] = useState(false);
+  const [unresolvedState, dispatchUnresolvedState] = useReducer(
+    (_current: UnresolvedFileState, next: UnresolvedFileState) => next,
+    idleUnresolvedFileState,
+  );
 
   const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
 
@@ -576,24 +555,25 @@ const FileDiffSection = memo(function FileDiffSection({
   );
 
   useEffect(() => {
-    setUnresolvedFile(null);
-    setUnresolvedError(null);
-    setUnresolvedLoading(false);
-    if (file.hasMergeConflicts !== true) return;
+    if (file.hasMergeConflicts !== true) {
+      dispatchUnresolvedState(idleUnresolvedFileState);
+      return;
+    }
     const params = new URLSearchParams({ path: file.path });
     let cancelled = false;
-    setUnresolvedLoading(true);
+    dispatchUnresolvedState({ error: null, file: null, loading: true });
     void fetchJson<FileContents>(`/api/unresolved-file?${params.toString()}`)
       .then((contents) => {
-        if (!cancelled) setUnresolvedFile(contents);
+        if (!cancelled) dispatchUnresolvedState({ error: null, file: contents, loading: false });
       })
       .catch((error) => {
         if (!cancelled) {
-          setUnresolvedError(error instanceof Error ? error.message : String(error));
+          dispatchUnresolvedState({
+            error: error instanceof Error ? error.message : String(error),
+            file: null,
+            loading: false,
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setUnresolvedLoading(false);
       });
     return () => {
       cancelled = true;
@@ -717,7 +697,7 @@ const FileDiffSection = memo(function FileDiffSection({
           fileDiff: file.hasMergeConflicts === true ? null : fileDiff,
           lineNumber: submittedAnnotation.lineNumber,
           side: submittedAnnotation.side,
-          unresolvedFile,
+          unresolvedFile: unresolvedState.file,
         }),
         filePath,
         id,
@@ -735,7 +715,7 @@ const FileDiffSection = memo(function FileDiffSection({
       onAnnotationsChange,
       onCommentSaved,
       onSelectedLinesChange,
-      unresolvedFile,
+      unresolvedState.file,
     ],
   );
 
@@ -776,7 +756,7 @@ const FileDiffSection = memo(function FileDiffSection({
   );
 
   if (file.hasMergeConflicts === true) {
-    if (unresolvedError != null) {
+    if (unresolvedState.error != null) {
       return (
         <div
           role="alert"
@@ -786,16 +766,15 @@ const FileDiffSection = memo(function FileDiffSection({
             <span className="font-mono" translate="no">
               {file.path}
             </span>
-            <span>{unresolvedError}</span>
+            <span>{unresolvedState.error}</span>
           </span>
         </div>
       );
     }
 
-    if (unresolvedLoading || unresolvedFile == null) {
+    if (unresolvedState.loading || unresolvedState.file == null) {
       return (
-        <div
-          role="status"
+        <output
           aria-live="polite"
           aria-busy="true"
           className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
@@ -806,13 +785,13 @@ const FileDiffSection = memo(function FileDiffSection({
             </span>
             <span>Loading merge conflict…</span>
           </span>
-        </div>
+        </output>
       );
     }
 
     return (
       <UnresolvedFile
-        file={unresolvedFile}
+        file={unresolvedState.file}
         options={{
           ...fileDiffOptions,
           hunkSeparators:
@@ -836,7 +815,13 @@ const FileDiffSection = memo(function FileDiffSection({
     const headerStub = { name: file.path, hunks: [] } as unknown as FileDiffMetadata;
     return (
       <>
-        {renderHeader(headerStub)}
+        <CustomFileHeader
+          collapsed={collapsed}
+          fileDiff={headerStub}
+          onCollapsedChange={handleHeaderCollapsedChange}
+          onViewedChange={handleHeaderViewedChange}
+          viewed={viewed}
+        />
         {collapsed ? null : <UnsupportedFileBody path={file.path} />}
       </>
     );
@@ -844,8 +829,7 @@ const FileDiffSection = memo(function FileDiffSection({
 
   if (fileDiff == null) {
     return (
-      <div
-        role="status"
+      <output
         aria-live="polite"
         aria-busy="true"
         className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
@@ -856,13 +840,25 @@ const FileDiffSection = memo(function FileDiffSection({
           </span>
           <span>Loading…</span>
         </span>
-      </div>
+      </output>
     );
   }
 
   if (isHeavyFile) {
     return (
-      <HeavyFileDiff collapsed={collapsed} fileDiff={fileDiff} header={renderHeader(fileDiff)} />
+      <HeavyFileDiff
+        collapsed={collapsed}
+        fileDiff={fileDiff}
+        header={
+          <CustomFileHeader
+            collapsed={collapsed}
+            fileDiff={fileDiff}
+            onCollapsedChange={handleHeaderCollapsedChange}
+            onViewedChange={handleHeaderViewedChange}
+            viewed={viewed}
+          />
+        }
+      />
     );
   }
 

@@ -1,30 +1,6 @@
-import { memo, useEffect, useRef, type ReactNode } from "react";
-import type { DiffLineAnnotation } from "@pierre/diffs";
-import type { AnnotationSide } from "@pierre/diffs";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "../ui/button.js";
-
-export type CommentAnnotationMetadata = {
-  body: string;
-  id: string;
-  kind: "comment-form" | "comment";
-  // Set when the form is reopened to edit an existing comment. Cancel restores
-  // body + kind from this snapshot instead of removing the annotation.
-  previousBody?: string;
-};
-
-export type CommentAnnotation = DiffLineAnnotation<CommentAnnotationMetadata>;
-
-export function patchAnnotationMeta(
-  annotations: CommentAnnotation[],
-  id: string,
-  patch: Partial<CommentAnnotationMetadata>,
-): CommentAnnotation[] {
-  return annotations.map((annotation) =>
-    annotation.metadata.id === id
-      ? { ...annotation, metadata: { ...annotation.metadata, ...patch } }
-      : annotation,
-  );
-}
+import type { CommentAnnotation } from "./commentAnnotationModel.js";
 
 export const CommentAnnotationView = memo(function CommentAnnotationView({
   annotation,
@@ -44,6 +20,24 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const { body, id, kind, previousBody } = annotation.metadata;
   const isEditing = previousBody !== undefined;
+  const [draftBody, setDraftBody] = useState(body);
+  const draftBodyRef = useRef(body);
+
+  useEffect(() => {
+    setDraftBody(body);
+    draftBodyRef.current = body;
+  }, [body, id]);
+
+  const handleDraftChange = useCallback((nextBody: string) => {
+    draftBodyRef.current = nextBody;
+    setDraftBody(nextBody);
+  }, []);
+
+  const flushDraftBody = useCallback(() => {
+    if (kind === "comment-form" && draftBodyRef.current !== body) {
+      onBodyChange(id, draftBodyRef.current);
+    }
+  }, [body, id, kind, onBodyChange]);
 
   useEffect(() => {
     if (kind !== "comment-form") return;
@@ -62,7 +56,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
         <div className="-mt-0.5 mb-1.5 flex h-6 items-center gap-2 text-xs leading-none">
           <span className="font-semibold text-foreground">You</span>
           <span className="text-muted-foreground">now</span>
-          <div className="app-comment-actions ml-auto flex items-center gap-0.5">
+          <div className="app-saved-comment-actions ml-auto flex items-center gap-0.5">
             <Button
               size="sm"
               variant="ghost"
@@ -102,14 +96,21 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
       </div>
       <textarea
         ref={textareaRef}
-        value={body}
-        onChange={(event) => onBodyChange(id, event.target.value)}
+        value={draftBody}
+        onChange={(event) => handleDraftChange(event.target.value)}
+        onBlur={(event) => {
+          const nextFocus = event.relatedTarget;
+          if (nextFocus instanceof Node && event.currentTarget.parentElement?.contains(nextFocus)) {
+            return;
+          }
+          flushDraftBody();
+        }}
         aria-label={`Comment on ${annotation.side} line ${annotation.lineNumber}`}
         placeholder="Leave a comment"
         className="app-comment-textarea min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] duration-150 ease-out focus:border-ring"
       />
       <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" onClick={() => onSubmit(id, body)}>
+        <Button size="sm" onClick={() => onSubmit(id, draftBody)}>
           {isEditing ? "Save" : "Comment"}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => onCancel(id)}>
@@ -129,19 +130,4 @@ function CommentCard({ children, variant }: { children: ReactNode; variant: "sav
       {children}
     </div>
   );
-}
-
-export function createCommentAnnotation(
-  side: AnnotationSide,
-  lineNumber: number,
-): CommentAnnotation {
-  return {
-    side,
-    lineNumber,
-    metadata: {
-      body: "",
-      id: `${side}-${lineNumber}-${Date.now()}`,
-      kind: "comment-form",
-    },
-  };
 }

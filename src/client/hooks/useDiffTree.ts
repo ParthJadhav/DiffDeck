@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { FileTree as TreeModel, prepareFileTreeInput, type GitStatusEntry } from "@pierre/trees";
 import { buildGitStatus } from "../lib/diff.js";
 import { fileTreeShapeOptions } from "../lib/constants.js";
@@ -176,7 +176,7 @@ export function useDiffTree({
     treeModel.setGitStatus(gitStatuses);
   }, [gitStatuses, treeModel, viewedPaths]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (selectedPath == null) {
       return;
     }
@@ -201,9 +201,9 @@ export function useDiffTree({
   }, [selectedPath, treeModel]);
 
   useEffect(() => {
+    const model = treeModel;
     return () => {
-      treeModel.cleanUp();
-      treeModelRef.current = null;
+      model.cleanUp();
     };
   }, [treeModel]);
 

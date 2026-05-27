@@ -460,7 +460,7 @@ kbd {
   filter: blur(0);
 }
 
-.app-comment-actions {
+.app-copy-comment-actions {
   animation: app-comment-actions-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
 }
 
@@ -533,12 +533,12 @@ kbd {
   }
 }
 
-.app-comment-actions > :nth-child(1) {
+.app-copy-comment-actions > :nth-child(1) {
   animation: app-comment-action-row-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
   animation-delay: 0ms;
 }
 
-.app-comment-actions > :nth-child(2) {
+.app-copy-comment-actions > :nth-child(2) {
   animation: app-comment-action-row-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
   animation-delay: 80ms;
 }
@@ -835,7 +835,7 @@ kbd {
 
 /* Reveal Edit/Delete on hover/focus of the saved-comment card; keep them
    visible whenever the user is interacting with them via keyboard. */
-.app-comment-card[data-variant="saved"] .app-comment-actions {
+.app-comment-card[data-variant="saved"] .app-saved-comment-actions {
   opacity: 0;
   transition:
     opacity 140ms cubic-bezier(0.2, 0, 0, 1),
@@ -843,14 +843,14 @@ kbd {
   transform: translateX(2px);
 }
 
-.app-comment-card[data-variant="saved"]:hover .app-comment-actions,
-.app-comment-card[data-variant="saved"]:focus-within .app-comment-actions {
+.app-comment-card[data-variant="saved"]:hover .app-saved-comment-actions,
+.app-comment-card[data-variant="saved"]:focus-within .app-saved-comment-actions {
   opacity: 1;
   transform: translateX(0);
 }
 
 @media (hover: none) {
-  .app-comment-card[data-variant="saved"] .app-comment-actions {
+  .app-comment-card[data-variant="saved"] .app-saved-comment-actions {
     opacity: 1;
     transform: none;
   }

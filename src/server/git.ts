@@ -616,10 +616,10 @@ function getUnmergedPaths(repoRoot: string): string[] {
     encoding: "utf8",
   });
   if (result.status !== 0) return [];
-  return result.stdout
-    .split(/\r?\n/)
-    .map((path) => path.trim())
-    .filter(Boolean);
+  return result.stdout.split(/\r?\n/).flatMap((path) => {
+    const trimmed = path.trim();
+    return trimmed.length === 0 ? [] : [trimmed];
+  });
 }
 
 function createSummary(fileDiff: FileDiffMetadata): DiffFileSummary {

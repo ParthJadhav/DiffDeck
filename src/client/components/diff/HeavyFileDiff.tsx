@@ -1,4 +1,13 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { cleanLastNewline } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 
@@ -128,17 +137,20 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [range, setRange] = useState({ start: 0, end: 0 });
+  const commitRange = useCallback((start: number, end: number) => {
+    setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+  }, []);
 
   useLayoutEffect(() => {
     if (!renderRows || rows.length === 0) {
-      setRange((prev) => (prev.start === 0 && prev.end === 0 ? prev : { start: 0, end: 0 }));
+      commitRange(0, 0);
       return;
     }
     const node = containerRef.current;
     if (node == null) return;
     const scroller = findScrollParent(node);
     if (scroller == null) {
-      setRange({ start: 0, end: rows.length });
+      commitRange(0, rows.length);
       return;
     }
 
@@ -155,9 +167,7 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
       const startIdx = Math.max(0, Math.floor(offset / ROW_HEIGHT) - OVERSCAN);
       const visibleCount = Math.ceil(viewportHeight / ROW_HEIGHT) + OVERSCAN * 2;
       const endIdx = Math.min(rows.length, startIdx + visibleCount);
-      setRange((prev) =>
-        prev.start === startIdx && prev.end === endIdx ? prev : { start: startIdx, end: endIdx },
-      );
+      commitRange(startIdx, endIdx);
     };
 
     const schedule = () => {
@@ -182,7 +192,7 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
       ro.disconnect();
       if (raf !== 0) cancelAnimationFrame(raf);
     };
-  }, [renderRows, rows.length]);
+  }, [commitRange, renderRows, rows.length]);
 
   if (collapsed) {
     return <>{header}</>;
@@ -192,8 +202,7 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
     return (
       <>
         {header}
-        <div
-          role="status"
+        <output
           aria-live="polite"
           aria-busy="true"
           className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
@@ -202,7 +211,7 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
             <span aria-hidden="true" className="app-pending-spinner" />
             <span>Preparing diff…</span>
           </span>
-        </div>
+        </output>
       </>
     );
   }

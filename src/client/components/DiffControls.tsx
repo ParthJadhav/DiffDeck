@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
 import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
@@ -55,7 +47,7 @@ function CheckLabel({
           <svg
             aria-hidden="true"
             viewBox="0 0 12 12"
-            className="h-[10px] w-[10px]"
+            className="size-[10px]"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
@@ -140,7 +132,7 @@ function OptionButton<T extends string>({
     >
       <span
         className={cn(
-          "inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center transition-colors",
+          "inline-flex size-3.5 shrink-0 items-center justify-center transition-colors",
           active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
         )}
       >
@@ -214,7 +206,7 @@ function MiniIcon({
   switch (name) {
     case "bars":
       return (
-        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3.5" fill="currentColor">
           <path d="M3 2h2v12H3zM7 4h6v2H7zM7 10h6v2H7z" />
         </svg>
       );
@@ -223,7 +215,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.7"
@@ -237,7 +229,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -251,7 +243,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -265,7 +257,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -280,7 +272,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -295,7 +287,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -309,7 +301,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.8"
@@ -323,7 +315,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -337,7 +329,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -352,7 +344,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -364,7 +356,7 @@ function MiniIcon({
       );
     case "dark":
       return (
-        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor">
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3.5" fill="currentColor">
           <path d="M9.5 14A5.8 5.8 0 017.7 2.7 5 5 0 0013.3 9a5.8 5.8 0 01-3.8 5z" />
         </svg>
       );
@@ -373,7 +365,7 @@ function MiniIcon({
         <svg
           aria-hidden="true"
           viewBox="0 0 16 16"
-          className="h-3.5 w-3.5"
+          className="size-3.5"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.5"
@@ -383,7 +375,7 @@ function MiniIcon({
         </svg>
       );
     default:
-      return <span aria-hidden="true" className="h-1.5 w-1.5 rounded-sm bg-current" />;
+      return <span aria-hidden="true" className="size-1.5 rounded-sm bg-current" />;
   }
 }
 
@@ -397,7 +389,7 @@ function GearIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-4 w-4"
+      className="size-4"
     >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -423,15 +415,15 @@ export function DiffControls(props: DiffControlsProps) {
 
   const [open, setOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
-  const [panelState, setPanelState] = useState<"closed" | "open">("closed");
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
   const panelId = useId();
   const titleId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDialogElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const updatePanelPosition = useCallback(() => {
+  const updatePanelPositionRef = useRef<() => void>(() => {});
+  updatePanelPositionRef.current = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect == null) return;
 
@@ -448,10 +440,11 @@ export function DiffControls(props: DiffControlsProps) {
       position: "fixed",
       width,
     });
-  }, []);
+  };
 
   useLayoutEffect(() => {
     if (!open) return;
+    const updatePanelPosition = () => updatePanelPositionRef.current();
     updatePanelPosition();
     window.addEventListener("resize", updatePanelPosition);
     window.addEventListener("scroll", updatePanelPosition, true);
@@ -459,16 +452,14 @@ export function DiffControls(props: DiffControlsProps) {
       window.removeEventListener("resize", updatePanelPosition);
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
-  }, [open, updatePanelPosition]);
+  }, [open]);
 
   useEffect(() => {
     if (open) {
       setPanelMounted(true);
-      const frame = window.requestAnimationFrame(() => setPanelState("open"));
-      return () => window.cancelAnimationFrame(frame);
+      return;
     }
 
-    setPanelState("closed");
     if (!panelMounted) return;
 
     const timer = window.setTimeout(() => setPanelMounted(false), 140);
@@ -501,15 +492,14 @@ export function DiffControls(props: DiffControlsProps) {
   return (
     <div ref={containerRef} className="flex shrink-0 flex-col gap-2">
       {panelMounted ? (
-        <div
+        <dialog
+          open
           ref={panelRef}
-          role="dialog"
-          aria-modal="false"
           aria-labelledby={titleId}
-          data-state={panelState}
+          data-state={open ? "open" : "closed"}
           id={panelId}
           style={{ ...panelStyle, overscrollBehavior: "contain" }}
-          className="app-settings-popover z-50 overflow-y-auto overflow-x-hidden rounded-2xl bg-popover p-2 text-popover-foreground"
+          className="app-settings-popover z-50 m-0 overflow-y-auto overflow-x-hidden rounded-2xl border-0 bg-popover p-2 text-popover-foreground"
         >
           <div
             className="app-settings-section mb-2 flex items-center justify-between gap-2 px-0.5"
@@ -522,7 +512,7 @@ export function DiffControls(props: DiffControlsProps) {
               type="button"
               aria-label="Close diff settings"
               onClick={() => setOpen(false)}
-              className="app-icon-btn h-7 w-7"
+              className="app-icon-btn size-7"
             >
               <MiniIcon name="none" />
             </button>
@@ -595,7 +585,7 @@ export function DiffControls(props: DiffControlsProps) {
               </div>
             </ControlSection>
           </div>
-        </div>
+        </dialog>
       ) : null}
 
       <button

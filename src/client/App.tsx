@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import { prepareFileTreeInput } from "@pierre/trees";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
@@ -15,14 +15,63 @@ import { useMediaQuery } from "./hooks/useMediaQuery.js";
 import { fileTreeShapeOptions, highlighterLangs, themeOptions } from "./lib/constants.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "./lib/uiTypes.js";
+import type { SessionPayload } from "./types.js";
 import { workerFactory } from "./workerFactory.js";
 
 const lineDiffType = "word-alt" as const;
+const hunkSeparators: HunkSeparatorMode = "custom";
+const LARGE_DIFF_LINE_THRESHOLD = 800;
 
 export function App() {
   const { session, loading, refreshing, error, revision, refresh, setError } = useSession();
 
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  if (loading) {
+    return <ShellState>Loading diff session…</ShellState>;
+  }
+
+  if (error != null) {
+    return <ShellState variant="error">{error}</ShellState>;
+  }
+
+  if (session == null) {
+    return <ShellState>No session data available.</ShellState>;
+  }
+
+  return (
+    <WorkerPoolContextProvider
+      poolOptions={{ workerFactory }}
+      highlighterOptions={{
+        langs: [...highlighterLangs],
+        theme: themeOptions,
+        lineDiffType,
+      }}
+    >
+      <WorkerPoolRenderOptionsSync />
+      <DiffDeckSession
+        key={revision}
+        refresh={refresh}
+        refreshing={refreshing}
+        revision={revision}
+        session={session}
+        setError={setError}
+      />
+    </WorkerPoolContextProvider>
+  );
+}
+
+function DiffDeckSession({
+  refresh,
+  refreshing,
+  revision,
+  session,
+  setError,
+}: {
+  refresh: () => void;
+  refreshing: boolean;
+  revision: number;
+  session: SessionPayload;
+  setError: (message: string | null) => void;
+}) {
   const [themeType, setThemeType] = useLocalStorage<ThemeChoice>(
     "diffdeck.settings.themeType",
     "system",
@@ -31,7 +80,6 @@ export function App() {
     "diffdeck.settings.diffStyle",
     "split",
   );
-  const hunkSeparators: HunkSeparatorMode = "custom";
   const [overflow, setOverflow] = useLocalStorage<OverflowMode>(
     "diffdeck.settings.overflow",
     "scroll",
@@ -48,12 +96,32 @@ export function App() {
     "diffdeck.settings.expandUnchanged",
     false,
   );
-  const [collapsedFilePaths, setCollapsedFilePaths] = useState<Set<string>>(() => new Set());
-  const autoCollapsedRevisionRef = useRef<number | null>(null);
+  const sessionFilesByPath = useMemo(
+    () => new Map(session.files.map((file) => [file.path, file])),
+    [session],
+  );
+  const orderedFiles = useMemo(
+    () => orderSessionFiles(session, sessionFilesByPath),
+    [session, sessionFilesByPath],
+  );
+  const [selectionState, setSelectionState] = useState<{
+    scrollSignal: number;
+    selectedPath: string | null;
+  }>(() => ({
+    scrollSignal: 0,
+    selectedPath: orderedFiles[0]?.path ?? null,
+  }));
+  const [collapsedFilePaths, setCollapsedFilePaths] = useState<Set<string>>(
+    () => new Set(getAutoCollapsedPaths(orderedFiles)),
+  );
   const [viewedFilePaths, setViewedFilePaths] = useState<Set<string>>(() => new Set());
-  const [commentExports, setCommentExports] = useState<CommentExportRecord[]>([]);
-  const [clearCommentsSignal, setClearCommentsSignal] = useState(0);
+  const [commentsState, setCommentsState] = useState<{
+    clearSignal: number;
+    exports: CommentExportRecord[];
+  }>(() => ({ clearSignal: 0, exports: [] }));
   const isDesktopLayout = useMediaQuery("(min-width: 1024px)");
+  const { scrollSignal, selectedPath } = selectionState;
+  const { clearSignal: clearCommentsSignal, exports: commentExports } = commentsState;
 
   const reportError = useCallback((message: string) => setError(message), [setError]);
 
@@ -63,83 +131,26 @@ export function App() {
     root.classList.toggle("dark", themeType === "dark");
   }, [themeType]);
 
-  const sessionFilesByPath = useMemo(() => {
-    if (session == null) return null;
-    return new Map(session.files.map((file) => [file.path, file]));
-  }, [session]);
+  const { fileDiffs, requestPath } = useFileDiff(reportError);
 
-  const orderedFiles = useMemo(() => {
-    if (session == null) return [];
-    const filesByPath = sessionFilesByPath ?? new Map();
-    const prepared = prepareFileTreeInput(
-      session.files.map((f) => f.path),
-      fileTreeShapeOptions,
-    );
-    const ordered: typeof session.files = [];
-    const orderedPaths = new Set<string>();
-    for (const path of prepared.paths) {
-      const file = filesByPath.get(path);
-      if (file != null) {
-        ordered.push(file);
-        orderedPaths.add(path);
+  const handleTreeSelection = useCallback(
+    (path: string | null) => {
+      setSelectionState((current) => ({
+        scrollSignal: path == null ? current.scrollSignal : current.scrollSignal + 1,
+        selectedPath: path,
+      }));
+      const selectedFile = path == null ? null : sessionFilesByPath.get(path);
+      if (selectedFile?.hasMergeConflicts !== true && selectedFile?.isBinary !== true) {
+        if (path != null) requestPath(path);
       }
-    }
-    for (const file of session.files) {
-      if (!orderedPaths.has(file.path)) ordered.push(file);
-    }
-    return ordered;
-  }, [session, sessionFilesByPath]);
-
-  useEffect(() => {
-    if (session == null) return;
-    if (selectedPath == null || sessionFilesByPath?.has(selectedPath) !== true) {
-      setSelectedPath(orderedFiles[0]?.path ?? null);
-    }
-  }, [session, selectedPath, orderedFiles, sessionFilesByPath]);
-
-  useEffect(() => {
-    if (session == null || autoCollapsedRevisionRef.current === revision) return;
-    autoCollapsedRevisionRef.current = revision;
-    const LARGE_DIFF_LINE_THRESHOLD = 800;
-    const largePaths = orderedFiles
-      .filter((file) => file.additions + file.deletions >= LARGE_DIFF_LINE_THRESHOLD)
-      .map((file) => file.path);
-    setCollapsedFilePaths(new Set(largePaths));
-  }, [session, orderedFiles, revision]);
-
-  const { fileDiffs, requestPath, reset: resetFileDiffs } = useFileDiff(reportError);
-  const [scrollSignal, setScrollSignal] = useState(0);
-  const previousRevisionRef = useRef(revision);
-
-  useEffect(() => {
-    resetFileDiffs();
-  }, [resetFileDiffs, revision]);
-
-  useEffect(() => {
-    if (previousRevisionRef.current === revision) return;
-    const previousRevision = previousRevisionRef.current;
-    previousRevisionRef.current = revision;
-    if (previousRevision === 0) return;
-
-    setViewedFilePaths(new Set());
-    setCommentExports([]);
-    setClearCommentsSignal((n) => n + 1);
-  }, [revision]);
-
-  useEffect(() => {
-    if (selectedPath == null) return;
-    const selectedFile = sessionFilesByPath?.get(selectedPath);
-    if (selectedFile?.hasMergeConflicts === true) return;
-    requestPath(selectedPath);
-  }, [requestPath, selectedPath, sessionFilesByPath]);
-
-  const handleTreeSelection = useCallback((path: string | null) => {
-    setSelectedPath(path);
-    if (path != null) setScrollSignal((n) => n + 1);
-  }, []);
+    },
+    [requestPath, sessionFilesByPath],
+  );
 
   const handleVisiblePathChange = useCallback((path: string) => {
-    setSelectedPath((current) => (current === path ? current : path));
+    setSelectionState((current) =>
+      current.selectedPath === path ? current : { ...current, selectedPath: path },
+    );
   }, []);
 
   const handleCollapsedFileChange = useCallback((path: string, value: boolean) => {
@@ -167,23 +178,30 @@ export function App() {
   }, []);
 
   const handleCommentSaved = useCallback((comment: CommentExportRecord) => {
-    setCommentExports((current) => {
-      const existingIndex = current.findIndex((item) => item.id === comment.id);
-      if (existingIndex === -1) return [...current, comment];
+    setCommentsState((current) => {
+      const existingIndex = current.exports.findIndex((item) => item.id === comment.id);
+      if (existingIndex === -1) {
+        return { ...current, exports: [...current.exports, comment] };
+      }
 
-      const next = [...current];
+      const next = [...current.exports];
       next[existingIndex] = comment;
-      return next;
+      return { ...current, exports: next };
     });
   }, []);
 
   const handleCommentDeleted = useCallback((id: string) => {
-    setCommentExports((current) => current.filter((comment) => comment.id !== id));
+    setCommentsState((current) => ({
+      ...current,
+      exports: current.exports.filter((comment) => comment.id !== id),
+    }));
   }, []);
 
   const handleClearAllComments = useCallback(() => {
-    setCommentExports([]);
-    setClearCommentsSignal((n) => n + 1);
+    setCommentsState((current) => ({
+      clearSignal: current.clearSignal + 1,
+      exports: [],
+    }));
   }, []);
 
   const treeModel = useDiffTree({
@@ -193,22 +211,25 @@ export function App() {
     onSelectionChange: handleTreeSelection,
   });
 
-  const selectedFile =
-    selectedPath == null ? null : (sessionFilesByPath?.get(selectedPath) ?? null);
+  const selectedFile = selectedPath == null ? null : (sessionFilesByPath.get(selectedPath) ?? null);
 
   const orderedCommentExports = useMemo(() => {
     const fileOrder = new Map(orderedFiles.map((file, index) => [file.path, index]));
     const commentOrder = new Map(commentExports.map((comment, index) => [comment.id, index]));
-    let ordered: CommentExportRecord[] = [];
+    const ordered: CommentExportRecord[] = [];
 
     for (const comment of commentExports) {
-      const insertIndex = ordered.findIndex(
-        (current) => compareCommentExports(comment, current, fileOrder, commentOrder) < 0,
-      );
-      ordered =
-        insertIndex === -1
-          ? [...ordered, comment]
-          : [...ordered.slice(0, insertIndex), comment, ...ordered.slice(insertIndex)];
+      let low = 0;
+      let high = ordered.length;
+      while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (compareCommentExports(comment, ordered[mid]!, fileOrder, commentOrder) < 0) {
+          high = mid;
+        } else {
+          low = mid + 1;
+        }
+      }
+      ordered.splice(low, 0, comment);
     }
 
     return ordered;
@@ -240,8 +261,8 @@ export function App() {
   }, [orderedFiles]);
 
   const sidebarProps = {
-    diffArgs: session?.diffArgs ?? [],
-    fileCount: session?.files.length ?? 0,
+    diffArgs: session.diffArgs,
+    fileCount: session.files.length,
     onRefresh: refresh,
     refreshing,
     totals: diffTotals,
@@ -273,18 +294,6 @@ export function App() {
     viewedFilePaths,
   } satisfies DiffWorkspaceProps;
 
-  if (loading) {
-    return <ShellState>Loading diff session…</ShellState>;
-  }
-
-  if (error != null) {
-    return <ShellState variant="error">{error}</ShellState>;
-  }
-
-  if (session == null) {
-    return <ShellState>No session data available.</ShellState>;
-  }
-
   const sidebarFooter = (
     <div className="flex flex-col gap-2">
       <CopyCommentsButton comments={orderedCommentExports} onClearAll={handleClearAllComments} />
@@ -293,36 +302,80 @@ export function App() {
   );
 
   return (
-    <WorkerPoolContextProvider
-      poolOptions={{ workerFactory }}
-      highlighterOptions={{
-        langs: [...highlighterLangs],
-        theme: themeOptions,
-        lineDiffType,
-      }}
-    >
-      <WorkerPoolRenderOptionsSync />
-      <div className="h-dvh w-screen overflow-hidden bg-background text-foreground">
-        {isDesktopLayout ? (
-          <PanelGroup id="diffdeck-layout" orientation="horizontal" className="flex h-full w-full">
-            <Panel defaultSize="20%" minSize="12%" maxSize="45%" className="min-h-0">
-              <Sidebar {...sidebarProps} footer={sidebarFooter} />
-            </Panel>
-            <PanelResizeHandle className="app-resize-handle group relative w-px">
-              <span className="absolute inset-y-0 -left-1 -right-1" />
-            </PanelResizeHandle>
-            <Panel minSize="30%" className="min-h-0">
-              <DiffWorkspace {...workspaceProps} />
-            </Panel>
-          </PanelGroup>
-        ) : (
-          <div className="grid h-full w-full grid-cols-1 grid-rows-[minmax(13rem,40dvh)_minmax(0,1fr)] overflow-hidden">
+    <DiffDeckLayout
+      isDesktopLayout={isDesktopLayout}
+      sidebarFooter={sidebarFooter}
+      sidebarProps={sidebarProps}
+      workspaceProps={workspaceProps}
+    />
+  );
+}
+
+function orderSessionFiles(
+  session: SessionPayload,
+  filesByPath: ReadonlyMap<string, SessionPayload["files"][number]>,
+) {
+  const prepared = prepareFileTreeInput(
+    session.files.map((file) => file.path),
+    fileTreeShapeOptions,
+  );
+  const ordered: SessionPayload["files"] = [];
+  const orderedPaths = new Set<string>();
+  for (const path of prepared.paths) {
+    const file = filesByPath.get(path);
+    if (file != null) {
+      ordered.push(file);
+      orderedPaths.add(path);
+    }
+  }
+  for (const file of session.files) {
+    if (!orderedPaths.has(file.path)) ordered.push(file);
+  }
+  return ordered;
+}
+
+function getAutoCollapsedPaths(files: readonly SessionPayload["files"][number][]): string[] {
+  const paths: string[] = [];
+  for (const file of files) {
+    if (file.additions + file.deletions >= LARGE_DIFF_LINE_THRESHOLD) {
+      paths.push(file.path);
+    }
+  }
+  return paths;
+}
+
+function DiffDeckLayout({
+  isDesktopLayout,
+  sidebarFooter,
+  sidebarProps,
+  workspaceProps,
+}: {
+  isDesktopLayout: boolean;
+  sidebarFooter: ReactNode;
+  sidebarProps: Omit<SidebarProps, "footer">;
+  workspaceProps: DiffWorkspaceProps;
+}) {
+  return (
+    <div className="h-dvh w-screen overflow-hidden bg-background text-foreground">
+      {isDesktopLayout ? (
+        <PanelGroup id="diffdeck-layout" orientation="horizontal" className="flex h-full w-full">
+          <Panel defaultSize="20%" minSize="12%" maxSize="45%" className="min-h-0">
             <Sidebar {...sidebarProps} footer={sidebarFooter} />
+          </Panel>
+          <PanelResizeHandle className="app-resize-handle group relative w-px">
+            <span className="absolute inset-y-0 -left-1 -right-1" />
+          </PanelResizeHandle>
+          <Panel minSize="30%" className="min-h-0">
             <DiffWorkspace {...workspaceProps} />
-          </div>
-        )}
-      </div>
-    </WorkerPoolContextProvider>
+          </Panel>
+        </PanelGroup>
+      ) : (
+        <div className="grid h-full w-full grid-cols-1 grid-rows-[minmax(13rem,40dvh)_minmax(0,1fr)] overflow-hidden">
+          <Sidebar {...sidebarProps} footer={sidebarFooter} />
+          <DiffWorkspace {...workspaceProps} />
+        </div>
+      )}
+    </div>
   );
 }
 
