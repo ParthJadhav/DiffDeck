@@ -5,7 +5,7 @@ import open from "open";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDiffSession, resolveRepoRoot } from "./git.js";
-import { startServer } from "./server.js";
+import { startServer, type DiffSessionSource } from "./server.js";
 import type { CliOptions } from "./types.js";
 import { formatCliError } from "./errors.js";
 
@@ -118,12 +118,9 @@ function parseCliArgs(argv: string[]): CliOptions {
   return options;
 }
 
-async function startServerWithFallback(
-  session: ReturnType<typeof buildDiffSession>,
-  options: CliOptions,
-) {
+async function startServerWithFallback(sessionSource: DiffSessionSource, options: CliOptions) {
   try {
-    return await startServer(session, options.port, options.host);
+    return await startServer(sessionSource, options.port, options.host);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException)?.code;
     const portWasExplicit = options.port !== DEFAULT_PORT;
@@ -132,7 +129,7 @@ async function startServerWithFallback(
     console.warn(
       `Port ${options.port} is in use. Falling back to a free port — pass --port to override.`,
     );
-    return await startServer(session, 0, options.host);
+    return await startServer(sessionSource, 0, options.host);
   }
 }
 
@@ -140,10 +137,15 @@ async function main(): Promise<void> {
   const options = parseCliArgs(process.argv.slice(2));
   const requestedRepoPath = realpathSync(resolve(options.repo));
   const repoRoot = resolveRepoRoot(requestedRepoPath);
-  const session = buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs, {
-    debug: options.debug,
-  });
-  const server = await startServerWithFallback(session, options);
+  const buildSession = () =>
+    buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs, {
+      debug: options.debug,
+    });
+  const session = buildSession();
+  const server = await startServerWithFallback(
+    { initialSession: session, refresh: buildSession },
+    options,
+  );
 
   console.log(`Diffdeck server running at ${server.url}`);
   console.log(`Repository: ${repoRoot}`);

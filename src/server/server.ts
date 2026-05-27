@@ -12,6 +12,41 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
+export type DiffSessionSource =
+  | DiffSession
+  | (() => DiffSession)
+  | {
+      initialSession: DiffSession;
+      refresh: () => DiffSession;
+    };
+
+export function createDiffSessionStore(sessionSource: DiffSessionSource): {
+  current: () => DiffSession;
+  refresh: () => DiffSession;
+} {
+  let session: DiffSession;
+  let refresh: () => DiffSession;
+
+  if (typeof sessionSource === "function") {
+    session = sessionSource();
+    refresh = sessionSource;
+  } else if ("initialSession" in sessionSource) {
+    session = sessionSource.initialSession;
+    refresh = sessionSource.refresh;
+  } else {
+    session = sessionSource;
+    refresh = () => session;
+  }
+
+  return {
+    current: () => session,
+    refresh: () => {
+      session = refresh();
+      return session;
+    },
+  };
+}
+
 function getClientDir(): string {
   return fileURLToPath(new URL("../client", import.meta.url));
 }
@@ -21,15 +56,17 @@ function getIndexHtml(clientDir: string): string {
 }
 
 export async function startServer(
-  session: DiffSession,
+  sessionSource: DiffSessionSource,
   port: number,
   host: string,
 ): Promise<RunningServer> {
   const clientDir = getClientDir();
   const indexHtml = getIndexHtml(clientDir);
   const app = express();
+  const sessionStore = createDiffSessionStore(sessionSource);
 
-  app.get("/api/session", (_request, response) => {
+  app.get("/api/session", (request, response) => {
+    const session = request.query.refresh === "1" ? sessionStore.refresh() : sessionStore.current();
     response.json({
       repoRoot: session.repoRoot,
       currentDirectory: session.currentDirectory,
@@ -45,7 +82,7 @@ export async function startServer(
       return;
     }
 
-    const fileDiff = session.fileDiffs.get(path);
+    const fileDiff = sessionStore.current().fileDiffs.get(path);
     if (fileDiff == null) {
       response.status(404).json({ error: `No diff found for ${path}.` });
       return;
@@ -61,7 +98,7 @@ export async function startServer(
       return;
     }
 
-    const contents = session.unresolvedFiles.get(path);
+    const contents = sessionStore.current().unresolvedFiles.get(path);
     if (contents == null) {
       response.status(404).json({ error: `No unresolved file found for ${path}.` });
       return;

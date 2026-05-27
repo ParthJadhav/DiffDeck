@@ -20,7 +20,7 @@ import { workerFactory } from "./workerFactory.js";
 const lineDiffType = "word-alt" as const;
 
 export function App() {
-  const { session, loading, error, setError } = useSession();
+  const { session, loading, refreshing, error, revision, refresh, setError } = useSession();
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [themeType, setThemeType] = useLocalStorage<ThemeChoice>(
@@ -49,7 +49,7 @@ export function App() {
     false,
   );
   const [collapsedFilePaths, setCollapsedFilePaths] = useState<Set<string>>(() => new Set());
-  const autoCollapsedRef = useRef(false);
+  const autoCollapsedRevisionRef = useRef<number | null>(null);
   const [viewedFilePaths, setViewedFilePaths] = useState<Set<string>>(() => new Set());
   const [commentExports, setCommentExports] = useState<CommentExportRecord[]>([]);
   const [clearCommentsSignal, setClearCommentsSignal] = useState(0);
@@ -91,28 +91,40 @@ export function App() {
   }, [session, sessionFilesByPath]);
 
   useEffect(() => {
-    if (session != null && selectedPath == null) {
+    if (session == null) return;
+    if (selectedPath == null || sessionFilesByPath?.has(selectedPath) !== true) {
       setSelectedPath(orderedFiles[0]?.path ?? null);
     }
-  }, [session, selectedPath, orderedFiles]);
+  }, [session, selectedPath, orderedFiles, sessionFilesByPath]);
 
   useEffect(() => {
-    if (session == null || autoCollapsedRef.current) return;
-    autoCollapsedRef.current = true;
+    if (session == null || autoCollapsedRevisionRef.current === revision) return;
+    autoCollapsedRevisionRef.current = revision;
     const LARGE_DIFF_LINE_THRESHOLD = 800;
     const largePaths = orderedFiles
       .filter((file) => file.additions + file.deletions >= LARGE_DIFF_LINE_THRESHOLD)
       .map((file) => file.path);
-    if (largePaths.length === 0) return;
-    setCollapsedFilePaths((current) => {
-      const next = new Set(current);
-      for (const path of largePaths) next.add(path);
-      return next;
-    });
-  }, [session, orderedFiles]);
+    setCollapsedFilePaths(new Set(largePaths));
+  }, [session, orderedFiles, revision]);
 
-  const { fileDiffs, requestPath } = useFileDiff(reportError);
+  const { fileDiffs, requestPath, reset: resetFileDiffs } = useFileDiff(reportError);
   const [scrollSignal, setScrollSignal] = useState(0);
+  const previousRevisionRef = useRef(revision);
+
+  useEffect(() => {
+    resetFileDiffs();
+  }, [resetFileDiffs, revision]);
+
+  useEffect(() => {
+    if (previousRevisionRef.current === revision) return;
+    const previousRevision = previousRevisionRef.current;
+    previousRevisionRef.current = revision;
+    if (previousRevision === 0) return;
+
+    setViewedFilePaths(new Set());
+    setCommentExports([]);
+    setClearCommentsSignal((n) => n + 1);
+  }, [revision]);
 
   useEffect(() => {
     if (selectedPath == null) return;
@@ -230,6 +242,8 @@ export function App() {
   const sidebarProps = {
     diffArgs: session?.diffArgs ?? [],
     fileCount: session?.files.length ?? 0,
+    onRefresh: refresh,
+    refreshing,
     totals: diffTotals,
     treeModel,
   } satisfies Omit<SidebarProps, "footer">;
@@ -253,6 +267,7 @@ export function App() {
     scrollSignal,
     selectedFile,
     selectedPath,
+    sessionRevision: revision,
     showLineNumbers,
     themeType,
     viewedFilePaths,

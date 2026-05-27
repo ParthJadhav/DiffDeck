@@ -5,6 +5,7 @@ import { fetchJson } from "../lib/api.js";
 export interface UseFileDiffResult {
   fileDiffs: Record<string, FileDiffMetadata>;
   requestPath: (path: string) => void;
+  reset: () => void;
 }
 
 // On very large diffs the IntersectionObserver in DiffWorkspace can enqueue
@@ -20,6 +21,7 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
   const loadedRef = useRef<Set<string>>(new Set());
   const queueRef = useRef<string[]>([]);
   const queuedSetRef = useRef<Set<string>>(new Set());
+  const generationRef = useRef(0);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
@@ -30,20 +32,23 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
       queuedSetRef.current.delete(path);
       if (loadedRef.current.has(path) || inflightRef.current.has(path)) continue;
       inflightRef.current.add(path);
+      const generation = generationRef.current;
       const params = new URLSearchParams({ path });
       void fetchJson<FileDiffMetadata>(`/api/file-diff?${params.toString()}`)
         .then((fileDiff) => {
+          if (generationRef.current !== generation) return;
           loadedRef.current.add(path);
           setFileDiffs((current) => ({ ...current, [path]: fileDiff }));
         })
         .catch((requestError) => {
+          if (generationRef.current !== generation) return;
           onErrorRef.current(
             requestError instanceof Error ? requestError.message : String(requestError),
           );
         })
         .finally(() => {
           inflightRef.current.delete(path);
-          dispatchNext();
+          if (generationRef.current === generation) dispatchNext();
         });
     }
   }, []);
@@ -60,5 +65,14 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
     [dispatchNext],
   );
 
-  return { fileDiffs, requestPath };
+  const reset = useCallback(() => {
+    generationRef.current += 1;
+    inflightRef.current.clear();
+    loadedRef.current.clear();
+    queueRef.current = [];
+    queuedSetRef.current.clear();
+    setFileDiffs({});
+  }, []);
+
+  return { fileDiffs, requestPath, reset };
 }

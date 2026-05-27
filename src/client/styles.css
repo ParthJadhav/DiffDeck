@@ -390,6 +390,7 @@ kbd {
 }
 
 .app-sidebar-header {
+  container-type: inline-size;
   box-shadow: inset 0 -1px 0 oklch(var(--border) / 0.62);
 }
 
@@ -405,6 +406,11 @@ kbd {
 
 .app-sidebar-action:hover:not(:disabled) {
   background: oklch(var(--accent));
+}
+
+.app-sidebar-refresh-button {
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .app-count-badge {
@@ -423,6 +429,12 @@ kbd {
   background: oklch(var(--diff-deleted) / 0.12);
   color: oklch(var(--diff-deleted));
   box-shadow: inset 0 0 0 1px oklch(var(--diff-deleted) / 0.28);
+}
+
+@container (max-width: 18rem) {
+  .app-file-count-label {
+    display: none;
+  }
 }
 
 .app-copy-status {

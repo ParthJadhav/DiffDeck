@@ -41,6 +41,7 @@ export interface DiffWorkspaceProps {
   scrollSignal: number;
   selectedFile: DiffFileSummary | null;
   selectedPath: string | null;
+  sessionRevision: number;
   showLineNumbers: boolean;
   themeType: ThemeChoice;
   viewedFilePaths: ReadonlySet<string>;
@@ -66,6 +67,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     scrollSignal,
     selectedFile,
     selectedPath,
+    sessionRevision,
     showLineNumbers,
     themeType,
     viewedFilePaths,
@@ -145,6 +147,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
           onVisiblePathChange={onVisiblePathChange}
           scrollSignal={scrollSignal}
           selectedPath={selectedPath}
+          sessionRevision={sessionRevision}
           viewedFilePaths={viewedFilePaths}
         />
       </section>
@@ -182,6 +185,7 @@ function MultiFileScroller(props: {
   onVisiblePathChange: (path: string) => void;
   scrollSignal: number;
   selectedPath: string | null;
+  sessionRevision: number;
   viewedFilePaths: ReadonlySet<string>;
 }) {
   const {
@@ -198,6 +202,7 @@ function MultiFileScroller(props: {
     onVisiblePathChange,
     scrollSignal,
     selectedPath,
+    sessionRevision,
     viewedFilePaths,
   } = props;
 
@@ -223,6 +228,7 @@ function MultiFileScroller(props: {
   // half-typed comment when it remounts.
   const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotationsByFile>({});
   const [selectedLines, setSelectedLines] = useState<SelectedLinesByFile>({});
+  const previousSessionRevisionRef = useRef(sessionRevision);
 
   const handleAnnotationsChange = useCallback(
     (path: string, updater: (current: CommentAnnotation[]) => CommentAnnotation[]) => {
@@ -260,6 +266,15 @@ function MultiFileScroller(props: {
     setCommentAnnotations((current) => pruneByKey(current, filesByPath));
     setSelectedLines((current) => pruneByKey(current, filesByPath));
   }, [filesByPath]);
+
+  useEffect(() => {
+    if (previousSessionRevisionRef.current === sessionRevision) return;
+    previousSessionRevisionRef.current = sessionRevision;
+    setCommentAnnotations({});
+    setSelectedLines({});
+    lastReportedPathRef.current = null;
+    pinnedPathRef.current = null;
+  }, [sessionRevision]);
 
   const lastClearSignalRef = useRef(clearCommentsSignal);
   useEffect(() => {
@@ -415,6 +430,7 @@ function MultiFileScroller(props: {
           onSelectedLinesChange={handleSelectedLinesChange}
           onViewedChange={onViewedFileChange}
           selectedLines={selectedLines[file.path] ?? null}
+          sessionRevision={sessionRevision}
           viewed={viewedFilePaths.has(file.path)}
         />
       </div>
@@ -431,6 +447,7 @@ function MultiFileScroller(props: {
       onCommentSaved,
       onViewedFileChange,
       selectedLines,
+      sessionRevision,
       viewedFilePaths,
     ],
   );
@@ -496,6 +513,7 @@ const FileDiffSection = memo(function FileDiffSection({
   onSelectedLinesChange,
   onViewedChange,
   selectedLines,
+  sessionRevision,
   viewed,
 }: {
   collapsed: boolean;
@@ -513,6 +531,7 @@ const FileDiffSection = memo(function FileDiffSection({
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
   selectedLines: SelectedLineRange | null;
+  sessionRevision: number;
   viewed: boolean;
 }) {
   const [unresolvedFile, setUnresolvedFile] = useState<FileContents | null>(null);
@@ -557,11 +576,13 @@ const FileDiffSection = memo(function FileDiffSection({
   );
 
   useEffect(() => {
+    setUnresolvedFile(null);
+    setUnresolvedError(null);
+    setUnresolvedLoading(false);
     if (file.hasMergeConflicts !== true) return;
     const params = new URLSearchParams({ path: file.path });
     let cancelled = false;
     setUnresolvedLoading(true);
-    setUnresolvedError(null);
     void fetchJson<FileContents>(`/api/unresolved-file?${params.toString()}`)
       .then((contents) => {
         if (!cancelled) setUnresolvedFile(contents);
@@ -577,7 +598,7 @@ const FileDiffSection = memo(function FileDiffSection({
     return () => {
       cancelled = true;
     };
-  }, [file.hasMergeConflicts, file.path]);
+  }, [file.hasMergeConflicts, file.path, sessionRevision]);
 
   const filePath = file.path;
 
