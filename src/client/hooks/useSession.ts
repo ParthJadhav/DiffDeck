@@ -20,11 +20,11 @@ export function useSession(): UseSessionResult {
   const [revision, setRevision] = useState(0);
   const requestIdRef = useRef(0);
 
-  const loadSession = useCallback(async (initial: boolean) => {
+  const loadSession = useCallback(async (useInitialLoadingState: boolean) => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
-    if (initial) {
+    if (useInitialLoadingState) {
       setLoading(true);
     } else {
       setRefreshing(true);
@@ -32,10 +32,7 @@ export function useSession(): UseSessionResult {
     setError(null);
 
     try {
-      const params = new URLSearchParams({ t: String(Date.now()) });
-      if (!initial) {
-        params.set("refresh", "1");
-      }
+      const params = new URLSearchParams({ refresh: "1", t: String(Date.now()) });
       const nextSession = await fetchJson<SessionPayload>(`/api/session?${params.toString()}`);
       if (requestIdRef.current === requestId) {
         setSession(nextSession);
