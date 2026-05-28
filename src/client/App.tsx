@@ -120,6 +120,8 @@ function DiffDeckSession({
     exports: CommentExportRecord[];
   }>(() => ({ clearSignal: 0, exports: [] }));
   const isDesktopLayout = useMediaQuery("(min-width: 1024px)");
+  const supportsSplitDiff = useMediaQuery("(min-width: 640px)");
+  const effectiveDiffStyle = supportsSplitDiff ? diffStyle : "unified";
   const { scrollSignal, selectedPath } = selectionState;
   const { clearSignal: clearCommentsSignal, exports: commentExports } = commentsState;
 
@@ -236,10 +238,14 @@ function DiffDeckSession({
   }, [commentExports, orderedFiles]);
 
   const controlsProps = {
-    diffStyle,
+    diffStyle: effectiveDiffStyle,
     disableBackground,
     expandUnchanged,
-    onDiffStyleChange: setDiffStyle,
+    onDiffStyleChange: (next) => {
+      if (supportsSplitDiff || next === "unified") {
+        setDiffStyle(next);
+      }
+    },
     onDisableBackgroundChange: setDisableBackground,
     onExpandUnchangedChange: setExpandUnchanged,
     onOverflowChange: setOverflow,
@@ -272,7 +278,7 @@ function DiffDeckSession({
   const workspaceProps = {
     clearCommentsSignal,
     collapsedFilePaths,
-    diffStyle,
+    diffStyle: effectiveDiffStyle,
     disableBackground,
     expandUnchanged,
     fileDiffs,
@@ -370,7 +376,10 @@ function DiffDeckLayout({
           </Panel>
         </PanelGroup>
       ) : (
-        <div className="grid h-full w-full grid-cols-1 grid-rows-[minmax(13rem,40dvh)_minmax(0,1fr)] overflow-hidden">
+        <div
+          className="grid h-full w-full grid-cols-1 overflow-hidden"
+          style={{ gridTemplateRows: "minmax(11rem, min(28dvh, 13.75rem)) minmax(0, 1fr)" }}
+        >
           <Sidebar {...sidebarProps} footer={sidebarFooter} />
           <DiffWorkspace {...workspaceProps} />
         </div>

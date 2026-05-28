@@ -1,6 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
+import { CheckSquare2, ChevronRight, FileText, Square } from "lucide-react";
 import { cn } from "../../lib/cn.js";
+import { Badge } from "../ui/badge.js";
+import { Button } from "../ui/button.js";
 
 export function CustomFileHeader({
   collapsed,
@@ -32,29 +35,36 @@ export function CustomFileHeader({
   return (
     <div
       className={cn(
-        "app-file-header flex w-full min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1.5",
+        "app-file-header flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2.5 gap-y-1 px-2.5 py-1",
         !collapsed && "app-file-header-open",
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           aria-label={collapsed ? `Expand ${fileDiff.name}` : `Collapse ${fileDiff.name}`}
           aria-pressed={collapsed}
           onClick={() => onCollapsedChange(!collapsed)}
-          className="app-icon-btn size-7"
+          className="h-7 w-7 text-muted-foreground"
         >
-          <ChevronIcon expanded={!collapsed} />
-        </button>
+          <ChevronRight
+            aria-hidden="true"
+            className={cn(
+              "size-3.5 transition-transform duration-150 ease-out",
+              !collapsed && "rotate-90",
+            )}
+          />
+        </Button>
         <FileIcon />
         <PathLabel path={fileDiff.name} />
         {hasMergeConflicts ? (
-          <span className="inline-flex shrink-0 items-center rounded-md bg-warning-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-warning-foreground shadow-[inset_0_0_0_1px_oklch(var(--warning-border)/0.8)]">
+          <Badge variant="warning" className="shrink-0 text-[10px] uppercase">
             Conflict
-          </span>
+          </Badge>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-2 font-mono text-xs tabular-nums">
+      <div className="flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] leading-none tabular-nums">
         {counts.deletions > 0 || counts.additions === 0 ? (
           <span className="text-diff-deleted">-{counts.deletions}</span>
         ) : null}
@@ -223,7 +233,7 @@ function PathLabel({ path }: { path: string }) {
   return (
     <span
       ref={containerRef}
-      className="app-path-label text-sm font-medium text-foreground"
+      className="app-path-label text-[13px] font-medium text-foreground"
       translate="no"
       title={path}
     >
@@ -243,31 +253,15 @@ function PathLabel({ path }: { path: string }) {
   );
 }
 
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn("size-3.5 transition-transform duration-150 ease-out", expanded && "rotate-90")}
-    >
-      <path d="M6 4l4 4-4 4" />
-    </svg>
-  );
-}
-
 function FileIcon() {
   return (
-    <span
+    <Badge
       aria-hidden="true"
-      className="inline-flex size-4 shrink-0 items-center justify-center rounded-[0.25rem] bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_oklch(var(--info-border)/0.75)]"
+      variant="outline"
+      className="h-5 shrink-0 border-info-border/75 bg-info-muted px-1 text-info-foreground"
     >
-      <span className="size-1.5 rounded-[2px] bg-info" />
-    </span>
+      <FileText className="size-3" />
+    </Badge>
   );
 }
 
@@ -281,43 +275,26 @@ function ViewedButton({
   viewed: boolean;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant={viewed ? "secondary" : "outline"}
+      size="sm"
       aria-label={viewed ? `Mark ${filePath} unviewed` : `Mark ${filePath} viewed`}
       aria-pressed={viewed}
       onClick={onClick}
       className={cn(
-        "app-viewed-button ml-1 inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 font-sans text-xs font-medium transition-[background-color,box-shadow,color,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "app-viewed-button ml-1 h-7 gap-1.5 px-2 font-sans text-[11.5px] leading-none",
         viewed
-          ? "bg-info-muted text-info-foreground shadow-[inset_0_0_0_1px_oklch(var(--info-border)/0.8)] hover:bg-info-muted/80 hover:shadow-[inset_0_0_0_1px_oklch(var(--info-border))]"
-          : "bg-transparent text-muted-foreground shadow-[inset_0_0_0_1px_oklch(var(--border)/0.7)] hover:bg-accent hover:text-foreground hover:shadow-[inset_0_0_0_1px_oklch(var(--border))]",
+          ? "border-info-border/80 bg-info-muted text-info-foreground hover:bg-info-muted/80"
+          : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
       <ViewedIcon checked={viewed} />
       <span>Viewed</span>
-    </button>
+    </Button>
   );
 }
 
 function ViewedIcon({ checked }: { checked: boolean }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" className="size-3.5 shrink-0">
-      <rect
-        x="1.75"
-        y="1.75"
-        width="12.5"
-        height="12.5"
-        rx="3.5"
-        className={checked ? "fill-info stroke-info" : "stroke-current"}
-        strokeWidth="1.6"
-      />
-      <path
-        d="M5 8.1l2.05 2.05L11.25 5.8"
-        className={cn("app-viewed-check stroke-background", checked && "app-viewed-check-visible")}
-        strokeWidth="1.65"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+  const Icon = checked ? CheckSquare2 : Square;
+  return <Icon aria-hidden="true" className="size-3.5 shrink-0" />;
 }

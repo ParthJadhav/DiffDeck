@@ -96,6 +96,7 @@ bun run check
 
 See [GitHub Releases](https://github.com/ParthJadhav/DiffDeck/releases) for the full version history. Highlights:
 
+- **0.3.8** — Refined the review UI with shared controls, icons, compact states, and better mobile diff layout.
 - **0.3.7** — Browser page refreshes now reload the current git status instead of reusing a cached session.
 - **0.2.0** — File-list virtualization for large diffs (23k+ files), survives non-ASCII patches, comment drafts persist across scroll.
 - **0.1.3** — Float copy-comments FAB, render binary file placeholders, oklch theme tokens.

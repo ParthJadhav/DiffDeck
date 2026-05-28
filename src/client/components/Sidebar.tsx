@@ -1,8 +1,10 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { FileTree } from "@pierre/trees/react";
 import type { FileTree as TreeModel } from "@pierre/trees";
+import { RefreshCw } from "lucide-react";
 import { buildHeader } from "../lib/diff.js";
 import { cn } from "../lib/cn.js";
+import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 
 export interface SidebarProps {
@@ -62,32 +64,41 @@ export function Sidebar({
 
   return (
     <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_oklch(var(--border)/0.7)] lg:shadow-none">
-      <div className="app-sidebar-header flex h-11 items-center gap-1 px-3">
+      <div className="app-sidebar-header flex h-10 items-center gap-1 px-3">
         <span className="font-mono text-[12px] font-semibold text-foreground">Diffdeck</span>
-        <CountBadge
-          className="ml-auto"
+        <Badge
+          variant="secondary"
+          className="ml-auto h-5 px-1.5 text-[11px] leading-none"
           title={headerLabel}
-          ariaLabel={`${fileCount} ${fileCount === 1 ? "file" : "files"} in diff`}
+          aria-label={`${fileCount} ${fileCount === 1 ? "file" : "files"} in diff`}
         >
           <span>{fileCount}</span>
           <span className="app-file-count-label ml-1">{fileCount === 1 ? "file" : "files"}</span>
-        </CountBadge>
-        <CountBadge tone="added" ariaLabel={`${totals.additions} additions`}>
+        </Badge>
+        <Badge
+          variant="success"
+          className="h-5 px-1.5 text-[11px] leading-none"
+          aria-label={`${totals.additions} additions`}
+        >
           +{totals.additions}
-        </CountBadge>
-        <CountBadge tone="deleted" ariaLabel={`${totals.deletions} deletions`}>
+        </Badge>
+        <Badge
+          variant="outline"
+          className="h-5 border-diff-deleted/30 bg-diff-deleted/10 px-1.5 text-[11px] leading-none text-diff-deleted"
+          aria-label={`${totals.deletions} deletions`}
+        >
           −{totals.deletions}
-        </CountBadge>
+        </Badge>
         <Button
           variant="ghost"
           size="icon"
-          className="app-sidebar-refresh-button shrink-0 rounded-[6px] text-muted-foreground hover:text-foreground"
+          className="app-sidebar-refresh-button h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
           onClick={onRefresh}
           disabled={refreshing}
           aria-label={refreshing ? "Refreshing diff" : "Refresh diff"}
           title={refreshing ? "Refreshing diff" : "Refresh diff"}
         >
-          <RefreshIcon className={cn("size-3.5", refreshing && "animate-spin")} />
+          <RefreshCw className={cn(refreshing && "animate-spin")} />
         </Button>
       </div>
 
@@ -113,57 +124,8 @@ export function Sidebar({
           />
         )}
       </div>
-      {footer != null ? <div className="app-sidebar-footer px-3 py-2">{footer}</div> : null}
+      {footer != null ? <div className="app-sidebar-footer px-3 py-2.5">{footer}</div> : null}
     </aside>
-  );
-}
-
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M13.5 3.5v3h-3" />
-      <path d="M2.8 6.7a5 5 0 0 1 8.4-2.4l2.3 2.2" />
-      <path d="M2.5 12.5v-3h3" />
-      <path d="M13.2 9.3a5 5 0 0 1-8.4 2.4L2.5 9.5" />
-    </svg>
-  );
-}
-
-function CountBadge({
-  ariaLabel,
-  children,
-  className,
-  title,
-  tone,
-}: {
-  ariaLabel: string;
-  children: ReactNode;
-  className?: string;
-  title?: string;
-  tone?: "added" | "deleted";
-}) {
-  return (
-    <span
-      className={cn(
-        "app-count-badge inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full px-1.5 text-[11px] font-medium leading-none tabular-nums",
-        tone === "added" && "app-count-badge--added",
-        tone === "deleted" && "app-count-badge--deleted",
-        className,
-      )}
-      title={title}
-      aria-label={ariaLabel}
-    >
-      {children}
-    </span>
   );
 }
 

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { Check, Copy, Trash2, X } from "lucide-react";
 import { formatCommentExport, type CommentExportRecord } from "../lib/commentExport.js";
 import { cn } from "../lib/cn.js";
+import { Badge } from "./ui/badge.js";
+import { Button } from "./ui/button.js";
 
 type CopyStatus = "idle" | "copied" | "failed";
 
@@ -65,18 +68,18 @@ export function CopyCommentsButton({
       className="app-copy-comment-actions flex flex-col gap-1.5"
       aria-label="Comment actions"
     >
-      <button
-        type="button"
+      <Button
         onClick={handleCopy}
         aria-label={`Copy ${commentCount} ${commentLabel} with context`}
         title="Copy comments with context"
-        className="app-comment-action app-comment-action--primary group flex h-10 w-full items-center gap-2 rounded-lg px-3 text-[12.5px] font-medium"
+        className="group h-10 w-full justify-start rounded-lg px-3 text-[12.5px]"
       >
-        <CopyIcon />
+        <Copy className="size-3.5" />
         <span className="min-w-0 flex-1 truncate text-left">Copy comments</span>
-        <span
+        <Badge
           data-status={copyStatus}
-          className="app-comment-action-badge inline-grid h-5 min-w-[1.5rem] place-items-center rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums"
+          variant="secondary"
+          className="app-comment-action-badge inline-grid h-5 min-w-[1.5rem] rounded-full border-transparent px-1.5 text-[10.5px]"
           aria-hidden="true"
         >
           <span
@@ -93,7 +96,7 @@ export function CopyCommentsButton({
               copyStatus === "copied" && "app-copy-status-item-visible",
             )}
           >
-            <CheckIcon />
+            <Check className="size-2.5" />
           </span>
           <span
             className={cn(
@@ -101,25 +104,22 @@ export function CopyCommentsButton({
               copyStatus === "failed" && "app-copy-status-item-visible",
             )}
           >
-            <ErrorIcon />
+            <X className="size-2.5" />
           </span>
-        </span>
-      </button>
-      <button
-        type="button"
+        </Badge>
+      </Button>
+      <Button
+        variant={isConfirmingClear ? "destructive" : "outline"}
         onClick={handleClearClick}
         aria-label={`${isConfirmingClear ? "Confirm clear" : "Clear"} ${commentCount} ${commentLabel}`}
         title={isConfirmingClear ? "Click again to confirm" : "Clear all comments"}
-        className={cn(
-          "app-comment-action group flex h-10 w-full items-center gap-2 rounded-lg px-3 text-[12.5px] font-medium",
-          isConfirmingClear && "app-comment-action--danger",
-        )}
+        className="group h-10 w-full justify-start rounded-lg px-3 text-[12.5px]"
       >
-        <TrashIcon />
+        <Trash2 className="size-3.5" />
         <span className="min-w-0 flex-1 truncate text-left">
           {isConfirmingClear ? "Click to confirm" : "Clear all"}
         </span>
-      </button>
+      </Button>
       <output className="sr-only" aria-live="polite">
         {copyStatus === "copied"
           ? "Copied comments"
@@ -152,75 +152,4 @@ async function copyTextToClipboard(text: string): Promise<void> {
   } finally {
     document.body.removeChild(textarea);
   }
-}
-
-function CopyIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      className="size-3.5 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="5.5" y="5.5" width="7" height="7" rx="1.4" />
-      <path d="M3.5 10.5h-.2A1.3 1.3 0 012 9.2V3.3A1.3 1.3 0 013.3 2h5.9a1.3 1.3 0 011.3 1.3v.2" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      className="size-3.5 shrink-0"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2.75 4.25h10.5" />
-      <path d="M6 4.25V3a1 1 0 011-1h2a1 1 0 011 1v1.25" />
-      <path d="M3.75 4.25l.7 8.4a1 1 0 001 .9h5.1a1 1 0 001-.9l.7-8.4" />
-      <path d="M6.5 7v4M9.5 7v4" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 12 12"
-      className="size-2.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M2.5 6.4l2.4 2.4L9.5 3.7" />
-    </svg>
-  );
-}
-
-function ErrorIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 12 12"
-      className="size-2.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-    >
-      <path d="M3 3l6 6M9 3l-6 6" />
-    </svg>
-  );
 }

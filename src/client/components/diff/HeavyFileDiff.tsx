@@ -10,6 +10,7 @@ import {
 } from "react";
 import { cleanLastNewline } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
+import { LoaderCircle } from "lucide-react";
 
 const ROW_HEIGHT = 20;
 const OVERSCAN = 16;
@@ -208,7 +209,7 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
           className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
         >
           <span className="inline-flex items-center gap-2">
-            <span aria-hidden="true" className="app-pending-spinner" />
+            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
             <span>Preparing diff…</span>
           </span>
         </output>

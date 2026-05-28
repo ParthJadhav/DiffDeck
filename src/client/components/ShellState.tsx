@@ -1,5 +1,7 @@
 import { Children, isValidElement } from "react";
+import { LoaderCircle } from "lucide-react";
 import { cn } from "../lib/cn.js";
+import { Card, CardContent } from "./ui/card.js";
 
 export function ShellState({
   children,
@@ -14,29 +16,27 @@ export function ShellState({
 
   return (
     <div className="grid h-screen place-items-center bg-background p-8 text-center">
-      <div
+      <Card
         role={variant === "error" ? "alert" : "status"}
         aria-live={variant === "error" ? "assertive" : "polite"}
         aria-busy={isLoading || undefined}
         className={cn(
-          "max-w-md text-sm",
+          "max-w-md border-border",
           variant === "error" ? "text-destructive" : "text-muted-foreground",
         )}
       >
-        {isLoading ? (
-          <span className="inline-flex items-center gap-2">
-            <span>{stripped.trimEnd()}</span>
-            <span aria-hidden="true" className="inline-flex items-end gap-0.5">
-              <span className="shell-loading-dot" />
-              <span className="shell-loading-dot" />
-              <span className="shell-loading-dot" />
+        <CardContent className="p-4 text-sm">
+          {isLoading ? (
+            <span className="inline-flex items-center gap-2">
+              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              <span>{stripped.trimEnd()}</span>
+              <span className="sr-only">Loading</span>
             </span>
-            <span className="sr-only">Loading</span>
-          </span>
-        ) : (
-          children
-        )}
-      </div>
+          ) : (
+            children
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

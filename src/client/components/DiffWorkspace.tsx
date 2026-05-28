@@ -7,11 +7,14 @@ import {
 } from "@pierre/diffs/react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
+import { AlertCircle, LoaderCircle } from "lucide-react";
 import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
 import { fetchJson } from "../lib/api.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffFileSummary } from "../types.js";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card.js";
+import { Skeleton } from "./ui/skeleton.js";
 import { CommentAnnotationView } from "./diff/CommentAnnotation.js";
 import {
   createCommentAnnotation,
@@ -111,16 +114,18 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
         className="flex h-full min-h-0 min-w-0 flex-col bg-background focus:outline-none"
       >
         <div className="grid flex-1 place-items-center p-8 text-center">
-          <div className="max-w-sm space-y-3">
-            <h1 className="text-xl font-semibold text-foreground">No diff to render</h1>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Run the CLI inside a repository with pending changes, or pass{" "}
-              <code className="font-mono text-foreground/80" translate="no">
-                git diff
-              </code>{" "}
-              arguments to compare revisions.
-            </p>
-          </div>
+          <Card className="max-w-sm">
+            <CardHeader>
+              <CardTitle className="text-xl">No diff to render</CardTitle>
+              <CardDescription className="leading-relaxed">
+                Run the CLI inside a repository with pending changes, or pass{" "}
+                <code className="font-mono text-foreground/80" translate="no">
+                  git diff
+                </code>{" "}
+                arguments to compare revisions.
+              </CardDescription>
+            </CardHeader>
+          </Card>
         </div>
       </main>
     );
@@ -313,9 +318,9 @@ function MultiFileScroller(props: {
 
   const itemContent = useCallback(
     (_index: number, file: DiffFileSummary) => (
-      <div
+      <Card
         data-file-path={file.path}
-        className="app-file-card m-2.5 scroll-mt-2.5 overflow-clip rounded-lg"
+        className="app-file-card m-2.5 scroll-mt-2.5 overflow-clip rounded-lg border-border"
       >
         <FileDiffSection
           collapsed={collapsedFilePaths.has(file.path)}
@@ -333,7 +338,7 @@ function MultiFileScroller(props: {
           sessionRevision={sessionRevision}
           viewed={viewedFilePaths.has(file.path)}
         />
-      </div>
+      </Card>
     ),
     [
       collapsedFilePaths,
@@ -763,6 +768,7 @@ const FileDiffSection = memo(function FileDiffSection({
           className="app-diff-state app-diff-state-error grid place-items-center p-6 text-xs"
         >
           <span className="inline-flex items-center gap-2">
+            <AlertCircle aria-hidden="true" className="size-3.5 shrink-0" />
             <span className="font-mono" translate="no">
               {file.path}
             </span>
@@ -780,6 +786,7 @@ const FileDiffSection = memo(function FileDiffSection({
           className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
         >
           <span className="inline-flex items-center gap-2">
+            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
             <span className="font-mono text-foreground/70" translate="no">
               {file.path}
             </span>
@@ -834,12 +841,17 @@ const FileDiffSection = memo(function FileDiffSection({
         aria-busy="true"
         className="app-diff-state grid place-items-center p-6 text-xs text-muted-foreground"
       >
-        <span className="inline-flex items-center gap-2">
-          <span className="font-mono text-foreground/70" translate="no">
-            {file.path}
-          </span>
-          <span>Loading…</span>
-        </span>
+        <CardContent className="w-full max-w-lg space-y-2 p-0">
+          <div className="flex items-center gap-2">
+            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+            <span className="font-mono text-foreground/70" translate="no">
+              {file.path}
+            </span>
+            <span>Loading…</span>
+          </div>
+          <Skeleton className="h-2 w-full" />
+          <Skeleton className="h-2 w-2/3" />
+        </CardContent>
       </output>
     );
   }
@@ -905,12 +917,12 @@ function UnsupportedFileBody({ path }: { path: string }) {
   return (
     <div
       role="note"
-      className="app-diff-state grid place-items-center p-6 text-center text-xs text-muted-foreground"
+      className="app-diff-state app-unsupported-file-state grid place-items-center p-4 text-center text-xs text-muted-foreground"
     >
-      <div className="space-y-1">
+      <CardContent className="space-y-1 p-0">
         <p className="font-medium text-foreground">{label}</p>
         <p className="leading-relaxed">{description}</p>
-      </div>
+      </CardContent>
     </div>
   );
 }

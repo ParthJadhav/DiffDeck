@@ -1,5 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Badge } from "../ui/badge.js";
 import { Button } from "../ui/button.js";
+import { Card, CardContent, CardFooter, CardHeader } from "../ui/card.js";
+import { Textarea } from "../ui/textarea.js";
 import type { CommentAnnotation } from "./commentAnnotationModel.js";
 
 export const CommentAnnotationView = memo(function CommentAnnotationView({
@@ -53,48 +56,53 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   if (kind === "comment") {
     return (
       <CommentCard variant="saved">
-        <div className="-mt-0.5 mb-1.5 flex h-6 items-center gap-2 text-xs leading-none">
+        <CardHeader className="-mt-0.5 flex h-6 flex-row items-center gap-2 space-y-0 p-0 text-xs leading-none">
           <span className="font-semibold text-foreground">You</span>
           <span className="text-muted-foreground">now</span>
           <div className="app-saved-comment-actions ml-auto flex items-center gap-0.5">
             <Button
-              size="sm"
+              size="xs"
               variant="ghost"
-              className="app-comment-action-btn relative h-6 px-2 text-[11px]"
+              className="app-comment-action-btn relative h-6 px-2 font-sans text-[11px]"
               onClick={() => onEdit(id)}
               aria-label="Edit comment"
             >
               Edit
             </Button>
             <Button
-              size="sm"
+              size="xs"
               variant="ghost"
-              className="app-comment-action-btn relative h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+              className="app-comment-action-btn relative h-6 px-2 font-sans text-[11px] text-muted-foreground hover:text-destructive"
               onClick={() => onDelete(id)}
               aria-label="Delete comment"
             >
               Delete
             </Button>
           </div>
-        </div>
-        <p className="whitespace-pre-wrap text-pretty font-sans text-sm leading-snug text-foreground">
-          {body}
-        </p>
+        </CardHeader>
+        <CardContent className="mt-1.5 p-0">
+          <p className="whitespace-pre-wrap text-pretty font-sans text-sm leading-snug text-foreground">
+            {body}
+          </p>
+        </CardContent>
       </CommentCard>
     );
   }
 
   return (
     <CommentCard variant="form">
-      <div className="mb-2 flex items-baseline gap-2 text-xs">
+      <CardHeader className="mb-2 flex flex-row items-center gap-2 space-y-0 p-0 text-xs">
         <span className="font-semibold text-foreground">
           {isEditing ? "Edit comment" : "New comment"}
         </span>
-        <span className="font-mono tabular-nums text-muted-foreground">
+        <Badge
+          variant="outline"
+          className="h-5 rounded-md px-1.5 font-sans text-[10.5px] font-medium tabular-nums text-muted-foreground"
+        >
           {annotation.side}:{annotation.lineNumber}
-        </span>
-      </div>
-      <textarea
+        </Badge>
+      </CardHeader>
+      <Textarea
         ref={textareaRef}
         value={draftBody}
         onChange={(event) => handleDraftChange(event.target.value)}
@@ -107,27 +115,27 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
         }}
         aria-label={`Comment on ${annotation.side} line ${annotation.lineNumber}`}
         placeholder="Leave a comment"
-        className="app-comment-textarea min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] duration-150 ease-out focus:border-ring"
+        className="app-comment-textarea resize-y font-sans"
       />
-      <div className="mt-3 flex items-center gap-2">
-        <Button size="sm" onClick={() => onSubmit(id, draftBody)}>
+      <CardFooter className="mt-3 gap-2 p-0">
+        <Button size="sm" className="font-sans" onClick={() => onSubmit(id, draftBody)}>
           {isEditing ? "Save" : "Comment"}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => onCancel(id)}>
+        <Button size="sm" variant="ghost" className="font-sans" onClick={() => onCancel(id)}>
           Cancel
         </Button>
-      </div>
+      </CardFooter>
     </CommentCard>
   );
 });
 
 function CommentCard({ children, variant }: { children: ReactNode; variant: "saved" | "form" }) {
   return (
-    <div
+    <Card
       data-variant={variant}
-      className="app-comment-card group mx-4 my-2 max-w-2xl rounded-[16px] p-2.5"
+      className="app-comment-card group mx-4 my-2 max-w-2xl rounded-lg border-border font-sans"
     >
-      {children}
-    </div>
+      <CardContent className="p-2.5">{children}</CardContent>
+    </Card>
   );
 }
