@@ -30,5 +30,3 @@ export interface BadgeProps
 export function Badge({ className, ref, variant, ...props }: BadgeProps) {
   return <span ref={ref} className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
-
-export { badgeVariants };

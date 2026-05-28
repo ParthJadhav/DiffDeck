@@ -56,7 +56,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   if (kind === "comment") {
     return (
       <CommentCard variant="saved">
-        <CardHeader className="-mt-0.5 flex h-6 flex-row items-center gap-2 space-y-0 p-0 text-xs leading-none">
+        <CardHeader className="-mt-0.5 flex h-6 flex-row items-center gap-2 gap-y-0 p-0 text-xs leading-none">
           <span className="font-semibold text-foreground">You</span>
           <span className="text-muted-foreground">now</span>
           <div className="app-saved-comment-actions ml-auto flex items-center gap-0.5">
@@ -91,7 +91,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
 
   return (
     <CommentCard variant="form">
-      <CardHeader className="mb-2 flex flex-row items-center gap-2 space-y-0 p-0 text-xs">
+      <CardHeader className="mb-2 flex flex-row items-center gap-2 gap-y-0 p-0 text-xs">
         <span className="font-semibold text-foreground">
           {isEditing ? "Edit comment" : "New comment"}
         </span>

@@ -46,7 +46,7 @@ export function CustomFileHeader({
           aria-label={collapsed ? `Expand ${fileDiff.name}` : `Collapse ${fileDiff.name}`}
           aria-pressed={collapsed}
           onClick={() => onCollapsedChange(!collapsed)}
-          className="h-7 w-7 text-muted-foreground"
+          className="size-7 text-muted-foreground"
         >
           <ChevronRight
             aria-hidden="true"

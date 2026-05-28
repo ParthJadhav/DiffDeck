@@ -92,7 +92,7 @@ export function Sidebar({
         <Button
           variant="ghost"
           size="icon"
-          className="app-sidebar-refresh-button h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+          className="app-sidebar-refresh-button size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
           onClick={onRefresh}
           disabled={refreshing}
           aria-label={refreshing ? "Refreshing diff" : "Refresh diff"}

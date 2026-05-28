@@ -29,7 +29,7 @@ export function DialogContent({ className, ref, ...props }: DialogPartProps) {
 }
 
 export function DialogHeader({ className, ref, ...props }: DialogPartProps) {
-  return <div ref={ref} className={cn("flex flex-col space-y-1.5", className)} {...props} />;
+  return <div ref={ref} className={cn("flex flex-col gap-y-1.5", className)} {...props} />;
 }
 
 export function DialogTitle({ className, ref, ...props }: DialogPartProps) {

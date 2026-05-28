@@ -329,7 +329,7 @@ export function DiffControls(props: DiffControlsProps) {
         >
           <DialogContent className="border-0 bg-transparent p-2 shadow-none">
             <DialogHeader
-              className="app-settings-section mb-2 flex-row items-center justify-between gap-2 space-y-0 px-0.5"
+              className="app-settings-section mb-2 flex-row items-center justify-between gap-2 gap-y-0 px-0.5"
               style={{ "--settings-section-index": 0 } as CSSProperties}
             >
               <DialogTitle id={titleId} className="text-[12.5px] text-foreground">
@@ -341,7 +341,7 @@ export function DiffControls(props: DiffControlsProps) {
                 size="icon"
                 aria-label="Close diff settings"
                 onClick={() => setOpen(false)}
-                className="h-7 w-7"
+                className="size-7"
               >
                 <MiniIcon name="none" />
               </Button>

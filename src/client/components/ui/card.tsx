@@ -19,7 +19,7 @@ export function Card({ className, ref, ...props }: CardProps) {
 }
 
 export function CardHeader({ className, ref, ...props }: CardProps) {
-  return <div ref={ref} className={cn("flex flex-col space-y-1.5 p-4", className)} {...props} />;
+  return <div ref={ref} className={cn("flex flex-col gap-y-1.5 p-4", className)} {...props} />;
 }
 
 export function CardTitle({ className, ref, ...props }: CardProps) {
