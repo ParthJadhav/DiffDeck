@@ -335,35 +335,30 @@ export async function startServer(
 
   let watchTimer: ReturnType<typeof setInterval> | undefined;
   if (options.watch === true) {
-    let lastSnapshotId = sessionStore.current().snapshotId;
-    let lastFingerprint =
-      typeof sessionSource === "object" &&
-      "initialSession" in sessionSource &&
-      sessionSource.fingerprint != null
-        ? sessionSource.fingerprint()
-        : lastSnapshotId;
-    watchTimer = setInterval(() => {
+    let polling = false;
+    const poll = async () => {
+      if (polling) return;
+      polling = true;
       try {
-        if (
+        const next =
           typeof sessionSource === "object" &&
           "initialSession" in sessionSource &&
-          sessionSource.fingerprint != null
-        ) {
-          const nextFingerprint = sessionSource.fingerprint();
-          if (nextFingerprint === lastFingerprint) return;
-          lastFingerprint = nextFingerprint;
-        }
-        const next = sessionStore.refresh();
-        if (next.snapshotId !== lastSnapshotId) {
-          lastSnapshotId = next.snapshotId;
+          sessionSource.poll != null
+            ? await sessionSource.poll()
+            : sessionStore.refresh();
+        if (next != null && next.snapshotId !== sessionStore.current().snapshotId) {
+          sessionStore.replace(next);
           notifyClients(eventClients, "snapshot", { snapshotId: next.snapshotId, reason: "watch" });
         }
       } catch (error) {
         notifyClients(eventClients, "error", {
           message: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        polling = false;
       }
-    }, options.watchInterval ?? 750);
+    };
+    watchTimer = setInterval(() => void poll(), options.watchInterval ?? 750);
     watchTimer.unref();
   }
 

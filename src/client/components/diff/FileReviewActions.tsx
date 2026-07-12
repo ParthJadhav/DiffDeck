@@ -7,7 +7,7 @@ import { Button } from "../ui/button.js";
 export function FileReviewActions({
   capabilities,
   hunkCount,
-  onRefresh,
+  onReload,
   onStructuralChange,
   path,
   snapshotId,
@@ -15,7 +15,7 @@ export function FileReviewActions({
 }: {
   capabilities?: SessionPayload["capabilities"];
   hunkCount: number;
-  onRefresh: () => void;
+  onReload: () => void;
   onStructuralChange: (output: string | null) => void;
   path: string;
   snapshotId: string;
@@ -74,7 +74,7 @@ export function FileReviewActions({
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? `Unable to ${action} ${scope}.`);
       toast.success(`${pastTense(action)} ${scope}.`);
-      onRefresh();
+      onReload();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {

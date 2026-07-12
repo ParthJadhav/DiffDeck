@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import { Virtuoso } from "react-virtuoso";
 import { summarizeDependencyDiff } from "../../lib/dependencyDiff.js";
+import type { DependencyChange } from "../../lib/dependencyDiff.js";
 import { Badge } from "../ui/badge.js";
 import { Button } from "../ui/button.js";
 
@@ -45,30 +47,32 @@ export function DependencyDiff({
             No package version changes could be extracted. Use the source diff for this file.
           </p>
         ) : (
-          <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-            {changes.map((change) => (
-              <div
-                key={change.name}
-                className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2 text-xs"
-              >
-                <span className="truncate font-mono">{change.name}</span>
-                <span className="font-mono text-muted-foreground">
-                  {change.oldVersion ?? "—"} → {change.newVersion ?? "—"}
-                </span>
-                <Badge
-                  variant={
-                    change.type === "removed" || change.type === "downgraded"
-                      ? "outline"
-                      : "success"
-                  }
-                >
-                  {change.type}
-                </Badge>
-              </div>
-            ))}
-          </div>
+          <Virtuoso
+            aria-label="Dependency change list"
+            data={changes}
+            computeItemKey={(_index, change) => change.name}
+            itemContent={(_index, change) => <DependencyChangeRow change={change} />}
+            style={{ height: Math.min(560, Math.max(36, changes.length * 36)) }}
+            className="overflow-hidden rounded-md border border-border"
+          />
         )}
       </section>
     </>
+  );
+}
+
+function DependencyChangeRow({ change }: { change: DependencyChange }) {
+  return (
+    <div className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-border px-3 py-2 text-xs last:border-b-0">
+      <span className="truncate font-mono">{change.name}</span>
+      <span className="font-mono text-muted-foreground">
+        {change.oldVersion ?? "—"} → {change.newVersion ?? "—"}
+      </span>
+      <Badge
+        variant={change.type === "removed" || change.type === "downgraded" ? "outline" : "success"}
+      >
+        {change.type}
+      </Badge>
+    </div>
   );
 }

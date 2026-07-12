@@ -94,7 +94,11 @@ describe("server capabilities", () => {
 
   test("keeps writes absent by default and rejects stale snapshots in write mode", async () => {
     const repo = createWritableRepo();
-    const build = () => buildDiffSession(repo, repo, []);
+    let buildCount = 0;
+    const build = () => {
+      buildCount += 1;
+      return buildDiffSession(repo, repo, []);
+    };
     const initial = build();
     const readOnly = await startServer(initial, 0, "127.0.0.1");
     servers.push(readOnly);
@@ -129,6 +133,9 @@ describe("server capabilities", () => {
       body: JSON.stringify({ action: "stage", path: "a.txt", snapshotId: initial.snapshotId }),
     });
     expect(success.status).toBe(200);
+    expect(buildCount).toBe(2);
+    expect((await fetch(`${writable.url}api/session`)).status).toBe(200);
+    expect(buildCount).toBe(2);
     expect(runGit(repo, ["diff", "--cached", "--name-only"]).trim()).toBe("a.txt");
   });
 
@@ -326,15 +333,27 @@ describe("server capabilities", () => {
     expect((await fetch(`${timeoutServer.url}api/structural?path=a.txt`)).status).toBe(504);
   });
 
-  test("watch polling rebuilds only after its cheap fingerprint changes", async () => {
+  test("watch polling installs an asynchronously prepared session without rebuilding it", async () => {
     const initial = createSession("watch-initial");
     const refreshed = createSession("watch-refreshed");
-    let fingerprint = "one";
+    let pendingSession: DiffSession | null = null;
+    let activePolls = 0;
+    let maxActivePolls = 0;
+    let pollCount = 0;
     let refreshCount = 0;
     const server = await startServer(
       {
-        fingerprint: () => fingerprint,
         initialSession: initial,
+        poll: async () => {
+          pollCount += 1;
+          activePolls += 1;
+          maxActivePolls = Math.max(maxActivePolls, activePolls);
+          await Bun.sleep(30);
+          const next = pendingSession;
+          pendingSession = null;
+          activePolls -= 1;
+          return next;
+        },
         refresh: () => {
           refreshCount += 1;
           return refreshed;
@@ -345,11 +364,16 @@ describe("server capabilities", () => {
       { watch: true, watchInterval: 20 },
     );
     servers.push(server);
-    await Bun.sleep(55);
+    await Bun.sleep(75);
+    expect(pollCount).toBeGreaterThan(0);
+    expect(maxActivePolls).toBe(1);
     expect(refreshCount).toBe(0);
-    fingerprint = "two";
-    await Bun.sleep(55);
-    expect(refreshCount).toBe(1);
+    pendingSession = refreshed;
+    await Bun.sleep(75);
+    expect(refreshCount).toBe(0);
+    expect(await (await fetch(`${server.url}api/session`)).json()).toMatchObject({
+      snapshotId: refreshed.snapshotId,
+    });
   });
 });
 

@@ -32,7 +32,7 @@ const hunkSeparators: HunkSeparatorMode = "custom";
 const LARGE_DIFF_LINE_THRESHOLD = 800;
 
 export function App() {
-  const { session, loading, refreshing, error, revision, refresh } = useSession();
+  const { session, loading, refreshing, error, revision, refresh, reload } = useSession();
 
   if (loading) {
     return <ShellState>Loading diff session…</ShellState>;
@@ -60,6 +60,7 @@ export function App() {
         <WorkerPoolRenderOptionsSync />
         <DiffDeckSession
           refresh={refresh}
+          reload={reload}
           refreshing={refreshing}
           revision={revision}
           session={session}
@@ -71,11 +72,13 @@ export function App() {
 
 function DiffDeckSession({
   refresh,
+  reload,
   refreshing,
   revision,
   session,
 }: {
   refresh: () => void;
+  reload: () => void;
   refreshing: boolean;
   revision: number;
   session: SessionPayload;
@@ -105,7 +108,7 @@ function DiffDeckSession({
     false,
   );
   const [autoRefresh, setAutoRefresh] = useLocalStorage("diffdeck.settings.autoRefresh", false);
-  useWatchEvents(session.capabilities?.watch === true, refresh, autoRefresh);
+  useWatchEvents(session.capabilities?.watch === true, reload, autoRefresh);
   const sessionFilesByPath = useMemo(
     () => new Map(session.files.map((file) => [file.path, file])),
     [session],
@@ -342,7 +345,7 @@ function DiffDeckSession({
     onRetryFileDiff: retryPath,
     onViewedFileChange: handleViewedFileChange,
     onVisiblePathChange: handleVisiblePathChange,
-    onSessionRefresh: refresh,
+    onSessionReload: reload,
     overflow,
     scrollSignal,
     selectedFile,

@@ -2,11 +2,15 @@
 
 import { readFileSync, realpathSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import open from "open";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildDiffSession, resolveRepoRoot } from "./git.js";
+import {
+  buildDiffSession,
+  buildDiffSessionFromRawDiff,
+  getRawDiffAsync,
+  resolveRepoRoot,
+} from "./git.js";
 import { startServer, type DiffSessionSource } from "./server.js";
 import type { CliOptions } from "./types.js";
 import { formatCliError } from "./errors.js";
@@ -209,30 +213,33 @@ async function main(): Promise<void> {
     buildDiffSession(repoRoot, requestedRepoPath, options.diffArgs, {
       debug: options.debug,
     });
-  const fingerprint = () => {
-    const result = spawnSync(
-      "git",
-      [
-        "-C",
-        repoRoot,
-        "-c",
-        "core.quotePath=false",
-        "diff",
-        "--binary",
-        "--no-color",
-        "--no-ext-diff",
-        ...options.diffArgs,
-      ],
-      { encoding: "buffer", maxBuffer: 100 * 1024 * 1024 },
-    );
-    if (result.status !== 0) return `${Date.now()}`;
-    return createHash("sha256").update(result.stdout).digest("hex");
-  };
   const session = buildSession();
+  let watchFingerprint = createHash("sha256").update(session.rawDiff).digest("hex");
+  const poll = async () => {
+    const rawDiff = await getRawDiffAsync(repoRoot, options.diffArgs);
+    const nextFingerprint = createHash("sha256").update(rawDiff).digest("hex");
+    if (nextFingerprint === watchFingerprint) return null;
+    const nextSession = buildDiffSessionFromRawDiff(
+      repoRoot,
+      requestedRepoPath,
+      options.diffArgs,
+      rawDiff,
+      { debug: options.debug },
+    );
+    watchFingerprint = nextFingerprint;
+    return nextSession;
+  };
   const remote = !isLoopbackHost(options.host);
   const capabilityToken = remote ? randomBytes(24).toString("base64url") : undefined;
   const server = await startServerWithFallback(
-    { fingerprint, initialSession: session, refresh: buildSession },
+    {
+      initialSession: session,
+      onRefresh: (nextSession) => {
+        watchFingerprint = createHash("sha256").update(nextSession.rawDiff).digest("hex");
+      },
+      poll,
+      refresh: buildSession,
+    },
     { ...options, capabilityToken },
   );
 

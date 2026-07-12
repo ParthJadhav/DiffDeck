@@ -5,7 +5,6 @@ import {
   type FileContents,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
 import { AlertCircle, FileWarning, ImageOff, LoaderCircle } from "lucide-react";
 import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
@@ -29,6 +28,9 @@ import { ImageDiff } from "./diff/ImageDiff.js";
 import { DependencyDiff } from "./diff/DependencyDiff.js";
 import { FileReviewActions } from "./diff/FileReviewActions.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
+import { MultiFileScroller } from "./diff/MultiFileScroller.js";
+
+const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
 
 export interface DiffWorkspaceProps {
   annotationsByFile: Readonly<Record<string, CommentAnnotation[]>>;
@@ -50,7 +52,7 @@ export interface DiffWorkspaceProps {
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
   onRetryFileDiff: (path: string) => void;
-  onSessionRefresh: () => void;
+  onSessionReload: () => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
   overflow: OverflowMode;
@@ -82,7 +84,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     onCommentSaved,
     onRequestFileDiff,
     onRetryFileDiff,
-    onSessionRefresh,
+    onSessionReload,
     onViewedFileChange,
     onVisiblePathChange,
     overflow,
@@ -162,355 +164,39 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       <section className="min-h-0 min-w-0 flex-1">
         <MultiFileScroller
           key={sessionRevision}
-          annotationsByFile={annotationsByFile}
-          capabilities={capabilities}
-          diffOptions={diffOptions}
           collapsedFilePaths={collapsedFilePaths}
-          fileDiffs={fileDiffs}
-          fileDiffErrors={fileDiffErrors}
           files={files}
-          onAnnotationsChange={onAnnotationsChange}
-          onCollapsedFileChange={onCollapsedFileChange}
-          onCommentDeleted={onCommentDeleted}
-          onCommentSaved={onCommentSaved}
           onRequestFileDiff={onRequestFileDiff}
-          onRetryFileDiff={onRetryFileDiff}
-          onSessionRefresh={onSessionRefresh}
-          onViewedFileChange={onViewedFileChange}
           onVisiblePathChange={onVisiblePathChange}
+          renderFile={(file, selectedLines, onSelectedLinesChange) => (
+            <FileDiffSection
+              collapsed={collapsedFilePaths.has(file.path)}
+              capabilities={capabilities}
+              commentAnnotations={annotationsByFile[file.path] ?? EMPTY_ANNOTATIONS}
+              diffOptions={diffOptions}
+              file={file}
+              fileDiff={fileDiffs[file.path] ?? null}
+              fileDiffError={fileDiffErrors[file.path] ?? null}
+              onAnnotationsChange={onAnnotationsChange}
+              onCollapsedChange={onCollapsedFileChange}
+              onCommentDeleted={onCommentDeleted}
+              onCommentSaved={onCommentSaved}
+              onRetryFileDiff={onRetryFileDiff}
+              onSessionReload={onSessionReload}
+              onSelectedLinesChange={onSelectedLinesChange}
+              onViewedChange={onViewedFileChange}
+              selectedLines={selectedLines}
+              sessionRevision={sessionRevision}
+              snapshotId={snapshotId}
+              viewed={viewedFilePaths.has(file.path)}
+            />
+          )}
           scrollSignal={scrollSignal}
           selectedPath={selectedPath}
-          snapshotId={snapshotId}
-          sessionRevision={sessionRevision}
-          viewedFilePaths={viewedFilePaths}
         />
       </section>
     </main>
   );
-}
-
-const VIRTUOSO_OVERSCAN_PX = 1200;
-const VIRTUOSO_INCREASE_VIEWPORT_PX = 600;
-const VIRTUOSO_MIN_ITEM_HEIGHT_PX = 40;
-const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
-
-const computeItemKey = (_index: number, file: DiffFileSummary) => file.path;
-const measureFileItem = (element: HTMLElement) =>
-  Math.max(
-    element.getBoundingClientRect().height,
-    element.offsetHeight,
-    VIRTUOSO_MIN_ITEM_HEIGHT_PX,
-  );
-
-type SelectedLinesByFile = Record<string, SelectedLineRange | null>;
-
-function MultiFileScroller(props: {
-  annotationsByFile: Readonly<Record<string, CommentAnnotation[]>>;
-  capabilities?: SessionPayload["capabilities"];
-  collapsedFilePaths: ReadonlySet<string>;
-  diffOptions: Parameters<typeof FileDiff>[0]["options"];
-  fileDiffs: Record<string, FileDiffMetadata>;
-  fileDiffErrors: Record<string, string>;
-  files: DiffFileSummary[];
-  onAnnotationsChange: (
-    path: string,
-    updater: (current: CommentAnnotation[]) => CommentAnnotation[],
-  ) => void;
-  onCollapsedFileChange: (path: string, value: boolean) => void;
-  onCommentDeleted: (id: string) => void;
-  onCommentSaved: (comment: CommentExportRecord) => void;
-  onRequestFileDiff: (path: string) => void;
-  onRetryFileDiff: (path: string) => void;
-  onSessionRefresh: () => void;
-  onViewedFileChange: (path: string, value: boolean) => void;
-  onVisiblePathChange: (path: string) => void;
-  scrollSignal: number;
-  selectedPath: string | null;
-  snapshotId: string;
-  sessionRevision: number;
-  viewedFilePaths: ReadonlySet<string>;
-}) {
-  const {
-    annotationsByFile,
-    capabilities,
-    collapsedFilePaths,
-    diffOptions,
-    fileDiffs,
-    fileDiffErrors,
-    files,
-    onAnnotationsChange,
-    onCollapsedFileChange,
-    onCommentDeleted,
-    onCommentSaved,
-    onRequestFileDiff,
-    onRetryFileDiff,
-    onSessionRefresh,
-    onViewedFileChange,
-    onVisiblePathChange,
-    scrollSignal,
-    selectedPath,
-    snapshotId,
-    sessionRevision,
-    viewedFilePaths,
-  } = props;
-
-  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  const lastReportedPathRef = useRef<string | null>(null);
-  const suppressObserverUntilRef = useRef(
-    typeof performance === "undefined" ? 0 : performance.now() + 1_000,
-  );
-  const pinnedPathRef = useRef<string | null>(selectedPath);
-  const visibleObserverCleanupRef = useRef<(() => void) | null>(null);
-  const fileIndexByPath = useMemo(
-    () => new Map(files.map((file, index) => [file.path, index])),
-    [files],
-  );
-
-  // Per-file UI state lives here, not inside FileDiffSection, so a row that
-  // scrolls out of the virtualized window doesn't lose its selection or its
-  // half-typed comment when it remounts.
-  const [selectedLines, setSelectedLines] = useState<SelectedLinesByFile>({});
-
-  const handleSelectedLinesChange = useCallback((path: string, range: SelectedLineRange | null) => {
-    setSelectedLines((current) => {
-      if (current[path] === range) return current;
-      if (range == null) {
-        if (!(path in current)) return current;
-        const { [path]: _removed, ...rest } = current;
-        return rest;
-      }
-      return { ...current, [path]: range };
-    });
-  }, []);
-
-  const handleRangeChanged = useCallback(
-    (range: { startIndex: number; endIndex: number }) => {
-      for (let i = range.startIndex; i <= range.endIndex; i++) {
-        const file = files[i];
-        if (file == null) continue;
-        if (file.hasMergeConflicts === true || file.isBinary === true) continue;
-        if (collapsedFilePaths.has(file.path)) continue;
-        onRequestFileDiff(file.path);
-      }
-    },
-    [collapsedFilePaths, files, onRequestFileDiff],
-  );
-
-  const handleScrollerRef = useCallback(
-    (ref: HTMLElement | Window | null) => {
-      visibleObserverCleanupRef.current?.();
-      visibleObserverCleanupRef.current = null;
-      if (!(ref instanceof HTMLElement)) return;
-      visibleObserverCleanupRef.current = installVisiblePathObserver(ref, {
-        lastReportedPathRef,
-        onVisiblePathChange,
-        pinnedPathRef,
-        suppressObserverUntilRef,
-      });
-    },
-    [onVisiblePathChange],
-  );
-
-  useEffect(() => {
-    return cleanupVisibleObserver(visibleObserverCleanupRef);
-  }, []);
-
-  const handledScrollRequestRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (selectedPath == null) return;
-    const scrollRequest = `${scrollSignal}:${selectedPath}`;
-    if (handledScrollRequestRef.current === scrollRequest) return;
-    const index = fileIndexByPath.get(selectedPath);
-    if (index == null) return;
-    handledScrollRequestRef.current = scrollRequest;
-    lastReportedPathRef.current = selectedPath;
-    pinnedPathRef.current = selectedPath;
-    suppressObserverUntilRef.current = performance.now() + 350;
-    const scrollToSelected = () => virtuosoRef.current?.scrollToIndex({ index, align: "start" });
-    scrollToSelected();
-    const animationFrame = window.requestAnimationFrame(scrollToSelected);
-    const retryTimer = window.setTimeout(scrollToSelected, 250);
-
-    let released = false;
-    const release = () => {
-      if (released) return;
-      released = true;
-      pinnedPathRef.current = null;
-      window.removeEventListener("wheel", release);
-      window.removeEventListener("touchstart", release);
-      window.removeEventListener("keydown", release);
-    };
-    window.addEventListener("wheel", release, { passive: true, once: true });
-    window.addEventListener("touchstart", release, { passive: true, once: true });
-    window.addEventListener("keydown", release, { once: true });
-    const timer = window.setTimeout(release, 1500);
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      window.clearTimeout(retryTimer);
-      window.clearTimeout(timer);
-      release();
-    };
-  }, [fileIndexByPath, scrollSignal, selectedPath]);
-
-  const itemContent = useCallback(
-    (_index: number, file: DiffFileSummary) => (
-      <Card
-        aria-current={file.path === selectedPath ? "location" : undefined}
-        data-file-path={file.path}
-        data-selected={file.path === selectedPath ? "true" : undefined}
-        className="app-file-card m-2.5 scroll-mt-2.5 overflow-clip rounded-lg border-border"
-      >
-        <FileDiffSection
-          collapsed={collapsedFilePaths.has(file.path)}
-          capabilities={capabilities}
-          commentAnnotations={annotationsByFile[file.path] ?? EMPTY_ANNOTATIONS}
-          diffOptions={diffOptions}
-          file={file}
-          fileDiff={fileDiffs[file.path] ?? null}
-          fileDiffError={fileDiffErrors[file.path] ?? null}
-          onAnnotationsChange={onAnnotationsChange}
-          onCollapsedChange={onCollapsedFileChange}
-          onCommentDeleted={onCommentDeleted}
-          onCommentSaved={onCommentSaved}
-          onRetryFileDiff={onRetryFileDiff}
-          onSessionRefresh={onSessionRefresh}
-          onSelectedLinesChange={handleSelectedLinesChange}
-          onViewedChange={onViewedFileChange}
-          selectedLines={selectedLines[file.path] ?? null}
-          sessionRevision={sessionRevision}
-          snapshotId={snapshotId}
-          viewed={viewedFilePaths.has(file.path)}
-        />
-      </Card>
-    ),
-    [
-      annotationsByFile,
-      capabilities,
-      collapsedFilePaths,
-      diffOptions,
-      fileDiffs,
-      fileDiffErrors,
-      handleSelectedLinesChange,
-      onCollapsedFileChange,
-      onCommentDeleted,
-      onCommentSaved,
-      onRetryFileDiff,
-      onSessionRefresh,
-      onAnnotationsChange,
-      onViewedFileChange,
-      selectedLines,
-      selectedPath,
-      sessionRevision,
-      snapshotId,
-      viewedFilePaths,
-    ],
-  );
-
-  return (
-    <Virtuoso<DiffFileSummary>
-      ref={virtuosoRef}
-      data={files}
-      itemContent={itemContent}
-      computeItemKey={computeItemKey}
-      defaultItemHeight={VIRTUOSO_MIN_ITEM_HEIGHT_PX}
-      rangeChanged={handleRangeChanged}
-      itemSize={measureFileItem}
-      overscan={VIRTUOSO_OVERSCAN_PX}
-      increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_PX}
-      initialTopMostItemIndex={fileIndexByPath.get(selectedPath ?? "") ?? 0}
-      scrollerRef={handleScrollerRef}
-      className="app-virtuoso h-full"
-    />
-  );
-}
-
-function installVisiblePathObserver(
-  root: HTMLElement,
-  refs: {
-    lastReportedPathRef: { current: string | null };
-    onVisiblePathChange: (path: string) => void;
-    pinnedPathRef: { current: string | null };
-    suppressObserverUntilRef: { current: number };
-  },
-): () => void {
-  const visibility = new Map<string, Element>();
-  const observed = new WeakSet<Element>();
-  const ABOVE_THRESHOLD = 24;
-  const intersectionObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const path = (entry.target as HTMLElement).dataset.filePath;
-        if (path == null) continue;
-        if (entry.isIntersecting) {
-          visibility.set(path, entry.target);
-        } else {
-          visibility.delete(path);
-        }
-      }
-      if (performance.now() < refs.suppressObserverUntilRef.current) {
-        return;
-      }
-      if (refs.pinnedPathRef.current != null && visibility.has(refs.pinnedPathRef.current)) {
-        if (refs.lastReportedPathRef.current !== refs.pinnedPathRef.current) {
-          refs.lastReportedPathRef.current = refs.pinnedPathRef.current;
-          refs.onVisiblePathChange(refs.pinnedPathRef.current);
-        }
-        return;
-      }
-      refs.pinnedPathRef.current = null;
-      const rootTop = root.getBoundingClientRect().top;
-      let above: { path: string; top: number } | null = null;
-      let below: { path: string; top: number } | null = null;
-      for (const [path, node] of visibility) {
-        const top = node.getBoundingClientRect().top - rootTop;
-        if (top <= ABOVE_THRESHOLD) {
-          if (above == null || top > above.top) above = { path, top };
-        } else if (below == null || top < below.top) {
-          below = { path, top };
-        }
-      }
-      const best = above ?? below;
-      if (best != null && best.path !== refs.lastReportedPathRef.current) {
-        refs.lastReportedPathRef.current = best.path;
-        refs.onVisiblePathChange(best.path);
-      }
-    },
-    { root, threshold: 0 },
-  );
-  const adopt = (target: Element) => {
-    const candidates = target.matches?.("[data-file-path]")
-      ? [target]
-      : Array.from(target.querySelectorAll<HTMLElement>("[data-file-path]"));
-    for (const node of candidates) {
-      if (!observed.has(node)) {
-        observed.add(node);
-        intersectionObserver.observe(node);
-      }
-    }
-  };
-  adopt(root);
-  const mutationObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node instanceof Element) adopt(node);
-      }
-    }
-  });
-  mutationObserver.observe(root, { childList: true, subtree: true });
-  return () => {
-    intersectionObserver.disconnect();
-    mutationObserver.disconnect();
-  };
-}
-
-function cleanupVisibleObserver(ref: { current: (() => void) | null }) {
-  const cleanup = ref.current;
-  return () => {
-    cleanup?.();
-    if (ref.current === cleanup) {
-      ref.current = null;
-    }
-  };
 }
 
 // Files at or above this changed-line count freeze the main thread for several
@@ -546,7 +232,7 @@ const FileDiffSection = memo(function FileDiffSection({
   onCommentDeleted,
   onCommentSaved,
   onRetryFileDiff,
-  onSessionRefresh,
+  onSessionReload,
   onSelectedLinesChange,
   onViewedChange,
   selectedLines,
@@ -569,7 +255,7 @@ const FileDiffSection = memo(function FileDiffSection({
   onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRetryFileDiff: (path: string) => void;
-  onSessionRefresh: () => void;
+  onSessionReload: () => void;
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
   selectedLines: SelectedLineRange | null;
@@ -592,7 +278,7 @@ const FileDiffSection = memo(function FileDiffSection({
       <FileReviewActions
         capabilities={capabilities}
         hunkCount={fileDiff?.hunks.length ?? 0}
-        onRefresh={onSessionRefresh}
+        onReload={onSessionReload}
         onStructuralChange={setStructuralOutput}
         path={file.path}
         snapshotId={snapshotId}
@@ -603,7 +289,7 @@ const FileDiffSection = memo(function FileDiffSection({
       capabilities,
       file.path,
       fileDiff?.hunks.length,
-      onSessionRefresh,
+      onSessionReload,
       snapshotId,
       structuralOutput,
     ],
