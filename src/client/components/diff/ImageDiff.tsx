@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Images, Layers3, PanelLeftClose } from "lucide-react";
+import { Columns2, Layers3, PanelLeftClose } from "lucide-react";
 import { fetchJson } from "../../lib/api.js";
+import { cn } from "../../lib/cn.js";
 import { Button } from "../ui/button.js";
 
 type Mode = "side-by-side" | "overlay" | "swipe";
@@ -58,18 +59,24 @@ export function ImageDiff({ path }: { path: string }) {
   return (
     <section aria-label={`Image diff for ${path}`} className="space-y-3 p-3">
       {both ? (
-        <div className="flex gap-1" role="group" aria-label="Image comparison mode">
+        <div
+          className="app-image-mode-switch inline-flex items-center gap-0.5 rounded-md border border-border/70 bg-muted/45 p-0.5"
+          role="group"
+          aria-label="Image comparison mode"
+        >
           <ModeButton
             active={activeMode === "side-by-side"}
             onClick={() => setMode("side-by-side")}
-            icon={<Images />}
+            icon={<Columns2 />}
+            label="Side by side"
           >
-            Side by side
+            Split
           </ModeButton>
           <ModeButton
             active={activeMode === "overlay"}
             onClick={() => setMode("overlay")}
             icon={<Layers3 />}
+            label="Overlay"
           >
             Overlay
           </ModeButton>
@@ -77,6 +84,7 @@ export function ImageDiff({ path }: { path: string }) {
             active={activeMode === "swipe"}
             onClick={() => setMode("swipe")}
             icon={<PanelLeftClose />}
+            label="Swipe"
           >
             Swipe
           </ModeButton>
@@ -133,20 +141,30 @@ function ModeButton({
   active,
   children,
   icon,
+  label,
   onClick,
 }: {
   active: boolean;
   children: React.ReactNode;
   icon: React.ReactNode;
+  label: string;
   onClick: () => void;
 }) {
   return (
     <Button
       type="button"
-      variant={active ? "secondary" : "ghost"}
+      variant="ghost"
+      size="xs"
+      aria-label={label}
       aria-pressed={active}
+      title={label}
       onClick={onClick}
-      className="h-8 text-xs"
+      className={cn(
+        "h-7 gap-1.5 rounded-[0.3rem] px-2 text-[11px] font-medium shadow-none [&_svg]:size-3.5",
+        active
+          ? "bg-card text-foreground shadow-sm hover:bg-card"
+          : "text-muted-foreground hover:text-foreground",
+      )}
     >
       {icon}
       {children}
