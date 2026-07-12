@@ -32,7 +32,8 @@ export function useSession(): UseSessionResult {
     setError(null);
 
     try {
-      const params = new URLSearchParams({ refresh: "1", t: String(Date.now()) });
+      const params = new URLSearchParams({ t: String(Date.now()) });
+      if (!useInitialLoadingState) params.set("refresh", "1");
       const nextSession = await fetchJson<SessionPayload>(`/api/session?${params.toString()}`);
       if (requestIdRef.current === requestId) {
         setSession(nextSession);

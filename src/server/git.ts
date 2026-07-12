@@ -628,6 +628,7 @@ function createSummary(fileDiff: FileDiffMetadata): DiffFileSummary {
   return {
     path: fileDiff.name,
     prevPath: fileDiff.prevName,
+    diffId: fileDiff.cacheKey ?? buildCacheKey("file", fileDiff.name, JSON.stringify(fileDiff)),
     changeType: fileDiff.type,
     gitStatus: mapChangeTypeToGitStatus(fileDiff.type),
     additions,
@@ -720,6 +721,7 @@ export function buildDiffSession(
     }
     files.push({
       path,
+      diffId: buildCacheKey("conflict", path, contents),
       changeType: "change",
       gitStatus: "modified",
       additions: 0,
@@ -728,7 +730,14 @@ export function buildDiffSession(
     });
   }
 
+  const snapshotId = buildCacheKey(
+    "session",
+    `${repoRoot}:${diffArgs.join("\0")}`,
+    files.map((file) => `${file.path}:${file.diffId}`).join("\n"),
+  );
+
   return {
+    snapshotId,
     repoRoot,
     currentDirectory: currentDirectoryDisplay,
     diffArgs,

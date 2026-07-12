@@ -4,6 +4,7 @@ import type { GitStatus } from "@pierre/trees";
 export interface DiffFileSummary {
   path: string;
   prevPath?: string;
+  diffId: string;
   changeType: FileDiffMetadata["type"];
   gitStatus: GitStatus;
   additions: number;
@@ -13,6 +14,7 @@ export interface DiffFileSummary {
 }
 
 export interface DiffSession {
+  snapshotId: string;
   repoRoot: string;
   currentDirectory: string;
   diffArgs: string[];
@@ -25,10 +27,16 @@ export interface DiffSession {
 export interface CliOptions {
   repo: string;
   port: number;
+  portExplicit: boolean;
   host: string;
   openBrowser: boolean;
   debug: boolean;
   diffArgs: string[];
+  editor?: string;
+  structural: boolean;
+  watch: boolean;
+  watchInterval: number;
+  write: boolean;
 }
 
 export interface DiffBuildOptions {

@@ -25,10 +25,12 @@ import { Label } from "./ui/label.js";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group.js";
 
 export interface DiffControlsProps {
+  autoRefresh: boolean;
   diffStyle: DiffLayout;
   disableBackground: boolean;
   expandUnchanged: boolean;
   onDiffStyleChange: (value: DiffLayout) => void;
+  onAutoRefreshChange: (value: boolean) => void;
   onDisableBackgroundChange: (value: boolean) => void;
   onExpandUnchangedChange: (value: boolean) => void;
   onOverflowChange: (value: OverflowMode) => void;
@@ -225,10 +227,12 @@ function MiniIcon({
 
 export function DiffControls(props: DiffControlsProps) {
   const {
+    autoRefresh,
     diffStyle,
     disableBackground,
     expandUnchanged,
     onDiffStyleChange,
+    onAutoRefreshChange,
     onDisableBackgroundChange,
     onExpandUnchangedChange,
     onOverflowChange,
@@ -291,6 +295,12 @@ export function DiffControls(props: DiffControlsProps) {
     const timer = window.setTimeout(() => setPanelMounted(false), 140);
     return () => window.clearTimeout(timer);
   }, [open, panelMounted]);
+
+  useEffect(() => {
+    const openSettings = () => setOpen(true);
+    window.addEventListener("diffdeck:open-settings", openSettings);
+    return () => window.removeEventListener("diffdeck:open-settings", openSettings);
+  }, []);
 
   useEffect(() => {
     if (!open || !panelMounted) return;
@@ -410,6 +420,9 @@ export function DiffControls(props: DiffControlsProps) {
                     onChange={(checked) => onDisableBackgroundChange(!checked)}
                   >
                     Backgrounds
+                  </CheckLabel>
+                  <CheckLabel checked={autoRefresh} onChange={onAutoRefreshChange}>
+                    Auto refresh
                   </CheckLabel>
                 </div>
               </ControlSection>

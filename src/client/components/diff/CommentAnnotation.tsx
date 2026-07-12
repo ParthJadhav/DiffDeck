@@ -31,10 +31,14 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
     draftBodyRef.current = body;
   }, [body, id]);
 
-  const handleDraftChange = useCallback((nextBody: string) => {
-    draftBodyRef.current = nextBody;
-    setDraftBody(nextBody);
-  }, []);
+  const handleDraftChange = useCallback(
+    (nextBody: string) => {
+      draftBodyRef.current = nextBody;
+      setDraftBody(nextBody);
+      onBodyChange(id, nextBody);
+    },
+    [id, onBodyChange],
+  );
 
   const flushDraftBody = useCallback(() => {
     if (kind === "comment-form" && draftBodyRef.current !== body) {

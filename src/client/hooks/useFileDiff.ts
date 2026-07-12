@@ -4,8 +4,10 @@ import { fetchJson } from "../lib/api.js";
 
 export interface UseFileDiffResult {
   fileDiffs: Record<string, FileDiffMetadata>;
+  fileDiffErrors: Record<string, string>;
   requestPath: (path: string) => void;
   reset: () => void;
+  retryPath: (path: string) => void;
 }
 
 // On very large diffs the IntersectionObserver in DiffWorkspace can enqueue
@@ -15,15 +17,15 @@ export interface UseFileDiffResult {
 // own queue with a fixed concurrency to keep the network layer healthy.
 const MAX_INFLIGHT = 8;
 
-export function useFileDiff(onError: (message: string) => void): UseFileDiffResult {
+export function useFileDiff(): UseFileDiffResult {
   const [fileDiffs, setFileDiffs] = useState<Record<string, FileDiffMetadata>>({});
+  const [fileDiffErrors, setFileDiffErrors] = useState<Record<string, string>>({});
   const inflightRef = useRef<Set<string>>(new Set());
   const loadedRef = useRef<Set<string>>(new Set());
   const queueRef = useRef<string[]>([]);
   const queuedSetRef = useRef<Set<string>>(new Set());
   const generationRef = useRef(0);
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+  const controllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const dispatchNext = useCallback(() => {
     while (inflightRef.current.size < MAX_INFLIGHT && queueRef.current.length > 0) {
@@ -32,21 +34,33 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
       queuedSetRef.current.delete(path);
       if (loadedRef.current.has(path) || inflightRef.current.has(path)) continue;
       inflightRef.current.add(path);
+      const controller = new AbortController();
+      controllersRef.current.set(path, controller);
       const generation = generationRef.current;
       const params = new URLSearchParams({ path });
-      void fetchJson<FileDiffMetadata>(`/api/file-diff?${params.toString()}`)
+      void fetchJson<FileDiffMetadata>(`/api/file-diff?${params.toString()}`, {
+        signal: controller.signal,
+      })
         .then((fileDiff) => {
           if (generationRef.current !== generation) return;
           loadedRef.current.add(path);
           setFileDiffs((current) => ({ ...current, [path]: fileDiff }));
+          setFileDiffErrors((current) => {
+            if (!(path in current)) return current;
+            const { [path]: _removed, ...rest } = current;
+            return rest;
+          });
         })
         .catch((requestError) => {
           if (generationRef.current !== generation) return;
-          onErrorRef.current(
-            requestError instanceof Error ? requestError.message : String(requestError),
-          );
+          if (requestError instanceof DOMException && requestError.name === "AbortError") return;
+          setFileDiffErrors((current) => ({
+            ...current,
+            [path]: requestError instanceof Error ? requestError.message : String(requestError),
+          }));
         })
         .finally(() => {
+          controllersRef.current.delete(path);
           inflightRef.current.delete(path);
           if (generationRef.current === generation) dispatchNext();
         });
@@ -67,12 +81,28 @@ export function useFileDiff(onError: (message: string) => void): UseFileDiffResu
 
   const reset = useCallback(() => {
     generationRef.current += 1;
+    for (const controller of controllersRef.current.values()) controller.abort();
+    controllersRef.current.clear();
     inflightRef.current.clear();
     loadedRef.current.clear();
     queueRef.current = [];
     queuedSetRef.current.clear();
     setFileDiffs({});
+    setFileDiffErrors({});
   }, []);
 
-  return { fileDiffs, requestPath, reset };
+  const retryPath = useCallback(
+    (path: string) => {
+      loadedRef.current.delete(path);
+      setFileDiffErrors((current) => {
+        if (!(path in current)) return current;
+        const { [path]: _removed, ...rest } = current;
+        return rest;
+      });
+      requestPath(path);
+    },
+    [requestPath],
+  );
+
+  return { fileDiffErrors, fileDiffs, requestPath, reset, retryPath };
 }

@@ -15,6 +15,8 @@ export interface CommentExportRecord {
   id: string;
   lineNumber: number;
   side: AnnotationSide;
+  snapshotId?: string;
+  status?: "open" | "resolved" | "stale";
 }
 
 export function buildCommentContext({
@@ -82,7 +84,7 @@ function buildDiffContext(
 
   for (let currentLine = startLine; currentLine <= endLine; currentLine += 1) {
     const lineIndex = match.lineIndex + currentLine - match.start;
-    const content = lines[lineIndex];
+    const content = normalizeContextLine(lines[lineIndex]);
     if (content == null) continue;
     contextLines.push({
       content,
@@ -104,7 +106,7 @@ function buildFullFileContext(lines: string[], lineNumber: number): CommentConte
 
   for (let lineIndex = startIndex; lineIndex <= endIndex; lineIndex += 1) {
     contextLines.push({
-      content: lines[lineIndex] ?? "",
+      content: normalizeContextLine(lines[lineIndex]),
       lineNumber: lineIndex + 1,
       target: lineIndex === targetIndex,
     });
@@ -146,7 +148,7 @@ function formatContextBlock(record: CommentExportRecord): string {
   const rows = record.contextLines.map((line) => {
     const marker = line.target ? ">" : " ";
     const lineNumber = String(line.lineNumber).padStart(lineNumberWidth, " ");
-    return `${marker} ${lineNumber} | ${line.content}`;
+    return `${marker} ${lineNumber} | ${normalizeContextLine(line.content)}`;
   });
   const fence = getFence(rows);
   const language = getFenceLanguage(record.filePath);
@@ -173,4 +175,8 @@ function getFenceLanguage(filePath: string): string {
 
 function splitLines(contents: string): string[] {
   return contents.replace(/\r\n/g, "\n").split("\n");
+}
+
+function normalizeContextLine(content: string | undefined): string {
+  return (content ?? "").replace(/(?:\r\n|\r|\n)$/, "");
 }

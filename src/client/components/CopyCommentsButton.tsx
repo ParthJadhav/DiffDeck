@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Trash2, X } from "lucide-react";
-import { formatCommentExport, type CommentExportRecord } from "../lib/commentExport.js";
+import { Check, Copy, Download, Send, Trash2, X } from "lucide-react";
+import type { CommentExportRecord } from "../lib/commentExport.js";
+import { fetchWithCapability, withCapabilityToken } from "../lib/api.js";
+import {
+  createReviewPacket,
+  formatReviewPacketJson,
+  formatReviewPacketMarkdown,
+} from "../lib/reviewPacket.js";
 import { cn } from "../lib/cn.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
@@ -9,10 +15,20 @@ type CopyStatus = "idle" | "copied" | "failed";
 
 export function CopyCommentsButton({
   comments,
+  diffArgs,
   onClearAll,
+  repoRoot,
+  snapshotId,
+  totalFiles,
+  viewedFiles,
 }: {
   comments: CommentExportRecord[];
+  diffArgs: string[];
   onClearAll: () => void;
+  repoRoot: string;
+  snapshotId: string;
+  totalFiles: number;
+  viewedFiles: number;
 }) {
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const [clearConfirmation, setClearConfirmation] = useState({ active: false, commentCount: 0 });
@@ -20,10 +36,12 @@ export function CopyCommentsButton({
   const commentLabel = commentCount === 1 ? "comment" : "comments";
   const isConfirmingClear =
     clearConfirmation.active && clearConfirmation.commentCount === commentCount;
-  const copyText = useMemo(
-    () => (commentCount === 0 ? "" : formatCommentExport(comments)),
-    [comments, commentCount],
+  const packet = useMemo(
+    () => createReviewPacket({ comments, diffArgs, repoRoot, snapshotId, totalFiles, viewedFiles }),
+    [comments, diffArgs, repoRoot, snapshotId, totalFiles, viewedFiles],
   );
+  const copyText = useMemo(() => formatReviewPacketMarkdown(packet), [packet]);
+  const jsonPacket = useMemo(() => formatReviewPacketJson(packet), [packet]);
 
   useEffect(() => {
     if (copyStatus === "idle") return;
@@ -61,6 +79,20 @@ export function CopyCommentsButton({
     }
     onClearAll();
     setClearConfirmation({ active: false, commentCount: 0 });
+  };
+
+  const handleSend = async () => {
+    try {
+      const response = await fetchWithCapability("/api/review-packet", {
+        body: formatReviewPacketJson(packet),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Terminal submission failed");
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
   };
 
   return (
@@ -108,6 +140,31 @@ export function CopyCommentsButton({
           </span>
         </Badge>
       </Button>
+      <div className="grid grid-cols-2 gap-1.5">
+        <form action={withCapabilityToken("/api/review-packet/download")} method="post">
+          <input type="hidden" name="packet" value={jsonPacket} />
+          <Button
+            aria-label="Download review packet as JSON"
+            type="submit"
+            variant="outline"
+            title="Download JSON packet"
+            className="h-9 w-full justify-start px-2 text-[11.5px]"
+          >
+            <Download className="size-3.5" />
+            JSON
+          </Button>
+        </form>
+        <Button
+          variant="outline"
+          onClick={handleSend}
+          aria-label="Send review packet to terminal"
+          title="Print packet in the DiffDeck terminal"
+          className="h-9 justify-start px-2 text-[11.5px]"
+        >
+          <Send className="size-3.5" />
+          Terminal
+        </Button>
+      </div>
       <Button
         variant={isConfirmingClear ? "destructive" : "outline"}
         onClick={handleClearClick}

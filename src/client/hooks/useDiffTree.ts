@@ -167,7 +167,7 @@ export function useDiffTree({
   }
   const treeModel = treeModelRef.current;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     treeModel.resetPaths(filePaths, { preparedInput });
     treeModel.setGitStatus(gitStatuses);
   }, [filePaths, gitStatuses, preparedInput, treeModel]);

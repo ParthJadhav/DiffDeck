@@ -1,13 +1,7 @@
 import type { AnnotationSide, DiffLineAnnotation } from "@pierre/diffs";
+import type { ReviewAnnotationMetadata } from "../../lib/reviewSession.js";
 
-export type CommentAnnotationMetadata = {
-  body: string;
-  id: string;
-  kind: "comment-form" | "comment";
-  // Set when the form is reopened to edit an existing comment. Cancel restores
-  // body + kind from this snapshot instead of removing the annotation.
-  previousBody?: string;
-};
+export type CommentAnnotationMetadata = ReviewAnnotationMetadata;
 
 export type CommentAnnotation = DiffLineAnnotation<CommentAnnotationMetadata>;
 
