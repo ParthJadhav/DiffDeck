@@ -15,6 +15,7 @@ export interface SidebarProps {
   refreshing: boolean;
   totals: { additions: number; deletions: number };
   treeModel: TreeModel;
+  viewedCount: number;
 }
 
 export function Sidebar({
@@ -25,9 +26,12 @@ export function Sidebar({
   refreshing,
   totals,
   treeModel,
+  viewedCount,
 }: SidebarProps) {
   const headerLabel = buildHeader(diffArgs);
   const treeHostRef = useRef<HTMLDivElement | null>(null);
+  const safeViewedCount = Math.min(viewedCount, fileCount);
+  const reviewProgress = fileCount === 0 ? 0 : (safeViewedCount / fileCount) * 100;
 
   useEffect(() => {
     const root = treeHostRef.current;
@@ -63,7 +67,10 @@ export function Sidebar({
   }, [treeModel]);
 
   return (
-    <aside className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_oklch(var(--border)/0.7)] lg:shadow-none">
+    <aside
+      aria-label="Changed files and review controls"
+      className="app-sidebar flex h-full min-h-0 flex-col overflow-hidden shadow-[inset_0_-1px_0_oklch(var(--border)/0.7)] lg:shadow-none"
+    >
       <div className="app-sidebar-header flex h-10 items-center gap-1 px-3">
         <span className="font-mono text-[12px] font-semibold text-foreground">Diffdeck</span>
         <Badge
@@ -124,6 +131,22 @@ export function Sidebar({
           />
         )}
       </div>
+      {fileCount > 0 ? (
+        <div
+          className="app-sidebar-review-status px-3 py-2"
+          aria-label={`${safeViewedCount} of ${fileCount} files viewed`}
+        >
+          <div className="flex items-center justify-between gap-2 text-[11px] leading-none">
+            <span className="font-medium text-muted-foreground">Review</span>
+            <span className="font-mono text-foreground tabular-nums">
+              {safeViewedCount}/{fileCount}
+            </span>
+          </div>
+          <div className="app-review-progress mt-1.5 h-1 overflow-hidden rounded-full">
+            <span className="block h-full rounded-full" style={{ width: `${reviewProgress}%` }} />
+          </div>
+        </div>
+      ) : null}
       {footer != null ? <div className="app-sidebar-footer px-3 py-2.5">{footer}</div> : null}
     </aside>
   );

@@ -5,15 +5,16 @@ import {
   type FileContents,
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
-import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
-import { AlertCircle, LoaderCircle } from "lucide-react";
+import { AlertCircle, FileWarning, ImageOff, LoaderCircle } from "lucide-react";
 import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
 import { fetchJson } from "../lib/api.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary, SessionPayload } from "../types.js";
+import { isDependencyPath } from "../lib/fileFilters.js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card.js";
+import { Button } from "./ui/button.js";
 import { Skeleton } from "./ui/skeleton.js";
 import { CommentAnnotationView } from "./diff/CommentAnnotation.js";
 import {
@@ -23,27 +24,42 @@ import {
 } from "./diff/commentAnnotationModel.js";
 import { CustomFileHeader } from "./diff/CustomFileHeader.js";
 import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
+import { ImageDiff } from "./diff/ImageDiff.js";
+import { DependencyDiff } from "./diff/DependencyDiff.js";
+import { FileReviewActions } from "./diff/FileReviewActions.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
+import { MultiFileScroller } from "./diff/MultiFileScroller.js";
+
+const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
 
 export interface DiffWorkspaceProps {
-  clearCommentsSignal: number;
+  annotationsByFile: Readonly<Record<string, CommentAnnotation[]>>;
+  capabilities?: SessionPayload["capabilities"];
   collapsedFilePaths: ReadonlySet<string>;
   diffStyle: DiffLayout;
   disableBackground: boolean;
   expandUnchanged: boolean;
   files: DiffFileSummary[];
   fileDiffs: Record<string, FileDiffMetadata>;
+  fileDiffErrors: Record<string, string>;
   hunkSeparators: HunkSeparatorMode;
+  onAnnotationsChange: (
+    path: string,
+    updater: (current: CommentAnnotation[]) => CommentAnnotation[],
+  ) => void;
   onCollapsedFileChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRequestFileDiff: (path: string) => void;
+  onRetryFileDiff: (path: string) => void;
+  onSessionReload: () => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
   overflow: OverflowMode;
   scrollSignal: number;
   selectedFile: DiffFileSummary | null;
   selectedPath: string | null;
+  snapshotId: string;
   sessionRevision: number;
   showLineNumbers: boolean;
   themeType: ThemeChoice;
@@ -52,24 +68,30 @@ export interface DiffWorkspaceProps {
 
 export function DiffWorkspace(props: DiffWorkspaceProps) {
   const {
-    clearCommentsSignal,
+    annotationsByFile,
+    capabilities,
     collapsedFilePaths,
     diffStyle,
     disableBackground,
     expandUnchanged,
     files,
     fileDiffs,
+    fileDiffErrors,
     hunkSeparators,
+    onAnnotationsChange,
     onCollapsedFileChange,
     onCommentDeleted,
     onCommentSaved,
     onRequestFileDiff,
+    onRetryFileDiff,
+    onSessionReload,
     onViewedFileChange,
     onVisiblePathChange,
     overflow,
     scrollSignal,
     selectedFile,
     selectedPath,
+    snapshotId,
     sessionRevision,
     showLineNumbers,
     themeType,
@@ -110,6 +132,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     return (
       <main
         id="main"
+        aria-label="Diff review workspace"
         tabIndex={-1}
         className="flex h-full min-h-0 min-w-0 flex-col bg-background focus:outline-none"
       >
@@ -134,333 +157,46 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
   return (
     <main
       id="main"
+      aria-label="Diff review workspace"
       tabIndex={-1}
       className="flex h-full min-h-0 min-w-0 flex-col bg-background focus:outline-none"
     >
       <section className="min-h-0 min-w-0 flex-1">
         <MultiFileScroller
-          key={`${sessionRevision}:${clearCommentsSignal}`}
-          diffOptions={diffOptions}
+          key={sessionRevision}
           collapsedFilePaths={collapsedFilePaths}
-          fileDiffs={fileDiffs}
           files={files}
-          onCollapsedFileChange={onCollapsedFileChange}
-          onCommentDeleted={onCommentDeleted}
-          onCommentSaved={onCommentSaved}
           onRequestFileDiff={onRequestFileDiff}
-          onViewedFileChange={onViewedFileChange}
           onVisiblePathChange={onVisiblePathChange}
+          renderFile={(file, selectedLines, onSelectedLinesChange) => (
+            <FileDiffSection
+              collapsed={collapsedFilePaths.has(file.path)}
+              capabilities={capabilities}
+              commentAnnotations={annotationsByFile[file.path] ?? EMPTY_ANNOTATIONS}
+              diffOptions={diffOptions}
+              file={file}
+              fileDiff={fileDiffs[file.path] ?? null}
+              fileDiffError={fileDiffErrors[file.path] ?? null}
+              onAnnotationsChange={onAnnotationsChange}
+              onCollapsedChange={onCollapsedFileChange}
+              onCommentDeleted={onCommentDeleted}
+              onCommentSaved={onCommentSaved}
+              onRetryFileDiff={onRetryFileDiff}
+              onSessionReload={onSessionReload}
+              onSelectedLinesChange={onSelectedLinesChange}
+              onViewedChange={onViewedFileChange}
+              selectedLines={selectedLines}
+              sessionRevision={sessionRevision}
+              snapshotId={snapshotId}
+              viewed={viewedFilePaths.has(file.path)}
+            />
+          )}
           scrollSignal={scrollSignal}
           selectedPath={selectedPath}
-          sessionRevision={sessionRevision}
-          viewedFilePaths={viewedFilePaths}
         />
       </section>
     </main>
   );
-}
-
-const VIRTUOSO_OVERSCAN_PX = 1200;
-const VIRTUOSO_INCREASE_VIEWPORT_PX = 600;
-const VIRTUOSO_MIN_ITEM_HEIGHT_PX = 40;
-const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
-
-const computeItemKey = (_index: number, file: DiffFileSummary) => file.path;
-const measureFileItem = (element: HTMLElement) =>
-  Math.max(
-    element.getBoundingClientRect().height,
-    element.offsetHeight,
-    VIRTUOSO_MIN_ITEM_HEIGHT_PX,
-  );
-
-type CommentAnnotationsByFile = Record<string, CommentAnnotation[]>;
-type SelectedLinesByFile = Record<string, SelectedLineRange | null>;
-
-function MultiFileScroller(props: {
-  collapsedFilePaths: ReadonlySet<string>;
-  diffOptions: Parameters<typeof FileDiff>[0]["options"];
-  fileDiffs: Record<string, FileDiffMetadata>;
-  files: DiffFileSummary[];
-  onCollapsedFileChange: (path: string, value: boolean) => void;
-  onCommentDeleted: (id: string) => void;
-  onCommentSaved: (comment: CommentExportRecord) => void;
-  onRequestFileDiff: (path: string) => void;
-  onViewedFileChange: (path: string, value: boolean) => void;
-  onVisiblePathChange: (path: string) => void;
-  scrollSignal: number;
-  selectedPath: string | null;
-  sessionRevision: number;
-  viewedFilePaths: ReadonlySet<string>;
-}) {
-  const {
-    collapsedFilePaths,
-    diffOptions,
-    fileDiffs,
-    files,
-    onCollapsedFileChange,
-    onCommentDeleted,
-    onCommentSaved,
-    onRequestFileDiff,
-    onViewedFileChange,
-    onVisiblePathChange,
-    scrollSignal,
-    selectedPath,
-    sessionRevision,
-    viewedFilePaths,
-  } = props;
-
-  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
-  const lastReportedPathRef = useRef<string | null>(null);
-  const suppressObserverUntilRef = useRef(0);
-  const pinnedPathRef = useRef<string | null>(null);
-  const visibleObserverCleanupRef = useRef<(() => void) | null>(null);
-  const fileIndexByPath = useMemo(
-    () => new Map(files.map((file, index) => [file.path, index])),
-    [files],
-  );
-
-  // Per-file UI state lives here, not inside FileDiffSection, so a row that
-  // scrolls out of the virtualized window doesn't lose its selection or its
-  // half-typed comment when it remounts.
-  const [commentAnnotations, setCommentAnnotations] = useState<CommentAnnotationsByFile>({});
-  const [selectedLines, setSelectedLines] = useState<SelectedLinesByFile>({});
-
-  const handleAnnotationsChange = useCallback(
-    (path: string, updater: (current: CommentAnnotation[]) => CommentAnnotation[]) => {
-      setCommentAnnotations((current) => {
-        const previous = current[path] ?? EMPTY_ANNOTATIONS;
-        const next = updater(previous);
-        if (next === previous) return current;
-        if (next.length === 0) {
-          if (!(path in current)) return current;
-          const { [path]: _removed, ...rest } = current;
-          return rest;
-        }
-        return { ...current, [path]: next };
-      });
-    },
-    [],
-  );
-
-  const handleSelectedLinesChange = useCallback((path: string, range: SelectedLineRange | null) => {
-    setSelectedLines((current) => {
-      if (current[path] === range) return current;
-      if (range == null) {
-        if (!(path in current)) return current;
-        const { [path]: _removed, ...rest } = current;
-        return rest;
-      }
-      return { ...current, [path]: range };
-    });
-  }, []);
-
-  const handleRangeChanged = useCallback(
-    (range: { startIndex: number; endIndex: number }) => {
-      for (let i = range.startIndex; i <= range.endIndex; i++) {
-        const file = files[i];
-        if (file == null) continue;
-        if (file.hasMergeConflicts === true || file.isBinary === true) continue;
-        onRequestFileDiff(file.path);
-      }
-    },
-    [files, onRequestFileDiff],
-  );
-
-  const handleScrollerRef = useCallback(
-    (ref: HTMLElement | Window | null) => {
-      visibleObserverCleanupRef.current?.();
-      visibleObserverCleanupRef.current = null;
-      if (!(ref instanceof HTMLElement)) return;
-      visibleObserverCleanupRef.current = installVisiblePathObserver(ref, {
-        lastReportedPathRef,
-        onVisiblePathChange,
-        pinnedPathRef,
-        suppressObserverUntilRef,
-      });
-    },
-    [onVisiblePathChange],
-  );
-
-  useEffect(() => {
-    return cleanupVisibleObserver(visibleObserverCleanupRef);
-  }, []);
-
-  const handledScrollSignalRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (selectedPath == null) return;
-    if (handledScrollSignalRef.current === scrollSignal) return;
-    const index = fileIndexByPath.get(selectedPath);
-    if (index == null) return;
-    handledScrollSignalRef.current = scrollSignal;
-    lastReportedPathRef.current = selectedPath;
-    pinnedPathRef.current = selectedPath;
-    suppressObserverUntilRef.current = performance.now() + 350;
-    virtuosoRef.current?.scrollToIndex({ index, align: "start" });
-
-    let released = false;
-    const release = () => {
-      if (released) return;
-      released = true;
-      pinnedPathRef.current = null;
-      window.removeEventListener("wheel", release);
-      window.removeEventListener("touchstart", release);
-      window.removeEventListener("keydown", release);
-    };
-    window.addEventListener("wheel", release, { passive: true, once: true });
-    window.addEventListener("touchstart", release, { passive: true, once: true });
-    window.addEventListener("keydown", release, { once: true });
-    const timer = window.setTimeout(release, 1500);
-    return () => {
-      window.clearTimeout(timer);
-      release();
-    };
-  }, [fileIndexByPath, scrollSignal, selectedPath]);
-
-  const itemContent = useCallback(
-    (_index: number, file: DiffFileSummary) => (
-      <Card
-        data-file-path={file.path}
-        className="app-file-card m-2.5 scroll-mt-2.5 overflow-clip rounded-lg border-border"
-      >
-        <FileDiffSection
-          collapsed={collapsedFilePaths.has(file.path)}
-          commentAnnotations={commentAnnotations[file.path] ?? EMPTY_ANNOTATIONS}
-          diffOptions={diffOptions}
-          file={file}
-          fileDiff={fileDiffs[file.path] ?? null}
-          onAnnotationsChange={handleAnnotationsChange}
-          onCollapsedChange={onCollapsedFileChange}
-          onCommentDeleted={onCommentDeleted}
-          onCommentSaved={onCommentSaved}
-          onSelectedLinesChange={handleSelectedLinesChange}
-          onViewedChange={onViewedFileChange}
-          selectedLines={selectedLines[file.path] ?? null}
-          sessionRevision={sessionRevision}
-          viewed={viewedFilePaths.has(file.path)}
-        />
-      </Card>
-    ),
-    [
-      collapsedFilePaths,
-      commentAnnotations,
-      diffOptions,
-      fileDiffs,
-      handleAnnotationsChange,
-      handleSelectedLinesChange,
-      onCollapsedFileChange,
-      onCommentDeleted,
-      onCommentSaved,
-      onViewedFileChange,
-      selectedLines,
-      sessionRevision,
-      viewedFilePaths,
-    ],
-  );
-
-  return (
-    <Virtuoso<DiffFileSummary>
-      ref={virtuosoRef}
-      data={files}
-      itemContent={itemContent}
-      computeItemKey={computeItemKey}
-      defaultItemHeight={VIRTUOSO_MIN_ITEM_HEIGHT_PX}
-      rangeChanged={handleRangeChanged}
-      itemSize={measureFileItem}
-      overscan={VIRTUOSO_OVERSCAN_PX}
-      increaseViewportBy={VIRTUOSO_INCREASE_VIEWPORT_PX}
-      scrollerRef={handleScrollerRef}
-      className="app-virtuoso h-full"
-    />
-  );
-}
-
-function installVisiblePathObserver(
-  root: HTMLElement,
-  refs: {
-    lastReportedPathRef: { current: string | null };
-    onVisiblePathChange: (path: string) => void;
-    pinnedPathRef: { current: string | null };
-    suppressObserverUntilRef: { current: number };
-  },
-): () => void {
-  const visibility = new Map<string, Element>();
-  const observed = new WeakSet<Element>();
-  const ABOVE_THRESHOLD = 24;
-  const intersectionObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const path = (entry.target as HTMLElement).dataset.filePath;
-        if (path == null) continue;
-        if (entry.isIntersecting) {
-          visibility.set(path, entry.target);
-        } else {
-          visibility.delete(path);
-        }
-      }
-      if (performance.now() < refs.suppressObserverUntilRef.current) {
-        return;
-      }
-      if (refs.pinnedPathRef.current != null && visibility.has(refs.pinnedPathRef.current)) {
-        if (refs.lastReportedPathRef.current !== refs.pinnedPathRef.current) {
-          refs.lastReportedPathRef.current = refs.pinnedPathRef.current;
-          refs.onVisiblePathChange(refs.pinnedPathRef.current);
-        }
-        return;
-      }
-      refs.pinnedPathRef.current = null;
-      const rootTop = root.getBoundingClientRect().top;
-      let above: { path: string; top: number } | null = null;
-      let below: { path: string; top: number } | null = null;
-      for (const [path, node] of visibility) {
-        const top = node.getBoundingClientRect().top - rootTop;
-        if (top <= ABOVE_THRESHOLD) {
-          if (above == null || top > above.top) above = { path, top };
-        } else if (below == null || top < below.top) {
-          below = { path, top };
-        }
-      }
-      const best = above ?? below;
-      if (best != null && best.path !== refs.lastReportedPathRef.current) {
-        refs.lastReportedPathRef.current = best.path;
-        refs.onVisiblePathChange(best.path);
-      }
-    },
-    { root, threshold: 0 },
-  );
-  const adopt = (target: Element) => {
-    const candidates = target.matches?.("[data-file-path]")
-      ? [target]
-      : Array.from(target.querySelectorAll<HTMLElement>("[data-file-path]"));
-    for (const node of candidates) {
-      if (!observed.has(node)) {
-        observed.add(node);
-        intersectionObserver.observe(node);
-      }
-    }
-  };
-  adopt(root);
-  const mutationObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node instanceof Element) adopt(node);
-      }
-    }
-  });
-  mutationObserver.observe(root, { childList: true, subtree: true });
-  return () => {
-    intersectionObserver.disconnect();
-    mutationObserver.disconnect();
-  };
-}
-
-function cleanupVisibleObserver(ref: { current: (() => void) | null }) {
-  const cleanup = ref.current;
-  return () => {
-    cleanup?.();
-    if (ref.current === cleanup) {
-      ref.current = null;
-    }
-  };
 }
 
 // Files at or above this changed-line count freeze the main thread for several
@@ -485,25 +221,32 @@ const idleUnresolvedFileState: UnresolvedFileState = {
 
 const FileDiffSection = memo(function FileDiffSection({
   collapsed,
+  capabilities,
   commentAnnotations,
   diffOptions,
   file,
   fileDiff,
+  fileDiffError,
   onAnnotationsChange,
   onCollapsedChange,
   onCommentDeleted,
   onCommentSaved,
+  onRetryFileDiff,
+  onSessionReload,
   onSelectedLinesChange,
   onViewedChange,
   selectedLines,
   sessionRevision,
+  snapshotId,
   viewed,
 }: {
   collapsed: boolean;
+  capabilities?: SessionPayload["capabilities"];
   commentAnnotations: CommentAnnotation[];
   diffOptions: Parameters<typeof FileDiff>[0]["options"];
   file: DiffFileSummary;
   fileDiff: FileDiffMetadata | null;
+  fileDiffError: string | null;
   onAnnotationsChange: (
     path: string,
     updater: (current: CommentAnnotation[]) => CommentAnnotation[],
@@ -511,18 +254,46 @@ const FileDiffSection = memo(function FileDiffSection({
   onCollapsedChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
+  onRetryFileDiff: (path: string) => void;
+  onSessionReload: () => void;
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
   onViewedChange: (path: string, value: boolean) => void;
   selectedLines: SelectedLineRange | null;
   sessionRevision: number;
+  snapshotId: string;
   viewed: boolean;
 }) {
   const [unresolvedState, dispatchUnresolvedState] = useReducer(
     (_current: UnresolvedFileState, next: UnresolvedFileState) => next,
     idleUnresolvedFileState,
   );
+  const [structuralOutput, setStructuralOutput] = useState<string | null>(null);
 
   const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
+
+  useEffect(() => setStructuralOutput(null), [file.path, sessionRevision]);
+
+  const headerActions = useMemo(
+    () => (
+      <FileReviewActions
+        capabilities={capabilities}
+        hunkCount={fileDiff?.hunks.length ?? 0}
+        onReload={onSessionReload}
+        onStructuralChange={setStructuralOutput}
+        path={file.path}
+        snapshotId={snapshotId}
+        structuralActive={structuralOutput != null}
+      />
+    ),
+    [
+      capabilities,
+      file.path,
+      fileDiff?.hunks.length,
+      onSessionReload,
+      snapshotId,
+      structuralOutput,
+    ],
+  );
 
   const handleHeaderCollapsedChange = useCallback(
     (next: boolean) => {
@@ -542,6 +313,7 @@ const FileDiffSection = memo(function FileDiffSection({
   const renderHeader = useCallback(
     (metadataFileDiff: FileDiffMetadata) => (
       <CustomFileHeader
+        actions={headerActions}
         collapsed={collapsed}
         fileDiff={metadataFileDiff}
         hasMergeConflicts={file.hasMergeConflicts === true}
@@ -556,6 +328,7 @@ const FileDiffSection = memo(function FileDiffSection({
       handleHeaderCollapsedChange,
       handleHeaderViewedChange,
       viewed,
+      headerActions,
     ],
   );
 
@@ -609,6 +382,19 @@ const FileDiffSection = memo(function FileDiffSection({
     [filePath, onAnnotationsChange],
   );
 
+  useEffect(() => {
+    const handleShortcutComment = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== filePath || fileDiff == null) return;
+      const firstHunk = fileDiff.hunks[0];
+      if (firstHunk == null) return;
+      const side: AnnotationSide = firstHunk.additionCount > 0 ? "additions" : "deletions";
+      const line = side === "additions" ? firstHunk.additionStart : firstHunk.deletionStart;
+      addCommentAtLine(side, Math.max(1, line));
+    };
+    window.addEventListener("diffdeck:add-comment", handleShortcutComment);
+    return () => window.removeEventListener("diffdeck:add-comment", handleShortcutComment);
+  }, [addCommentAtLine, fileDiff, filePath]);
+
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
       onSelectedLinesChange(filePath, range);
@@ -618,6 +404,11 @@ const FileDiffSection = memo(function FileDiffSection({
       const side: AnnotationSide =
         (range.endSide ?? range.side) === "deletions" ? "deletions" : "additions";
       addCommentAtLine(side, Math.max(range.start, range.end));
+      window.dispatchEvent(
+        new CustomEvent("diffdeck:line-selected", {
+          detail: { line: Math.max(range.start, range.end), side },
+        }),
+      );
     },
     [addCommentAtLine, diffOptions, filePath, onSelectedLinesChange],
   );
@@ -823,14 +614,55 @@ const FileDiffSection = memo(function FileDiffSection({
     return (
       <>
         <CustomFileHeader
+          actions={headerActions}
           collapsed={collapsed}
           fileDiff={headerStub}
           onCollapsedChange={handleHeaderCollapsedChange}
           onViewedChange={handleHeaderViewedChange}
           viewed={viewed}
         />
-        {collapsed ? null : <UnsupportedFileBody path={file.path} />}
+        {collapsed ? null : IMAGE_EXTENSIONS.has(getFileExtension(file.path)) ? (
+          <ImageDiff path={file.path} />
+        ) : (
+          <UnsupportedFileBody path={file.path} />
+        )}
       </>
+    );
+  }
+
+  if (fileDiff == null && collapsed) {
+    const headerStub = { name: file.path, hunks: [] } as unknown as FileDiffMetadata;
+    return (
+      <CustomFileHeader
+        actions={headerActions}
+        collapsed
+        fileDiff={headerStub}
+        onCollapsedChange={handleHeaderCollapsedChange}
+        onViewedChange={handleHeaderViewedChange}
+        viewed={viewed}
+      />
+    );
+  }
+
+  if (fileDiff == null && fileDiffError != null) {
+    return (
+      <div
+        role="alert"
+        className="app-diff-state app-diff-state-error grid place-items-center gap-3 p-6 text-xs"
+      >
+        <span className="inline-flex items-center gap-2">
+          <AlertCircle className="size-3.5" />
+          <span className="font-mono">{file.path}</span>
+          <span>{fileDiffError}</span>
+        </span>
+        <Button
+          variant="outline"
+          className="h-8 text-xs"
+          onClick={() => onRetryFileDiff(file.path)}
+        >
+          Retry file diff
+        </Button>
+      </div>
     );
   }
 
@@ -856,25 +688,41 @@ const FileDiffSection = memo(function FileDiffSection({
     );
   }
 
-  if (isHeavyFile) {
+  if (structuralOutput != null) {
     return (
-      <HeavyFileDiff
-        collapsed={collapsed}
-        fileDiff={fileDiff}
-        header={
-          <CustomFileHeader
-            collapsed={collapsed}
-            fileDiff={fileDiff}
-            onCollapsedChange={handleHeaderCollapsedChange}
-            onViewedChange={handleHeaderViewedChange}
-            viewed={viewed}
-          />
-        }
-      />
+      <>
+        <CustomFileHeader
+          actions={headerActions}
+          collapsed={collapsed}
+          fileDiff={fileDiff}
+          onCollapsedChange={handleHeaderCollapsedChange}
+          onViewedChange={handleHeaderViewedChange}
+          viewed={viewed}
+        />
+        {collapsed ? null : (
+          <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed">
+            {structuralOutput}
+          </pre>
+        )}
+      </>
     );
   }
 
-  return (
+  const sourceDiff = isHeavyFile ? (
+    <HeavyFileDiff
+      collapsed={collapsed}
+      fileDiff={fileDiff}
+      header={
+        <CustomFileHeader
+          collapsed={collapsed}
+          fileDiff={fileDiff}
+          onCollapsedChange={handleHeaderCollapsedChange}
+          onViewedChange={handleHeaderViewedChange}
+          viewed={viewed}
+        />
+      }
+    />
+  ) : (
     <FileDiff
       fileDiff={fileDiff}
       options={fileDiffOptions}
@@ -883,6 +731,12 @@ const FileDiffSection = memo(function FileDiffSection({
       renderAnnotation={renderCommentAnnotation}
       renderCustomHeader={renderHeader}
     />
+  );
+
+  return isDependencyPath(file.path) && !collapsed ? (
+    <DependencyDiff fileDiff={fileDiff} header={renderHeader(fileDiff)} source={sourceDiff} />
+  ) : (
+    sourceDiff
   );
 });
 
@@ -910,6 +764,7 @@ function getFileExtension(path: string): string {
 function UnsupportedFileBody({ path }: { path: string }) {
   const extension = getFileExtension(path);
   const isImage = IMAGE_EXTENSIONS.has(extension);
+  const Icon = isImage ? ImageOff : FileWarning;
   const label = isImage ? "Image preview not supported" : "Binary file not shown";
   const description = isImage
     ? "Image diffs aren't rendered in the viewer yet."
@@ -919,9 +774,14 @@ function UnsupportedFileBody({ path }: { path: string }) {
       role="note"
       className="app-diff-state app-unsupported-file-state grid place-items-center p-4 text-center text-xs text-muted-foreground"
     >
-      <CardContent className="space-y-1 p-0">
-        <p className="font-medium text-foreground">{label}</p>
-        <p className="leading-relaxed">{description}</p>
+      <CardContent className="flex max-w-sm flex-col items-center gap-2 p-0">
+        <span className="app-unsupported-file-icon inline-flex size-8 items-center justify-center rounded-md">
+          <Icon aria-hidden="true" className="size-4" />
+        </span>
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">{label}</p>
+          <p className="leading-relaxed">{description}</p>
+        </div>
       </CardContent>
     </div>
   );

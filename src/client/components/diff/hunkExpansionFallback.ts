@@ -20,6 +20,31 @@ export function installHunkExpansionFallback(node: HTMLElement, instance: HunkEx
   }
   if (node.shadowRoot != null) {
     addFallbackRoot(node.shadowRoot);
+    makeExpansionControlsAccessible(node.shadowRoot);
+  }
+}
+
+function makeExpansionControlsAccessible(root: ShadowRoot): void {
+  for (const control of root.querySelectorAll<HTMLElement>(
+    "[data-expand-button], [data-unmodified-lines]",
+  )) {
+    if (control.tabIndex < 0) control.tabIndex = 0;
+    if (!control.hasAttribute("role")) control.setAttribute("role", "button");
+    if (!control.hasAttribute("aria-label")) {
+      const direction = control.hasAttribute("data-expand-up")
+        ? "above"
+        : control.hasAttribute("data-expand-down")
+          ? "below"
+          : "around";
+      control.setAttribute("aria-label", `Expand unchanged lines ${direction} this hunk`);
+    }
+    if (control.dataset.diffdeckKeyboardReady === "true") continue;
+    control.dataset.diffdeckKeyboardReady = "true";
+    control.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      control.click();
+    });
   }
 }
 

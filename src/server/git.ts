@@ -2,7 +2,7 @@ import { processFile, processPatch, type FileContents, type FileDiffMetadata } f
 import type { GitStatus } from "@pierre/trees";
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { DiffdeckError } from "./errors.js";
 import type { DiffBuildOptions, DiffFileSummary, DiffSession } from "./types.js";
 import { buildCacheKey } from "./cacheKey.js";
@@ -68,6 +68,31 @@ function runGit(repo: string, args: string[]): string {
   return typeof result.stdout === "string" ? result.stdout : "";
 }
 
+function runGitAsync(repo: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "git",
+      ["-C", repo, ...args],
+      { encoding: "utf8", maxBuffer: GIT_MAX_BUFFER },
+      (error, stdout, stderr) => {
+        if (error != null) {
+          const message = stderr.trim().length > 0 ? stderr.trim() : error.message;
+          reject(
+            new DiffdeckError(message, [
+              `repo: ${repo}`,
+              `command: git ${args.join(" ")}`,
+              `exit status: ${error.code ?? "unknown"}`,
+              `signal: ${error.signal ?? "none"}`,
+            ]),
+          );
+          return;
+        }
+        resolve(stdout);
+      },
+    );
+  });
+}
+
 export function resolveRepoRoot(startDirectory: string): string {
   return runGit(startDirectory, ["rev-parse", "--show-toplevel"]).trim();
 }
@@ -77,6 +102,20 @@ export function getRawDiff(repoRoot: string, diffArgs: string[]): string {
   // octal escapes wrapped in quotes. Git still quotes control characters such
   // as tabs and newlines; those headers are normalized before processPatch.
   return runGit(repoRoot, [
+    "-c",
+    "core.quotePath=false",
+    "diff",
+    "--find-renames",
+    "--submodule=diff",
+    "--binary",
+    "--no-color",
+    "--no-ext-diff",
+    ...diffArgs,
+  ]);
+}
+
+export function getRawDiffAsync(repoRoot: string, diffArgs: string[]): Promise<string> {
+  return runGitAsync(repoRoot, [
     "-c",
     "core.quotePath=false",
     "diff",
@@ -628,6 +667,7 @@ function createSummary(fileDiff: FileDiffMetadata): DiffFileSummary {
   return {
     path: fileDiff.name,
     prevPath: fileDiff.prevName,
+    diffId: fileDiff.cacheKey ?? buildCacheKey("file", fileDiff.name, JSON.stringify(fileDiff)),
     changeType: fileDiff.type,
     gitStatus: mapChangeTypeToGitStatus(fileDiff.type),
     additions,
@@ -641,12 +681,27 @@ export function buildDiffSession(
   diffArgs: string[],
   options?: DiffBuildOptions,
 ): DiffSession {
+  return buildDiffSessionFromRawDiff(
+    repoRoot,
+    currentDirectory,
+    diffArgs,
+    getRawDiff(repoRoot, diffArgs),
+    options,
+  );
+}
+
+export function buildDiffSessionFromRawDiff(
+  repoRoot: string,
+  currentDirectory: string,
+  diffArgs: string[],
+  rawDiff: string,
+  options?: DiffBuildOptions,
+): DiffSession {
   const logger = createLogger(options);
   logger?.(`repo root: ${repoRoot}`);
   logger?.(`working directory: ${currentDirectory}`);
   logger?.(`git diff args: ${summarizeDiffArgs(diffArgs)}`);
 
-  const rawDiff = getRawDiff(repoRoot, diffArgs);
   const fileDiffs = new Map<string, FileDiffMetadata>();
   const files: DiffFileSummary[] = [];
   const unresolvedFiles = new Map<string, string>();
@@ -720,6 +775,7 @@ export function buildDiffSession(
     }
     files.push({
       path,
+      diffId: buildCacheKey("conflict", path, contents),
       changeType: "change",
       gitStatus: "modified",
       additions: 0,
@@ -728,7 +784,14 @@ export function buildDiffSession(
     });
   }
 
+  const snapshotId = buildCacheKey(
+    "session",
+    `${repoRoot}:${diffArgs.join("\0")}`,
+    files.map((file) => `${file.path}:${file.diffId}`).join("\n"),
+  );
+
   return {
+    snapshotId,
     repoRoot,
     currentDirectory: currentDirectoryDisplay,
     diffArgs,

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { CheckSquare2, ChevronRight, FileText, Square } from "lucide-react";
 import { cn } from "../../lib/cn.js";
@@ -11,6 +11,7 @@ export function CustomFileHeader({
   hasMergeConflicts = false,
   onCollapsedChange,
   onViewedChange,
+  actions,
   viewed,
 }: {
   collapsed: boolean;
@@ -19,6 +20,7 @@ export function CustomFileHeader({
   onCollapsedChange: (next: boolean) => void;
   onViewedChange: (next: boolean) => void;
   viewed: boolean;
+  actions?: ReactNode;
 }) {
   const counts = useMemo(
     () =>
@@ -76,6 +78,7 @@ export function CustomFileHeader({
           viewed={viewed}
           onClick={() => onViewedChange(!viewed)}
         />
+        {actions}
       </div>
     </div>
   );
