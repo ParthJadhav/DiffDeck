@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { parseCliArgs } from "../src/server/cli.js";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { isCliEntrypoint, parseCliArgs } from "../src/server/cli.js";
 
 describe("CLI parsing", () => {
   test("tracks an explicitly supplied default port", () => {
@@ -35,5 +38,18 @@ describe("CLI parsing", () => {
       structural: true,
       write: true,
     });
+  });
+
+  test("recognizes an npm bin symlink as the CLI entrypoint", () => {
+    const directory = mkdtempSync(join(tmpdir(), "diffdeck-cli-entrypoint-"));
+    try {
+      const modulePath = join(directory, "cli.js");
+      const binPath = join(directory, "diffdeck");
+      writeFileSync(modulePath, "");
+      symlinkSync(modulePath, binPath);
+      expect(isCliEntrypoint(binPath, modulePath)).toBe(true);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });

@@ -280,7 +280,15 @@ function isLoopbackHost(host: string): boolean {
   return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
 }
 
-if (process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+export function isCliEntrypoint(entryPath: string, modulePath: string): boolean {
+  try {
+    return realpathSync(resolve(entryPath)) === realpathSync(modulePath);
+  } catch {
+    return false;
+  }
+}
+
+if (process.argv[1] != null && isCliEntrypoint(process.argv[1], fileURLToPath(import.meta.url))) {
   main().catch((error: unknown) => {
     const debug =
       process.argv.includes("--debug") ||
