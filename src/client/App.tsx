@@ -3,6 +3,7 @@ import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import { Toaster } from "sonner";
 import { prepareFileTreeInput } from "@pierre/trees";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
+import { RotateCcw } from "lucide-react";
 import { Sidebar, type SidebarProps } from "./components/Sidebar.js";
 import { DiffWorkspace, type DiffWorkspaceProps } from "./components/DiffWorkspace.js";
 import { DiffControls, type DiffControlsProps } from "./components/DiffControls.js";
@@ -355,12 +356,6 @@ function DiffDeckSession({
 
   const sidebarFooter = (
     <div className="flex flex-col gap-2">
-      <ReviewFiltersBar
-        filters={reviewSession.state.filters}
-        onChange={reviewSession.setFilters}
-        resultCount={visibleFiles.length}
-        totalCount={orderedFiles.length}
-      />
       <ReReviewSummary
         comments={orderedCommentExports}
         onRemoveStatus={reviewSession.removeCommentsByStatus}
@@ -374,18 +369,29 @@ function DiffDeckSession({
         totalFiles={orderedFiles.length}
         viewedFiles={viewedFilePaths.size}
       />
-      <DiffControls {...controlsProps} />
-      <button
-        type="button"
-        onClick={() => {
-          if (window.confirm("Reset all review progress, filters, drafts, and comments?")) {
-            reviewSession.resetReview();
-          }
-        }}
-        className="h-7 text-left text-[10.5px] text-muted-foreground hover:text-foreground"
-      >
-        Reset review state
-      </button>
+      <div className="app-sidebar-tool-row flex items-center gap-1.5">
+        <ReviewFiltersBar
+          filters={reviewSession.state.filters}
+          onChange={reviewSession.setFilters}
+          resultCount={visibleFiles.length}
+          totalCount={orderedFiles.length}
+        />
+        <DiffControls {...controlsProps} />
+        <button
+          type="button"
+          title="Reset review state"
+          aria-label="Reset review state"
+          onClick={() => {
+            if (window.confirm("Reset all review progress, filters, drafts, and comments?")) {
+              reviewSession.resetReview();
+            }
+          }}
+          className="app-reset-review-button inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted-foreground transition-[background-color,color,scale] hover:bg-destructive/10 hover:text-destructive active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <RotateCcw aria-hidden="true" className="size-3.5" />
+          <span className="app-reset-review-label">Reset</span>
+        </button>
+      </div>
     </div>
   );
 
