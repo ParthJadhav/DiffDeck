@@ -24,5 +24,6 @@ export interface SessionPayload {
     structural: boolean;
     watch: boolean;
     write: boolean;
+    writeActions?: Array<"stage" | "unstage" | "revert">;
   };
 }

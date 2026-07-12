@@ -28,6 +28,9 @@ export interface ServerOptions {
   write?: boolean;
 }
 
+type WriteAction = "stage" | "unstage" | "revert";
+type WriteDiffMode = "worktree" | "cached" | "readonly";
+
 export function createDiffSessionStore(sessionSource: DiffSessionSource): DiffSource {
   return createDiffSource(sessionSource);
 }
@@ -72,6 +75,8 @@ export async function startServer(
 
   app.get("/api/session", (request, response) => {
     const session = request.query.refresh === "1" ? sessionStore.refresh() : sessionStore.current();
+    const writeActions =
+      options.write === true ? getAvailableWriteActions(session.diffArgs) : ([] as WriteAction[]);
     response.json({
       snapshotId: session.snapshotId,
       repoRoot: session.repoRoot,
@@ -82,7 +87,8 @@ export async function startServer(
         editor: options.editor != null,
         structural: options.structural === true,
         watch: options.watch === true,
-        write: options.write === true,
+        write: writeActions.length > 0,
+        writeActions,
       },
     });
   });
@@ -396,29 +402,62 @@ function resolveAuthorizedPath(repoRoot: string, path: string): string | null {
 }
 
 function readImageSide(session: DiffSession, path: string, side: "old" | "new"): Buffer | null {
-  const revisions = getRevisionArguments(session.diffArgs);
-  const newRevision = revisions[1];
-  if (side === "new" && newRevision == null && !session.diffArgs.includes("--cached")) {
+  const diff = buildDisplayedFileDiff(session, path);
+  if (!diff.ok) return null;
+
+  const indexLine = diff.stdout.match(/^index\s+([0-9a-f]+)\.\.([0-9a-f]+)(?:\s|$)/im);
+  const objectId = side === "old" ? indexLine?.[1] : indexLine?.[2];
+  if (objectId == null) return null;
+
+  if (/^0+$/.test(objectId)) {
+    if (side === "old") return null;
     const target = resolveAuthorizedPath(session.repoRoot, path);
     return target != null && existsSync(target) ? readFileSync(target) : null;
   }
-  const revision =
-    side === "new"
-      ? newRevision == null
-        ? `:${path}`
-        : `${newRevision}:${path}`
-      : `${revisions[0] ?? "HEAD"}:${path}`;
-  const result = spawnSync("git", ["-C", session.repoRoot, "show", revision], {
+
+  const result = spawnSync("git", ["-C", session.repoRoot, "cat-file", "blob", objectId], {
     encoding: "buffer",
     maxBuffer: 20 * 1024 * 1024,
   });
-  return result.status === 0 && Buffer.isBuffer(result.stdout) ? result.stdout : null;
+  if (result.status === 0 && Buffer.isBuffer(result.stdout)) return result.stdout;
+  if (side === "old") return null;
+
+  // Binary patches include a computed object ID for worktree content even
+  // though that blob is not necessarily present in the object database.
+  const target = resolveAuthorizedPath(session.repoRoot, path);
+  return target != null && existsSync(target) ? readFileSync(target) : null;
 }
 
-function getRevisionArguments(diffArgs: readonly string[]): string[] {
+function getDisplayedDiffArguments(diffArgs: readonly string[], path: string): string[] {
   const separator = diffArgs.indexOf("--");
-  const candidates = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
-  return candidates.filter((argument) => !argument.startsWith("-"));
+  const diffOptions = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
+  return [...diffOptions, "--", path];
+}
+
+function buildDisplayedFileDiff(
+  session: DiffSession,
+  path: string,
+): { ok: true; stdout: string } | { ok: false; error: string } {
+  const result = spawnSync(
+    "git",
+    [
+      "-C",
+      session.repoRoot,
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--find-renames",
+      "--submodule=diff",
+      "--binary",
+      "--no-color",
+      "--no-ext-diff",
+      ...getDisplayedDiffArguments(session.diffArgs, path),
+    ],
+    { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
+  );
+  return result.status === 0
+    ? { ok: true, stdout: typeof result.stdout === "string" ? result.stdout : "" }
+    : { ok: false, error: result.stderr || "Unable to build the displayed file diff." };
 }
 
 function getImageMime(path: string): string {
@@ -438,37 +477,88 @@ function getImageMime(path: string): string {
 
 function applyWriteAction(
   session: DiffSession,
-  action: "stage" | "unstage" | "revert",
+  action: WriteAction,
   path: string,
   hunkIndex: unknown,
 ): { ok: true } | { ok: false; error: string } {
-  if (typeof hunkIndex === "number" && Number.isInteger(hunkIndex) && hunkIndex >= 0) {
-    const cached = action === "unstage";
-    const args = ["-C", session.repoRoot, "diff", ...(cached ? ["--cached"] : []), "--", path];
-    const diff = spawnSync("git", args, { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
-    if (diff.status !== 0)
-      return { ok: false, error: diff.stderr || "Unable to build hunk patch." };
+  const mode = getWriteDiffMode(session.diffArgs);
+  if (!getAvailableWriteActions(session.diffArgs).includes(action)) {
+    return {
+      ok: false,
+      error:
+        mode === "readonly"
+          ? "Write actions are unavailable for commit and range diffs."
+          : `${capitalize(action)} is unavailable in ${mode === "cached" ? "a cached" : "a working-tree"} review.`,
+    };
+  }
+
+  const hasHunkIndex = hunkIndex !== undefined;
+  if (
+    hasHunkIndex &&
+    (typeof hunkIndex !== "number" || !Number.isInteger(hunkIndex) || hunkIndex < 0)
+  ) {
+    return { ok: false, error: "The requested hunk index is invalid." };
+  }
+
+  if (typeof hunkIndex === "number") {
+    const diff = buildDisplayedFileDiff(session, path);
+    if (!diff.ok) return { ok: false, error: diff.error };
     const patch = selectHunkPatch(diff.stdout, hunkIndex);
     if (patch == null) return { ok: false, error: "The requested hunk no longer exists." };
     const applyArgs = ["-C", session.repoRoot, "apply"];
-    if (action === "stage" || action === "unstage") applyArgs.push("--cached");
-    if (action === "unstage" || action === "revert") applyArgs.push("--reverse");
+    if (mode === "worktree" && action === "stage") applyArgs.push("--cached");
+    if (mode === "cached" && action === "unstage") applyArgs.push("--cached", "--reverse");
+    if (mode === "cached" && action === "revert") applyArgs.push("--index", "--reverse");
+    if (mode === "worktree" && action === "revert") applyArgs.push("--reverse");
     const applied = spawnSync("git", applyArgs, { input: patch, encoding: "utf8" });
     return applied.status === 0
       ? { ok: true }
       : { ok: false, error: applied.stderr || "Git rejected the selected hunk." };
   }
-  const argsByAction = {
-    stage: ["add", "--", path],
-    unstage: ["restore", "--staged", "--", path],
-    revert: ["restore", "--worktree", "--", path],
-  } as const;
-  const result = spawnSync("git", ["-C", session.repoRoot, ...argsByAction[action]], {
+  const args =
+    action === "stage"
+      ? ["add", "--", path]
+      : action === "unstage"
+        ? ["restore", "--staged", "--", path]
+        : mode === "cached"
+          ? ["restore", "--source=HEAD", "--staged", "--worktree", "--", path]
+          : ["restore", "--worktree", "--", path];
+  const result = spawnSync("git", ["-C", session.repoRoot, ...args], {
     encoding: "utf8",
   });
   return result.status === 0
     ? { ok: true }
     : { ok: false, error: result.stderr || `Unable to ${action} ${path}.` };
+}
+
+function getAvailableWriteActions(diffArgs: readonly string[]): WriteAction[] {
+  const mode = getWriteDiffMode(diffArgs);
+  if (mode === "worktree") return ["stage", "revert"];
+  if (mode === "cached") return ["unstage", "revert"];
+  return [];
+}
+
+function getWriteDiffMode(diffArgs: readonly string[]): WriteDiffMode {
+  const separator = diffArgs.indexOf("--");
+  const diffOptions = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
+  const positional = diffOptions.filter((argument) => !argument.startsWith("-"));
+  const incompatible = diffOptions.some(
+    (argument) =>
+      argument === "-R" ||
+      argument === "--reverse" ||
+      argument === "--no-index" ||
+      argument === "--merge-base" ||
+      argument === "--output" ||
+      argument.startsWith("--output="),
+  );
+  if (positional.length > 0 || incompatible) return "readonly";
+  return diffOptions.includes("--cached") || diffOptions.includes("--staged")
+    ? "cached"
+    : "worktree";
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
 function selectHunkPatch(diff: string, hunkIndex: number): string | null {

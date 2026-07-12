@@ -23,7 +23,11 @@ export function FileReviewActions({
 }) {
   const [hunk, setHunk] = useState("file");
   const [busy, setBusy] = useState(false);
-  if (capabilities?.structural !== true && capabilities?.write !== true) return null;
+  const writeActions =
+    capabilities?.writeActions ??
+    (capabilities?.write === true ? (["stage", "unstage", "revert"] as const) : []);
+  const canWrite = writeActions.length > 0;
+  if (capabilities?.structural !== true && !canWrite) return null;
 
   const structural = async () => {
     if (structuralActive) {
@@ -84,7 +88,7 @@ export function FileReviewActions({
         Actions
       </summary>
       <div className="mt-1 flex flex-wrap items-center justify-end gap-1 rounded-md border border-border bg-popover p-1.5 shadow-sm">
-        {capabilities.structural ? (
+        {capabilities?.structural ? (
           <Button
             disabled={busy}
             variant="outline"
@@ -94,7 +98,7 @@ export function FileReviewActions({
             {structuralActive ? "Source" : "Structure"}
           </Button>
         ) : null}
-        {capabilities.write ? (
+        {canWrite ? (
           <>
             <select
               aria-label={`Action scope for ${path}`}
@@ -109,30 +113,36 @@ export function FileReviewActions({
                 </option>
               ))}
             </select>
-            <Button
-              disabled={busy}
-              variant="outline"
-              onClick={() => void mutate("stage")}
-              className="h-7 text-[10.5px]"
-            >
-              Stage
-            </Button>
-            <Button
-              disabled={busy}
-              variant="outline"
-              onClick={() => void mutate("unstage")}
-              className="h-7 text-[10.5px]"
-            >
-              Unstage
-            </Button>
-            <Button
-              disabled={busy}
-              variant="destructive"
-              onClick={() => void mutate("revert")}
-              className="h-7 text-[10.5px]"
-            >
-              Revert
-            </Button>
+            {writeActions.includes("stage") ? (
+              <Button
+                disabled={busy}
+                variant="outline"
+                onClick={() => void mutate("stage")}
+                className="h-7 text-[10.5px]"
+              >
+                Stage
+              </Button>
+            ) : null}
+            {writeActions.includes("unstage") ? (
+              <Button
+                disabled={busy}
+                variant="outline"
+                onClick={() => void mutate("unstage")}
+                className="h-7 text-[10.5px]"
+              >
+                Unstage
+              </Button>
+            ) : null}
+            {writeActions.includes("revert") ? (
+              <Button
+                disabled={busy}
+                variant="destructive"
+                onClick={() => void mutate("revert")}
+                className="h-7 text-[10.5px]"
+              >
+                Revert
+              </Button>
+            ) : null}
           </>
         ) : null}
       </div>

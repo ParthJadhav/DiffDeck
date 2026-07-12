@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -158,6 +158,96 @@ describe("server capabilities", () => {
     expect(runGit(repo, ["diff"]).match(/^@@/gm)).toHaveLength(1);
   });
 
+  test("reverts cached whole-file changes from both the index and worktree", async () => {
+    const repo = createWritableRepo();
+    runGit(repo, ["add", "a.txt"]);
+    const build = () => buildDiffSession(repo, repo, ["--cached"]);
+    const initial = build();
+    const writable = await startServer(
+      { initialSession: initial, refresh: build },
+      0,
+      "127.0.0.1",
+      { write: true },
+    );
+    servers.push(writable);
+
+    const sessionResponse = await fetch(`${writable.url}api/session`);
+    expect(await sessionResponse.json()).toMatchObject({
+      capabilities: { write: true, writeActions: ["unstage", "revert"] },
+    });
+    const response = await fetch(`${writable.url}api/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "revert",
+        path: "a.txt",
+        snapshotId: initial.snapshotId,
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("old\n");
+    expect(runGit(repo, ["diff", "--cached"])).toBe("");
+    expect(runGit(repo, ["diff"])).toBe("");
+  });
+
+  test("reverts exactly one displayed cached hunk from the index and worktree", async () => {
+    const repo = createMultiHunkRepo();
+    runGit(repo, ["add", "many.txt"]);
+    const build = () => buildDiffSession(repo, repo, ["--cached"]);
+    const initial = build();
+    const writable = await startServer(
+      { initialSession: initial, refresh: build },
+      0,
+      "127.0.0.1",
+      { write: true },
+    );
+    servers.push(writable);
+
+    const response = await fetch(`${writable.url}api/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "revert",
+        hunkIndex: 0,
+        path: "many.txt",
+        snapshotId: initial.snapshotId,
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(runGit(repo, ["diff", "--cached"]).match(/^@@/gm)).toHaveLength(1);
+    expect(runGit(repo, ["diff"])).toBe("");
+    const lines = readFileSync(join(repo, "many.txt"), "utf8").split("\n");
+    expect(lines[1]).toBe("line 2");
+    expect(lines[27]).toBe("changed near end");
+  });
+
+  test("keeps commit and range reviews read-only even when write mode is enabled", async () => {
+    const repo = createWritableRepo();
+    runGit(repo, ["add", "a.txt"]);
+    runGit(repo, ["commit", "-qm", "second"]);
+    const initial = buildDiffSession(repo, repo, ["HEAD~1", "HEAD"]);
+    const writable = await startServer(initial, 0, "127.0.0.1", { write: true });
+    servers.push(writable);
+
+    const sessionResponse = await fetch(`${writable.url}api/session`);
+    expect(await sessionResponse.json()).toMatchObject({
+      capabilities: { write: false, writeActions: [] },
+    });
+    const response = await fetch(`${writable.url}api/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "revert",
+        path: "a.txt",
+        snapshotId: initial.snapshotId,
+      }),
+    });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      error: "Write actions are unavailable for commit and range diffs.",
+    });
+  });
+
   test("serves only authorized image sides with MIME metadata", async () => {
     const repo = createImageRepo();
     const session = buildDiffSession(repo, repo, []);
@@ -172,6 +262,22 @@ describe("server capabilities", () => {
     });
     expect((await fetch(`${server.url}api/image?path=../secret.png&side=new`)).status).toBe(404);
     expect((await fetch(`${server.url}api/image?path=logo.png&side=invalid`)).status).toBe(400);
+  });
+
+  test("resolves image blobs from a symmetric revision range", async () => {
+    const { repo, before, after } = createImageRangeRepo();
+    const session = buildDiffSession(repo, repo, ["HEAD~1...HEAD"]);
+    const server = await startServer(session, 0, "127.0.0.1");
+    servers.push(server);
+
+    const oldResponse = await fetch(`${server.url}api/image?path=logo.png&side=old`);
+    const newResponse = await fetch(`${server.url}api/image?path=logo.png&side=new`);
+    expect(oldResponse.status).toBe(200);
+    expect(newResponse.status).toBe(200);
+    const oldPayload = (await oldResponse.json()) as { data: string };
+    const newPayload = (await newResponse.json()) as { data: string };
+    expect(Buffer.from(oldPayload.data, "base64")).toEqual(before);
+    expect(Buffer.from(newPayload.data, "base64")).toEqual(after);
   });
 
   test("reports unavailable structural and editor executables", async () => {
@@ -287,6 +393,23 @@ function createImageRepo(): string {
   runGit(repo, ["commit", "-qm", "initial"]);
   writeFileSync(join(repo, "logo.png"), Buffer.from([137, 80, 78, 71, 0, 3, 4]));
   return repo;
+}
+
+function createImageRangeRepo(): { repo: string; before: Buffer; after: Buffer } {
+  const repo = mkdtempSync(join(tmpdir(), "diffdeck-image-range-"));
+  repos.push(repo);
+  runGit(repo, ["init", "-q"]);
+  runGit(repo, ["config", "user.email", "test@example.com"]);
+  runGit(repo, ["config", "user.name", "Test"]);
+  const before = Buffer.from([137, 80, 78, 71, 0, 10, 11, 12]);
+  const after = Buffer.from([137, 80, 78, 71, 0, 20, 21, 22]);
+  writeFileSync(join(repo, "logo.png"), before);
+  runGit(repo, ["add", "."]);
+  runGit(repo, ["commit", "-qm", "initial"]);
+  writeFileSync(join(repo, "logo.png"), after);
+  runGit(repo, ["add", "."]);
+  runGit(repo, ["commit", "-qm", "update image"]);
+  return { repo, before, after };
 }
 
 function runGit(repo: string, args: string[]): string {
