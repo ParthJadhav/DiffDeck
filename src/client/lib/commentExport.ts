@@ -14,6 +14,7 @@ export interface CommentExportRecord {
   filePath: string;
   id: string;
   lineNumber: number;
+  scope?: "file" | "line";
   side: AnnotationSide;
   snapshotId?: string;
   status?: "open" | "resolved" | "stale";
@@ -45,11 +46,14 @@ export function formatCommentExport(records: CommentExportRecord[]): string {
   if (records.length === 0) return "";
 
   const blocks = records.map((record, index) => {
+    const isFileComment = record.scope === "file";
     const sideLabel = record.side === "additions" ? "new file" : "old file";
     const contextBlock = formatContextBlock(record);
 
     return [
-      `${index + 1}. ${record.filePath}:${record.lineNumber} (${sideLabel})`,
+      isFileComment
+        ? `${index + 1}. ${record.filePath} (file-level note)`
+        : `${index + 1}. ${record.filePath}:${record.lineNumber} (${sideLabel})`,
       "",
       "Context:",
       contextBlock,
@@ -137,6 +141,9 @@ function findPartialHunk(
 }
 
 function formatContextBlock(record: CommentExportRecord): string {
+  if (record.scope === "file") {
+    return "(file-level note; no individual line selected)";
+  }
   if (record.contextLines.length === 0) {
     return "(context unavailable from the loaded diff)";
   }

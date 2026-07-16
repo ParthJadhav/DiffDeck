@@ -59,7 +59,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
 
   if (kind === "comment") {
     return (
-      <CommentCard variant="saved">
+      <CommentCard id={id} variant="saved">
         <CardHeader className="-mt-0.5 flex h-6 flex-row items-center gap-2 gap-y-0 p-0 text-xs leading-none">
           <span className="font-semibold text-foreground">You</span>
           <span className="text-muted-foreground">now</span>
@@ -94,7 +94,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   }
 
   return (
-    <CommentCard variant="form">
+    <CommentCard id={id} variant="form">
       <CardHeader className="mb-2 flex flex-row items-center gap-2 gap-y-0 p-0 text-xs">
         <span className="font-semibold text-foreground">
           {isEditing ? "Edit comment" : "New comment"}
@@ -133,10 +133,20 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   );
 });
 
-function CommentCard({ children, variant }: { children: ReactNode; variant: "saved" | "form" }) {
+function CommentCard({
+  children,
+  id,
+  variant,
+}: {
+  children: ReactNode;
+  id: string;
+  variant: "saved" | "form";
+}) {
   return (
     <Card
+      data-comment-id={id}
       data-variant={variant}
+      tabIndex={-1}
       className="app-comment-card group mx-4 my-2 max-w-2xl rounded-lg border-border font-sans"
     >
       <CardContent className="p-2.5">{children}</CardContent>

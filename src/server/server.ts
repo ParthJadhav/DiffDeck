@@ -1,20 +1,33 @@
 import express from "express";
 import { createServer as createHttpServer } from "node:http";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { extname, join, resolve as resolvePath } from "node:path";
+import { extname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
 import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
 import type { DiffSession } from "./types.js";
 import { buildCacheKey } from "./cacheKey.js";
 import { createDiffSource, type DiffSessionSource, type DiffSource } from "./diffSource.js";
+import { isDiffWhitespaceMode } from "./whitespace.js";
 
 export type { DiffSessionSource } from "./diffSource.js";
 
 export interface RunningServer {
   url: string;
   close(): Promise<void>;
+}
+
+export function normalizeEditorLine(value: unknown): number {
+  const line = Number(value ?? 1);
+  return Number.isFinite(line) ? Math.max(1, Math.floor(line)) : 1;
 }
 
 export interface ServerOptions {
@@ -30,6 +43,32 @@ export interface ServerOptions {
 
 type WriteAction = "stage" | "unstage" | "revert";
 type WriteDiffMode = "worktree" | "cached" | "readonly";
+
+function serializeSession(sessionStore: DiffSource, session: DiffSession, options: ServerOptions) {
+  const writeActions =
+    options.write === true ? getAvailableWriteActions(session.diffArgs) : ([] as WriteAction[]);
+  return {
+    snapshotId: session.snapshotId,
+    repoRoot: session.repoRoot,
+    currentDirectory: session.currentDirectory,
+    diffArgs: session.diffArgs,
+    files: session.files,
+    preferences: {
+      whitespaceMode: sessionStore.getWhitespaceMode(),
+    },
+    capabilities: {
+      editor: options.editor != null,
+      structural: options.structural === true,
+      watch: options.watch === true,
+      write: writeActions.length > 0,
+      writeActions,
+    },
+  };
+}
+
+function formatServerError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export function createDiffSessionStore(sessionSource: DiffSessionSource): DiffSource {
   return createDiffSource(sessionSource);
@@ -75,22 +114,24 @@ export async function startServer(
 
   app.get("/api/session", (request, response) => {
     const session = request.query.refresh === "1" ? sessionStore.refresh() : sessionStore.current();
-    const writeActions =
-      options.write === true ? getAvailableWriteActions(session.diffArgs) : ([] as WriteAction[]);
-    response.json({
-      snapshotId: session.snapshotId,
-      repoRoot: session.repoRoot,
-      currentDirectory: session.currentDirectory,
-      diffArgs: session.diffArgs,
-      files: session.files,
-      capabilities: {
-        editor: options.editor != null,
-        structural: options.structural === true,
-        watch: options.watch === true,
-        write: writeActions.length > 0,
-        writeActions,
-      },
-    });
+    response.json(serializeSession(sessionStore, session, options));
+  });
+
+  app.post("/api/preferences", (request, response) => {
+    if (!isDiffWhitespaceMode(request.body?.whitespaceMode)) {
+      response.status(400).json({ error: "A valid whitespace mode is required." });
+      return;
+    }
+    try {
+      const session = sessionStore.setWhitespaceMode(request.body.whitespaceMode);
+      if (session == null) {
+        response.status(501).json({ error: "This diff source cannot rebuild whitespace modes." });
+        return;
+      }
+      response.json(serializeSession(sessionStore, session, options));
+    } catch (error) {
+      response.status(500).json({ error: formatServerError(error) });
+    }
   });
 
   app.get("/api/events", (request, response) => {
@@ -203,7 +244,7 @@ export async function startServer(
       return;
     }
     const path = typeof request.body?.path === "string" ? request.body.path : "";
-    const line = Number(request.body?.line ?? 1);
+    const line = normalizeEditorLine(request.body?.line);
     const session = sessionStore.current();
     if (sessionStore.file(path) == null) {
       response.status(404).json({ error: "The requested diff path is not authorized." });
@@ -226,7 +267,7 @@ export async function startServer(
       response.status(501).json({ error: `Editor command not found: ${command}` });
       return;
     }
-    const child = spawn(command, [...configuredArgs, `${target}:${Math.max(1, line)}`], {
+    const child = spawn(command, [...configuredArgs, `${target}:${line}`], {
       detached: true,
       stdio: "ignore",
     });
@@ -393,7 +434,19 @@ function notifyClients(
 function resolveAuthorizedPath(repoRoot: string, path: string): string | null {
   const root = resolvePath(repoRoot);
   const target = resolvePath(root, path);
-  return target === root || target.startsWith(`${root}/`) ? target : null;
+  if (!isWithinRoot(root, target)) return null;
+  if (!existsSync(target)) return target;
+
+  try {
+    return isWithinRoot(realpathSync(root), realpathSync(target)) ? target : null;
+  } catch {
+    return null;
+  }
+}
+
+function isWithinRoot(root: string, target: string): boolean {
+  const pathFromRoot = relative(root, target);
+  return pathFromRoot === "" || (!pathFromRoot.startsWith("..") && !isAbsolute(pathFromRoot));
 }
 
 function readImageSide(session: DiffSession, path: string, side: "old" | "new"): Buffer | null {

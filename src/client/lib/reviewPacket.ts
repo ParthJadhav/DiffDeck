@@ -1,6 +1,6 @@
 import { formatCommentExport, type CommentExportRecord } from "./commentExport.js";
 
-export const REVIEW_PACKET_VERSION = 1;
+export const REVIEW_PACKET_VERSION = 2;
 
 export interface ReviewPacketInput {
   comments: readonly CommentExportRecord[];
@@ -40,6 +40,7 @@ export function createReviewPacket(input: ReviewPacketInput): ReviewPacket {
         content: normalizeLine(line.content),
       })),
       status: comment.status ?? "open",
+      scope: comment.scope ?? "line",
     })),
   };
 }

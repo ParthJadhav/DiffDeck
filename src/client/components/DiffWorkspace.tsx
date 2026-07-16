@@ -1,4 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   FileDiff,
   UnresolvedFile,
@@ -9,11 +19,18 @@ import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
 import { AlertCircle, FileWarning, ImageOff, LoaderCircle } from "lucide-react";
 import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
 import { fetchJson } from "../lib/api.js";
+import {
+  focusRenderedReviewNote,
+  scrollToRenderedDiffLine,
+  type NavigateLineDetail,
+} from "../lib/diffDom.js";
+import { readDiffLocation } from "../lib/deepLink.js";
+import { getHunkTargets } from "../lib/hunkNavigation.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffFileSummary, SessionPayload } from "../types.js";
 import { isDependencyPath } from "../lib/fileFilters.js";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card.js";
+import { Card, CardContent, CardDescription, CardHeader } from "./ui/card.js";
 import { Button } from "./ui/button.js";
 import { Skeleton } from "./ui/skeleton.js";
 import { CommentAnnotationView } from "./diff/CommentAnnotation.js";
@@ -27,18 +44,29 @@ import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
 import { ImageDiff } from "./diff/ImageDiff.js";
 import { DependencyDiff } from "./diff/DependencyDiff.js";
 import { FileReviewActions } from "./diff/FileReviewActions.js";
+import { FileUtilities } from "./diff/FileUtilities.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
 import { MultiFileScroller } from "./diff/MultiFileScroller.js";
+import type { ReviewSurface } from "../lib/reviewSession.js";
+
+const AccessiblePatchView = lazy(async () => {
+  const module = await import("./AccessiblePatchView.js");
+  return { default: module.AccessiblePatchView };
+});
 
 const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
+const LINE_NAVIGATION_RETRY_ATTEMPTS = 160;
+const LINE_NAVIGATION_RETRY_MS = 50;
 
 export interface DiffWorkspaceProps {
   annotationsByFile: Readonly<Record<string, CommentAnnotation[]>>;
   capabilities?: SessionPayload["capabilities"];
   collapsedFilePaths: ReadonlySet<string>;
+  commentExports: readonly CommentExportRecord[];
   diffStyle: DiffLayout;
   disableBackground: boolean;
   expandUnchanged: boolean;
+  fileCommentDrafts: Readonly<Record<string, string>>;
   files: DiffFileSummary[];
   fileDiffs: Record<string, FileDiffMetadata>;
   fileDiffErrors: Record<string, string>;
@@ -50,12 +78,15 @@ export interface DiffWorkspaceProps {
   onCollapsedFileChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
+  onFileCommentDraftChange: (path: string, body: string) => void;
   onRequestFileDiff: (path: string) => void;
   onRetryFileDiff: (path: string) => void;
+  onReviewSurfaceChange: (surface: ReviewSurface) => void;
   onSessionReload: () => void;
   onViewedFileChange: (path: string, value: boolean) => void;
   onVisiblePathChange: (path: string) => void;
   overflow: OverflowMode;
+  reviewSurface: ReviewSurface;
   scrollSignal: number;
   selectedFile: DiffFileSummary | null;
   selectedPath: string | null;
@@ -71,9 +102,11 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     annotationsByFile,
     capabilities,
     collapsedFilePaths,
+    commentExports,
     diffStyle,
     disableBackground,
     expandUnchanged,
+    fileCommentDrafts,
     files,
     fileDiffs,
     fileDiffErrors,
@@ -82,12 +115,15 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     onCollapsedFileChange,
     onCommentDeleted,
     onCommentSaved,
+    onFileCommentDraftChange,
     onRequestFileDiff,
     onRetryFileDiff,
+    onReviewSurfaceChange,
     onSessionReload,
     onViewedFileChange,
     onVisiblePathChange,
     overflow,
+    reviewSurface,
     scrollSignal,
     selectedFile,
     selectedPath,
@@ -97,6 +133,57 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     themeType,
     viewedFilePaths,
   } = props;
+
+  useEffect(() => {
+    let navigationGeneration = 0;
+    let timer = 0;
+    const navigate = (event: Event) => {
+      const detail = (event as CustomEvent<NavigateLineDetail>).detail;
+      const generation = ++navigationGeneration;
+      let attempts = 0;
+      const tryScroll = () => {
+        if (generation !== navigationGeneration) return;
+        if (scrollToRenderedDiffLine(detail)) return;
+        attempts += 1;
+        if (attempts < LINE_NAVIGATION_RETRY_ATTEMPTS) {
+          timer = window.setTimeout(tryScroll, LINE_NAVIGATION_RETRY_MS);
+        }
+      };
+      window.requestAnimationFrame(tryScroll);
+    };
+    window.addEventListener("diffdeck:navigate-line", navigate);
+    return () => {
+      navigationGeneration += 1;
+      window.clearTimeout(timer);
+      window.removeEventListener("diffdeck:navigate-line", navigate);
+    };
+  }, []);
+
+  useEffect(() => {
+    let generation = 0;
+    let timer = 0;
+    const focusNote = (event: Event) => {
+      const detail = (event as CustomEvent<{ id: string; path: string; scope: "file" | "line" }>)
+        .detail;
+      const requestGeneration = ++generation;
+      let attempts = 0;
+      const tryFocus = () => {
+        if (requestGeneration !== generation) return;
+        if (focusRenderedReviewNote(detail)) return;
+        attempts += 1;
+        if (attempts < LINE_NAVIGATION_RETRY_ATTEMPTS) {
+          timer = window.setTimeout(tryFocus, LINE_NAVIGATION_RETRY_MS);
+        }
+      };
+      window.requestAnimationFrame(tryFocus);
+    };
+    window.addEventListener("diffdeck:focus-note", focusNote);
+    return () => {
+      generation += 1;
+      window.clearTimeout(timer);
+      window.removeEventListener("diffdeck:focus-note", focusNote);
+    };
+  }, []);
 
   const diffOptions = useMemo(
     () => ({
@@ -113,8 +200,8 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
         .join("\n"),
       expansionLineCount: hunkSeparators === "custom" ? 5 : 100,
       lineHoverHighlight: "both" as const,
-      onPostRender: installHunkExpansionFallback,
       overflow,
+      onPostRender: patchRenderedDiffAccessibility,
       themeType,
     }),
     [
@@ -139,7 +226,9 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
         <div className="grid flex-1 place-items-center p-8 text-center">
           <Card className="max-w-sm">
             <CardHeader>
-              <CardTitle className="text-xl">No diff to render</CardTitle>
+              <h1 className="text-xl font-semibold leading-none tracking-normal">
+                No diff to render
+              </h1>
               <CardDescription className="leading-relaxed">
                 Run the CLI inside a repository with pending changes, or pass{" "}
                 <code className="font-mono text-foreground/80" translate="no">
@@ -151,6 +240,33 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
           </Card>
         </div>
       </main>
+    );
+  }
+
+  if (reviewSurface === "accessible") {
+    return (
+      <Suspense
+        fallback={
+          <main
+            id="main"
+            aria-label={`Accessible patch for ${selectedFile.path}`}
+            className="grid h-full min-h-0 min-w-0 place-items-center bg-background text-xs text-muted-foreground"
+          >
+            Loading linear patch…
+          </main>
+        }
+      >
+        <AccessiblePatchView
+          comments={commentExports.filter((comment) => comment.filePath === selectedFile.path)}
+          error={fileDiffErrors[selectedFile.path]}
+          file={selectedFile}
+          fileDiff={fileDiffs[selectedFile.path]}
+          onAnnotationsChange={onAnnotationsChange}
+          onCommentSaved={onCommentSaved}
+          onRetry={onRetryFileDiff}
+          onReturnToRich={() => onReviewSurfaceChange("rich")}
+        />
+      </Suspense>
     );
   }
 
@@ -177,10 +293,12 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
               file={file}
               fileDiff={fileDiffs[file.path] ?? null}
               fileDiffError={fileDiffErrors[file.path] ?? null}
+              fileCommentDraft={fileCommentDrafts[file.path] ?? ""}
               onAnnotationsChange={onAnnotationsChange}
               onCollapsedChange={onCollapsedFileChange}
               onCommentDeleted={onCommentDeleted}
               onCommentSaved={onCommentSaved}
+              onFileCommentDraftChange={onFileCommentDraftChange}
               onRetryFileDiff={onRetryFileDiff}
               onSessionReload={onSessionReload}
               onSelectedLinesChange={onSelectedLinesChange}
@@ -197,6 +315,22 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       </section>
     </main>
   );
+}
+
+function patchRenderedDiffAccessibility(node: HTMLElement) {
+  queueMicrotask(() => {
+    const tree = node.getRootNode();
+    const scope = tree instanceof ShadowRoot ? tree : (node.shadowRoot ?? node);
+    patchScrollableCodeAccessibility(scope);
+  });
+}
+
+function patchScrollableCodeAccessibility(scope: ParentNode) {
+  for (const code of scope.querySelectorAll<HTMLElement>("code[data-code]")) {
+    code.tabIndex = 0;
+    const side = code.hasAttribute("data-additions") ? "new" : "old";
+    code.setAttribute("aria-label", `Scrollable ${side}-side code`);
+  }
 }
 
 // Files at or above this changed-line count freeze the main thread for several
@@ -225,12 +359,14 @@ const FileDiffSection = memo(function FileDiffSection({
   commentAnnotations,
   diffOptions,
   file,
+  fileCommentDraft,
   fileDiff,
   fileDiffError,
   onAnnotationsChange,
   onCollapsedChange,
   onCommentDeleted,
   onCommentSaved,
+  onFileCommentDraftChange,
   onRetryFileDiff,
   onSessionReload,
   onSelectedLinesChange,
@@ -245,6 +381,7 @@ const FileDiffSection = memo(function FileDiffSection({
   commentAnnotations: CommentAnnotation[];
   diffOptions: Parameters<typeof FileDiff>[0]["options"];
   file: DiffFileSummary;
+  fileCommentDraft: string;
   fileDiff: FileDiffMetadata | null;
   fileDiffError: string | null;
   onAnnotationsChange: (
@@ -254,6 +391,7 @@ const FileDiffSection = memo(function FileDiffSection({
   onCollapsedChange: (path: string, value: boolean) => void;
   onCommentDeleted: (id: string) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
+  onFileCommentDraftChange: (path: string, body: string) => void;
   onRetryFileDiff: (path: string) => void;
   onSessionReload: () => void;
   onSelectedLinesChange: (path: string, range: SelectedLineRange | null) => void;
@@ -269,27 +407,84 @@ const FileDiffSection = memo(function FileDiffSection({
   );
   const [structuralOutput, setStructuralOutput] = useState<string | null>(null);
 
+  const handleFileCommentSubmit = useCallback(
+    (body: string) => {
+      onCommentSaved({
+        body,
+        contextLines: [],
+        filePath: file.path,
+        id: `file-${crypto.randomUUID()}`,
+        lineNumber: 0,
+        scope: "file",
+        side: "additions",
+      });
+      onFileCommentDraftChange(file.path, "");
+    },
+    [file.path, onCommentSaved, onFileCommentDraftChange],
+  );
+
   const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
 
   useEffect(() => setStructuralOutput(null), [file.path, sessionRevision]);
 
+  useEffect(() => {
+    if (collapsed || fileDiff == null || isHeavyFile) return;
+    let attempts = 0;
+    let timer = 0;
+    let cancelled = false;
+    let observer: MutationObserver | null = null;
+    const patch = () => {
+      if (cancelled) return;
+      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-file-path]")).find(
+        (candidate) => candidate.dataset.filePath === file.path,
+      );
+      const shadowRoot = card?.querySelector("diffs-container")?.shadowRoot;
+      if (shadowRoot != null) {
+        patchScrollableCodeAccessibility(shadowRoot);
+        observer = new MutationObserver(() => patchScrollableCodeAccessibility(shadowRoot));
+        observer.observe(shadowRoot, { childList: true, subtree: true });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) timer = window.setTimeout(patch, 25);
+    };
+    window.requestAnimationFrame(patch);
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [collapsed, file.path, fileDiff, isHeavyFile]);
+
   const headerActions = useMemo(
     () => (
-      <FileReviewActions
-        capabilities={capabilities}
-        hunkCount={fileDiff?.hunks.length ?? 0}
-        onReload={onSessionReload}
-        onStructuralChange={setStructuralOutput}
-        path={file.path}
-        snapshotId={snapshotId}
-        structuralActive={structuralOutput != null}
-      />
+      <div className="flex items-center gap-0.5">
+        <FileUtilities
+          editorEnabled={capabilities?.editor === true}
+          fileCommentDraft={fileCommentDraft}
+          onFileCommentDraftChange={(body) => onFileCommentDraftChange(file.path, body)}
+          onFileCommentSubmit={handleFileCommentSubmit}
+          path={file.path}
+        />
+        <FileReviewActions
+          capabilities={capabilities}
+          hunkCount={fileDiff?.hunks.length ?? 0}
+          onReload={onSessionReload}
+          onStructuralChange={setStructuralOutput}
+          path={file.path}
+          snapshotId={snapshotId}
+          structuralActive={structuralOutput != null}
+        />
+      </div>
     ),
     [
       capabilities,
+      fileCommentDraft,
       file.path,
+      handleFileCommentSubmit,
       fileDiff?.hunks.length,
       onSessionReload,
+      onFileCommentDraftChange,
       snapshotId,
       structuralOutput,
     ],
@@ -360,6 +555,25 @@ const FileDiffSection = memo(function FileDiffSection({
 
   const filePath = file.path;
 
+  const handlePostRender = useCallback(
+    (...args: Parameters<typeof installHunkExpansionFallback>) => {
+      installHunkExpansionFallback(...args);
+      const location = readDiffLocation(window.location.href);
+      if (location.file !== filePath || location.line == null || location.side == null) {
+        return;
+      }
+      const detail = {
+        line: location.line,
+        path: filePath,
+        side: location.side,
+      } satisfies NavigateLineDetail;
+      window.requestAnimationFrame(() => {
+        scrollToRenderedDiffLine(detail);
+      });
+    },
+    [filePath],
+  );
+
   const commentAnnotationsRef = useRef(commentAnnotations);
   commentAnnotationsRef.current = commentAnnotations;
 
@@ -385,11 +599,9 @@ const FileDiffSection = memo(function FileDiffSection({
   useEffect(() => {
     const handleShortcutComment = (event: Event) => {
       if ((event as CustomEvent<string>).detail !== filePath || fileDiff == null) return;
-      const firstHunk = fileDiff.hunks[0];
-      if (firstHunk == null) return;
-      const side: AnnotationSide = firstHunk.additionCount > 0 ? "additions" : "deletions";
-      const line = side === "additions" ? firstHunk.additionStart : firstHunk.deletionStart;
-      addCommentAtLine(side, Math.max(1, line));
+      const target = getHunkTargets(fileDiff)[0];
+      if (target == null) return;
+      addCommentAtLine(target.side, target.line);
     };
     window.addEventListener("diffdeck:add-comment", handleShortcutComment);
     return () => window.removeEventListener("diffdeck:add-comment", handleShortcutComment);
@@ -406,7 +618,7 @@ const FileDiffSection = memo(function FileDiffSection({
       addCommentAtLine(side, Math.max(range.start, range.end));
       window.dispatchEvent(
         new CustomEvent("diffdeck:line-selected", {
-          detail: { line: Math.max(range.start, range.end), side },
+          detail: { line: Math.max(range.start, range.end), path: filePath, side },
         }),
       );
     },
@@ -498,6 +710,7 @@ const FileDiffSection = memo(function FileDiffSection({
         filePath,
         id,
         lineNumber: submittedAnnotation.lineNumber,
+        scope: "line",
         side: submittedAnnotation.side,
       });
       onSelectedLinesChange(filePath, null);
@@ -527,8 +740,9 @@ const FileDiffSection = memo(function FileDiffSection({
       enableGutterUtility: !hasOpenCommentForm,
       enableLineSelection: !hasOpenCommentForm,
       onLineSelectionEnd: handleLineSelectionEnd,
+      onPostRender: handlePostRender,
     }),
-    [collapsed, diffOptions, handleLineSelectionEnd, hasOpenCommentForm],
+    [collapsed, diffOptions, handleLineSelectionEnd, handlePostRender, hasOpenCommentForm],
   );
 
   const renderCommentAnnotation = useCallback(
@@ -714,6 +928,7 @@ const FileDiffSection = memo(function FileDiffSection({
       fileDiff={fileDiff}
       header={
         <CustomFileHeader
+          actions={headerActions}
           collapsed={collapsed}
           fileDiff={fileDiff}
           onCollapsedChange={handleHeaderCollapsedChange}

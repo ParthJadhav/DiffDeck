@@ -15,7 +15,7 @@ export function ShellState({
   const stripped = isLoading ? text.replace(/…\s*$/, "") : text;
 
   return (
-    <div className="grid h-screen place-items-center bg-background p-8 text-center">
+    <div className="grid h-dvh place-items-center bg-background p-8 text-center">
       <Card
         role={variant === "error" ? "alert" : "status"}
         aria-live={variant === "error" ? "assertive" : "polite"}

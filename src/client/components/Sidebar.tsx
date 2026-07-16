@@ -1,32 +1,53 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { FileTree } from "@pierre/trees/react";
 import type { FileTree as TreeModel } from "@pierre/trees";
-import { RefreshCw } from "lucide-react";
+import { FolderTree, List, RefreshCw } from "lucide-react";
 import { buildHeader } from "../lib/diff.js";
 import { cn } from "../lib/cn.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
+import { FlatFileList } from "./FlatFileList.js";
+import type { DiffFileSummary } from "../types.js";
+import type { FileOrder, FileViewMode } from "../lib/reviewSession.js";
 
 export interface SidebarProps {
   diffArgs: string[];
+  fileOrder: FileOrder;
   fileCount: number;
+  files: readonly DiffFileSummary[];
+  fileViewMode: FileViewMode;
   footer?: ReactNode;
+  onFileOrderChange: (order: FileOrder) => void;
+  onFileViewModeChange: (mode: FileViewMode) => void;
   onRefresh: () => void;
+  onSelectPath: (path: string) => void;
   refreshing: boolean;
+  selectedPath: string | null;
+  totalFileCount: number;
   totals: { additions: number; deletions: number };
   treeModel: TreeModel;
   viewedCount: number;
+  viewedPaths: ReadonlySet<string>;
 }
 
 export function Sidebar({
   diffArgs,
+  fileOrder,
   fileCount,
+  files,
+  fileViewMode,
   footer,
+  onFileOrderChange,
+  onFileViewModeChange,
   onRefresh,
+  onSelectPath,
   refreshing,
+  selectedPath,
+  totalFileCount,
   totals,
   treeModel,
   viewedCount,
+  viewedPaths,
 }: SidebarProps) {
   const headerLabel = buildHeader(diffArgs);
   const treeHostRef = useRef<HTMLDivElement | null>(null);
@@ -50,6 +71,12 @@ export function Sidebar({
         input.id = "diffdeck-file-search";
         input.name = "diffdeck-file-search";
         input.setAttribute("aria-label", "Search files");
+
+        const tree = shadowRoot?.querySelector<HTMLElement>("[role='tree']");
+        const searchContainer = input.closest<HTMLElement>("[data-file-tree-search-container]");
+        if (tree != null && searchContainer != null && tree.contains(searchContainer)) {
+          tree.parentElement?.insertBefore(searchContainer, tree);
+        }
       }
 
       if (shadowRoot != null) {
@@ -91,7 +118,7 @@ export function Sidebar({
         </Badge>
         <Badge
           variant="outline"
-          className="h-5 border-diff-deleted/30 bg-diff-deleted/10 px-1.5 text-[11px] leading-none text-diff-deleted"
+          className="h-5 border-diff-deleted/40 bg-transparent px-1.5 text-[11px] leading-none text-diff-deleted"
           aria-label={`${totals.deletions} deletions`}
         >
           −{totals.deletions}
@@ -109,20 +136,79 @@ export function Sidebar({
         </Button>
       </div>
 
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/70 px-2">
+        <div className="flex rounded-md border border-border bg-muted p-0.5" aria-label="File view">
+          <button
+            type="button"
+            aria-label="Tree file view"
+            aria-pressed={fileViewMode === "tree"}
+            title="Tree view"
+            onClick={() => onFileViewModeChange("tree")}
+            className={cn(
+              "grid size-6 place-items-center rounded text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              fileViewMode === "tree" && "bg-background text-foreground shadow-sm",
+            )}
+          >
+            <FolderTree aria-hidden="true" className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Flat file view"
+            aria-pressed={fileViewMode === "list"}
+            title="Flat list view"
+            onClick={() => onFileViewModeChange("list")}
+            className={cn(
+              "grid size-6 place-items-center rounded text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              fileViewMode === "list" && "bg-background text-foreground shadow-sm",
+            )}
+          >
+            <List aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+        <label className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="sr-only">Review file order</span>
+          <select
+            aria-label="Review file order"
+            value={fileOrder}
+            onChange={(event) => onFileOrderChange(event.target.value as FileOrder)}
+            className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[11px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="path">Order: Path</option>
+            <option value="status">Order: Status</option>
+            <option value="size">Order: Change size</option>
+          </select>
+        </label>
+      </div>
+
       <div ref={treeHostRef} className="min-h-0 flex-1 overflow-hidden">
         {fileCount === 0 ? (
           <div className="grid h-full place-items-center p-6 text-center">
             <div className="space-y-1.5">
-              <p className="text-sm font-medium text-foreground">Nothing to diff</p>
+              <p className="text-sm font-medium text-foreground">
+                {totalFileCount === 0 ? "Nothing to diff" : "No files match"}
+              </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                The working tree is clean, or your{" "}
-                <code className="font-mono" translate="no">
-                  git diff
-                </code>{" "}
-                arguments returned no files.
+                {totalFileCount === 0 ? (
+                  <>
+                    The working tree is clean, or your{" "}
+                    <code className="font-mono" translate="no">
+                      git diff
+                    </code>{" "}
+                    arguments returned no files.
+                  </>
+                ) : (
+                  "Adjust or clear the active review filters."
+                )}
               </p>
             </div>
           </div>
+        ) : fileViewMode === "list" ? (
+          <FlatFileList
+            files={files}
+            onSelectPath={onSelectPath}
+            selectedPath={selectedPath}
+            viewedPaths={viewedPaths}
+          />
         ) : (
           <FileTree
             model={treeModel}

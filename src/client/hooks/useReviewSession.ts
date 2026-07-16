@@ -11,7 +11,11 @@ import {
   updateReviewAnnotations,
   updateReviewPathSet,
   type ReviewAnnotation,
+  type FileOrder,
+  type FileViewMode,
   type ReviewFilters,
+  type ReviewMode,
+  type ReviewSurface,
   type ReviewSessionSnapshot,
   type ReviewSessionState,
 } from "../lib/reviewSession.js";
@@ -24,6 +28,11 @@ export interface UseReviewSessionResult {
   deleteComment: (id: string) => void;
   setCollapsed: (path: string, value: boolean) => void;
   setFilters: (filters: ReviewFilters) => void;
+  setFileCommentDraft: (path: string, body: string) => void;
+  setFileOrder: (order: FileOrder) => void;
+  setFileViewMode: (mode: FileViewMode) => void;
+  setReviewMode: (mode: ReviewMode) => void;
+  setReviewSurface: (surface: ReviewSurface) => void;
   setSelectedPath: (path: string | null) => void;
   setViewed: (path: string, value: boolean) => void;
   reconcileComments: (
@@ -159,6 +168,37 @@ export function useReviewSession(
     setState((current) => ({ ...current, filters }));
   }, []);
 
+  const setFileCommentDraft = useCallback((path: string, body: string) => {
+    setState((current) => {
+      const next = { ...current.fileCommentDrafts };
+      if (body.length === 0) delete next[path];
+      else next[path] = body;
+      return { ...current, fileCommentDrafts: next };
+    });
+  }, []);
+
+  const setFileOrder = useCallback((fileOrder: FileOrder) => {
+    setState((current) => (current.fileOrder === fileOrder ? current : { ...current, fileOrder }));
+  }, []);
+
+  const setFileViewMode = useCallback((fileViewMode: FileViewMode) => {
+    setState((current) =>
+      current.fileViewMode === fileViewMode ? current : { ...current, fileViewMode },
+    );
+  }, []);
+
+  const setReviewMode = useCallback((reviewMode: ReviewMode) => {
+    setState((current) =>
+      current.reviewMode === reviewMode ? current : { ...current, reviewMode },
+    );
+  }, []);
+
+  const setReviewSurface = useCallback((reviewSurface: ReviewSurface) => {
+    setState((current) =>
+      current.reviewSurface === reviewSurface ? current : { ...current, reviewSurface },
+    );
+  }, []);
+
   const reconcileComments = useCallback(
     (fileDiffs: Parameters<typeof reconcileCommentAnchors>[1], snapshotId: string) => {
       setState((current) => {
@@ -192,6 +232,11 @@ export function useReviewSession(
     resetReview,
     setCollapsed,
     setFilters,
+    setFileCommentDraft,
+    setFileOrder,
+    setFileViewMode,
+    setReviewMode,
+    setReviewSurface,
     setSelectedPath,
     setViewed,
     updateAnnotations,

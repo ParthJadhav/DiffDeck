@@ -1,6 +1,7 @@
+import "./nodeCompat.js";
 import { processFile, processPatch, type FileContents, type FileDiffMetadata } from "@pierre/diffs";
 import type { GitStatus } from "@pierre/trees";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { DiffdeckError } from "./errors.js";
@@ -551,6 +552,7 @@ function readWorktreeFile(repoRoot: string, path: string): string | null {
   const absolutePath = join(repoRoot, path);
   if (!existsSync(absolutePath)) return null;
   try {
+    if (lstatSync(absolutePath).isSymbolicLink()) return readlinkSync(absolutePath, "utf8");
     return readFileSync(absolutePath, "utf8");
   } catch {
     return null;
@@ -584,6 +586,21 @@ function splitRawDiffFiles(rawDiff: string): string[] {
     .split(/(?=^diff --git)/gm)
     .map((fileDiff) => fileDiff.trimStart())
     .filter((fileDiff) => fileDiff.startsWith("diff --git"));
+}
+
+function stripCombinedDiffFiles(rawDiff: string): string {
+  let skippingCombinedFile = false;
+  return rawDiff
+    .split(/(?<=\n)/)
+    .filter((line) => {
+      if (/^diff --(?:cc|combined) /.test(line)) {
+        skippingCombinedFile = true;
+        return false;
+      }
+      if (line.startsWith(DIFF_GIT_PREFIX)) skippingCombinedFile = false;
+      return !skippingCombinedFile;
+    })
+    .join("");
 }
 
 function applyGitHeaderPaths(
@@ -675,6 +692,43 @@ function createSummary(fileDiff: FileDiffMetadata): DiffFileSummary {
   };
 }
 
+function isTypeChangePair(first: FileDiffMetadata, second: FileDiffMetadata): boolean {
+  return (
+    first.name === second.name &&
+    ((first.type === "deleted" && second.type === "new") ||
+      (first.type === "new" && second.type === "deleted"))
+  );
+}
+
+function mergeTypeChangePair(first: FileDiffMetadata, second: FileDiffMetadata): FileDiffMetadata {
+  const deleted = first.type === "deleted" ? first : second;
+  const added = first.type === "new" ? first : second;
+  const splitOffset = deleted.splitLineCount;
+  const unifiedOffset = deleted.unifiedLineCount;
+  const addedHunks = added.hunks.map((hunk) => ({
+    ...hunk,
+    splitLineStart: hunk.splitLineStart + splitOffset,
+    unifiedLineStart: hunk.unifiedLineStart + unifiedOffset,
+  }));
+
+  return {
+    ...added,
+    cacheKey: buildCacheKey(
+      "type-change",
+      added.name,
+      `${deleted.cacheKey ?? "deleted"}\0${added.cacheKey ?? "added"}`,
+    ),
+    deletionLines: deleted.deletionLines,
+    hunks: [...deleted.hunks, ...addedHunks],
+    isPartial: deleted.isPartial || added.isPartial,
+    prevMode: deleted.mode,
+    prevObjectId: deleted.prevObjectId,
+    splitLineCount: deleted.splitLineCount + added.splitLineCount,
+    type: "change",
+    unifiedLineCount: deleted.unifiedLineCount + added.unifiedLineCount,
+  };
+}
+
 export function buildDiffSession(
   repoRoot: string,
   currentDirectory: string,
@@ -709,9 +763,10 @@ export function buildDiffSessionFromRawDiff(
   const currentDirectoryDisplay =
     relativeDirectory.length === 0 || relativeDirectory.startsWith("..") ? "." : relativeDirectory;
 
-  if (rawDiff.trim().length > 0) {
-    const normalizedDiff = normalizeRawGitDiffForParser(rawDiff);
-    logRawDiffContext(logger, rawDiff, normalizedDiff);
+  const parseableRawDiff = stripCombinedDiffFiles(rawDiff);
+  if (parseableRawDiff.trim().length > 0) {
+    const normalizedDiff = normalizeRawGitDiffForParser(parseableRawDiff);
+    logRawDiffContext(logger, parseableRawDiff, normalizedDiff);
     let parsedPatch: ReturnType<typeof processPatch>;
     try {
       parsedPatch = processPatch(normalizedDiff.rawDiff, "diffdeck", true);
@@ -723,13 +778,13 @@ export function buildDiffSessionFromRawDiff(
           repoRoot,
           currentDirectory,
           diffArgs,
-          rawDiff,
+          parseableRawDiff,
           normalizedDiff,
         ),
         error,
       );
     }
-    const rawFileDiffs = splitRawDiffFiles(rawDiff);
+    const rawFileDiffs = splitRawDiffFiles(parseableRawDiff);
     const parserRawFileDiffs = splitRawDiffFiles(normalizedDiff.rawDiff);
     const canHydrateFromWorktree = diffArgs.length === 0;
     logger?.(`upstream parser returned ${parsedPatch.files.length} file(s)`);
@@ -749,17 +804,32 @@ export function buildDiffSessionFromRawDiff(
           ? hydrateFileDiff(repoRoot, parserRawFileDiff, partialFileDiff, gitHeaderPaths, logger)
           : partialFileDiff;
       fileDiff.cacheKey = buildCacheKey("diff", fileDiff.name, rawFileDiff ?? rawDiff);
-      fileDiffs.set(fileDiff.name, fileDiff);
-      const summary = createSummary(fileDiff);
+      const existingFileDiff = fileDiffs.get(fileDiff.name);
+      const mergedFileDiff =
+        existingFileDiff != null && isTypeChangePair(existingFileDiff, fileDiff)
+          ? mergeTypeChangePair(existingFileDiff, fileDiff)
+          : fileDiff;
+      fileDiffs.set(mergedFileDiff.name, mergedFileDiff);
+      const summary = createSummary(mergedFileDiff);
       if (binary) {
         summary.isBinary = true;
       }
-      const contents = binary ? null : readWorktreeFile(repoRoot, fileDiff.name);
+      const contents = binary ? null : readWorktreeFile(repoRoot, mergedFileDiff.name);
       if (contents != null && hasMergeConflictMarkers(contents)) {
         summary.hasMergeConflicts = true;
-        unresolvedFiles.set(fileDiff.name, contents);
+        unresolvedFiles.set(mergedFileDiff.name, contents);
       }
-      files.push(summary);
+      const existingSummaryIndex = files.findIndex((entry) => entry.path === mergedFileDiff.name);
+      if (existingFileDiff != null && isTypeChangePair(existingFileDiff, fileDiff)) {
+        if (existingSummaryIndex >= 0) {
+          const existingSummary = files[existingSummaryIndex];
+          summary.isBinary ||= existingSummary?.isBinary;
+          summary.hasMergeConflicts ||= existingSummary?.hasMergeConflicts;
+          files[existingSummaryIndex] = summary;
+        }
+      } else {
+        files.push(summary);
+      }
     }
   }
 

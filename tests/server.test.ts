@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { createDiffSessionStore, startServer, type RunningServer } from "../src/server/server.js";
+import {
+  createDiffSessionStore,
+  normalizeEditorLine,
+  startServer,
+  type RunningServer,
+} from "../src/server/server.js";
 import { buildDiffSession } from "../src/server/git.js";
 import type { DiffSession } from "../src/server/types.js";
 
@@ -63,6 +68,59 @@ afterEach(async () => {
 });
 
 describe("server capabilities", () => {
+  test("validates and applies server-owned whitespace preferences", async () => {
+    let mode = "normal" as const | "ignore-all";
+    const server = await startServer(
+      {
+        initialSession: createSession("normal"),
+        getWhitespaceMode: () => mode,
+        refresh: () => createSession(mode),
+        setWhitespaceMode: (nextMode) => {
+          mode = nextMode === "ignore-all" ? nextMode : "normal";
+          return createSession(mode);
+        },
+      },
+      0,
+      "127.0.0.1",
+    );
+    servers.push(server);
+
+    const invalid = await fetch(`${server.url}api/preferences`, {
+      body: JSON.stringify({ whitespaceMode: "--ignore-all-space" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(invalid.status).toBe(400);
+
+    const changed = await fetch(`${server.url}api/preferences`, {
+      body: JSON.stringify({ whitespaceMode: "ignore-all" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(changed.status).toBe(200);
+    expect(await changed.json()).toMatchObject({
+      preferences: { whitespaceMode: "ignore-all" },
+      snapshotId: "snapshot-ignore-all",
+    });
+    expect(await (await fetch(`${server.url}api/session`)).json()).toMatchObject({
+      preferences: { whitespaceMode: "ignore-all" },
+    });
+  });
+
+  test("reports when a static diff source cannot change whitespace modes", async () => {
+    const server = await startServer(createSession("static"), 0, "127.0.0.1");
+    servers.push(server);
+    const response = await fetch(`${server.url}api/preferences`, {
+      body: JSON.stringify({ whitespaceMode: "ignore-all" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(response.status).toBe(501);
+    expect(await response.json()).toEqual({
+      error: "This diff source cannot rebuild whitespace modes.",
+    });
+  });
+
   test("requires the configured token for JSON and terminal routes", async () => {
     const server = await startServer(createSession("secure"), 0, "127.0.0.1", {
       capabilityToken: "secret",
@@ -71,7 +129,15 @@ describe("server capabilities", () => {
     const base = server.url.replace(/\?token=.*/, "").replace(/\/$/, "");
     expect((await fetch(`${base}/api/session`)).status).toBe(401);
     expect((await fetch(`${base}/api/session?token=wrong`)).status).toBe(401);
+    expect((await fetch(`${base}/api/session?token=secret&token=secret`)).status).toBe(401);
     expect((await fetch(`${base}/api/session?token=secret`)).status).toBe(200);
+    expect(
+      (
+        await fetch(`${base}/api/session`, {
+          headers: { authorization: "Bearer secret" },
+        })
+      ).status,
+    ).toBe(200);
     expect(
       (
         await fetch(`${base}/api/review-packet?token=secret`, {
@@ -90,6 +156,142 @@ describe("server capabilities", () => {
     });
     expect(download.status).toBe(200);
     expect(download.headers.get("content-disposition")).toContain("attachment");
+  });
+
+  test("validates every read and packet route without exposing unauthorized data", async () => {
+    const repo = createWritableRepo();
+    const session = buildDiffSession(repo, repo, []);
+    const server = await startServer(session, 0, "127.0.0.1");
+    servers.push(server);
+
+    expect((await fetch(`${server.url}api/file-diff`)).status).toBe(400);
+    expect((await fetch(`${server.url}api/file-diff?path=missing.txt`)).status).toBe(404);
+    expect((await fetch(`${server.url}api/file-diff?path=a.txt`)).status).toBe(200);
+    expect((await fetch(`${server.url}api/unresolved-file`)).status).toBe(400);
+    expect((await fetch(`${server.url}api/unresolved-file?path=a.txt`)).status).toBe(404);
+    expect((await fetch(`${server.url}api/image?path=a.txt&side=new`)).status).toBe(404);
+    expect((await fetch(`${server.url}api/image?path=a.txt&side=elsewhere`)).status).toBe(400);
+    expect(
+      (
+        await fetch(`${server.url}api/editor`, {
+          body: JSON.stringify({ path: "a.txt" }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        })
+      ).status,
+    ).toBe(501);
+    expect((await fetch(`${server.url}api/structural?path=a.txt`)).status).toBe(403);
+
+    const missingPacket = await fetch(`${server.url}api/review-packet/download`, {
+      body: "",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      method: "POST",
+    });
+    expect(missingPacket.status).toBe(400);
+    const malformedPacket = await fetch(`${server.url}api/review-packet/download`, {
+      body: new URLSearchParams({ packet: "not-json" }),
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      method: "POST",
+    });
+    expect(malformedPacket.status).toBe(400);
+    expect(
+      (
+        await fetch(`${server.url}api/review-packet`, {
+          body: JSON.stringify("not-an-object"),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        })
+      ).status,
+    ).toBe(400);
+    const shell = await fetch(`${server.url}deep/link/route`);
+    expect(shell.status).toBe(200);
+    expect(shell.headers.get("content-type")).toContain("text/html");
+  });
+
+  test("bounds request bodies and reports preference rebuild failures", async () => {
+    const server = await startServer(
+      {
+        initialSession: createSession("preference-error"),
+        refresh: () => createSession("preference-error"),
+        setWhitespaceMode: () => {
+          throw "rebuild failed";
+        },
+      },
+      0,
+      "127.0.0.1",
+    );
+    servers.push(server);
+    const failedPreference = await fetch(`${server.url}api/preferences`, {
+      body: JSON.stringify({ whitespaceMode: "ignore-all" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(failedPreference.status).toBe(500);
+    expect(await failedPreference.json()).toEqual({ error: "rebuild failed" });
+
+    const oversized = await fetch(`${server.url}api/review-packet`, {
+      body: JSON.stringify({ value: "x".repeat(1_100_000) }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(oversized.status).toBe(413);
+  });
+
+  test("rejects editor traversal, symlink escape, and invalid configuration", async () => {
+    const repo = createWritableRepo();
+    const outside = mkdtempSync(join(tmpdir(), "diffdeck-outside-"));
+    repos.push(outside);
+    writeFileSync(join(outside, "secret.txt"), "outside\n");
+    symlinkSync(join(outside, "secret.txt"), join(repo, "escape.txt"));
+
+    const session = buildDiffSession(repo, repo, []);
+    session.files.push({
+      additions: 1,
+      changeType: "change",
+      deletions: 0,
+      diffId: "escape",
+      gitStatus: "modified",
+      path: "escape.txt",
+    });
+    session.files.push({
+      additions: 1,
+      changeType: "change",
+      deletions: 0,
+      diffId: "traversal",
+      gitStatus: "modified",
+      path: "../secret.txt",
+    });
+    const server = await startServer(session, 0, "127.0.0.1", { editor: "true" });
+    servers.push(server);
+    for (const path of ["escape.txt", "../secret.txt"]) {
+      const response = await fetch(`${server.url}api/editor`, {
+        body: JSON.stringify({ path }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      expect(response.status).toBe(400);
+    }
+    expect(
+      (
+        await fetch(`${server.url}api/editor`, {
+          body: JSON.stringify({ path: "not-authorized.txt" }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        })
+      ).status,
+    ).toBe(404);
+
+    const invalidServer = await startServer(session, 0, "127.0.0.1", { editor: "   " });
+    servers.push(invalidServer);
+    expect(
+      (
+        await fetch(`${invalidServer.url}api/editor`, {
+          body: JSON.stringify({ path: "a.txt" }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+        })
+      ).status,
+    ).toBe(500);
   });
 
   test("keeps writes absent by default and rejects stale snapshots in write mode", async () => {
@@ -137,6 +339,56 @@ describe("server capabilities", () => {
     expect((await fetch(`${writable.url}api/session`)).status).toBe(200);
     expect(buildCount).toBe(2);
     expect(runGit(repo, ["diff", "--cached", "--name-only"]).trim()).toBe("a.txt");
+  });
+
+  test("rejects unauthorized write shapes and stale hunk boundaries", async () => {
+    const repo = createWritableRepo();
+    const build = () => buildDiffSession(repo, repo, []);
+    const initial = build();
+    const writable = await startServer(
+      { initialSession: initial, refresh: build },
+      0,
+      "127.0.0.1",
+      { write: true },
+    );
+    servers.push(writable);
+    for (const payload of [
+      { action: "delete", path: "a.txt", snapshotId: initial.snapshotId },
+      { action: "stage", path: "missing.txt", snapshotId: initial.snapshotId },
+    ]) {
+      const response = await fetch(`${writable.url}api/write`, {
+        body: JSON.stringify(payload),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      expect(response.status).toBe(400);
+    }
+    for (const hunkIndex of [-1, 1.5, "0", 99]) {
+      const response = await fetch(`${writable.url}api/write`, {
+        body: JSON.stringify({
+          action: "stage",
+          hunkIndex,
+          path: "a.txt",
+          snapshotId: initial.snapshotId,
+        }),
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      expect(response.status).toBe(422);
+    }
+    const unavailable = await fetch(`${writable.url}api/write`, {
+      body: JSON.stringify({
+        action: "unstage",
+        path: "a.txt",
+        snapshotId: initial.snapshotId,
+      }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    expect(unavailable.status).toBe(422);
+    expect(await unavailable.json()).toEqual({
+      error: "Unstage is unavailable in a working-tree review.",
+    });
   });
 
   test("stages exactly one selected hunk", async () => {
@@ -306,6 +558,14 @@ describe("server capabilities", () => {
         })
       ).status,
     ).toBe(501);
+  });
+
+  test("normalizes editor line targets before launch", () => {
+    expect(normalizeEditorLine(7.9)).toBe(7);
+    expect(normalizeEditorLine(0)).toBe(1);
+    expect(normalizeEditorLine(-4)).toBe(1);
+    expect(normalizeEditorLine("invalid")).toBe(1);
+    expect(normalizeEditorLine(undefined)).toBe(1);
   });
 
   test("bounds structural adapter execution and returns successful output", async () => {

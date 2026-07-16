@@ -2,10 +2,14 @@ import type { AnnotationSide } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { CommentExportRecord } from "./commentExport.js";
 
-export const REVIEW_SESSION_VERSION = 1;
+export const REVIEW_SESSION_VERSION = 5;
 
 export type ReviewCommentKind = "comment-form" | "comment";
 export type ReviewCommentStatus = "open" | "resolved" | "stale";
+export type ReviewMode = "all" | "focus";
+export type FileOrder = "path" | "status" | "size";
+export type FileViewMode = "tree" | "list";
+export type ReviewSurface = "rich" | "accessible";
 
 export interface ReviewAnnotationMetadata {
   body: string;
@@ -52,8 +56,13 @@ export interface ReviewSessionState {
   collapsedPaths: string[];
   commentExports: CommentExportRecord[];
   fileIdentities: Record<string, string>;
+  fileCommentDrafts: Record<string, string>;
+  fileOrder: FileOrder;
+  fileViewMode: FileViewMode;
   filters: ReviewFilters;
   identity: string;
+  reviewMode: ReviewMode;
+  reviewSurface: ReviewSurface;
   selectedPath: string | null;
   snapshotId: string;
   version: typeof REVIEW_SESSION_VERSION;
@@ -93,8 +102,13 @@ export function createReviewSession(
     collapsedPaths: uniqueExistingPaths(autoCollapsedPaths, snapshot.files),
     commentExports: [],
     fileIdentities: buildFileIdentities(snapshot.files),
+    fileCommentDrafts: {},
+    fileOrder: "path",
+    fileViewMode: "tree",
     filters: { ...emptyReviewFilters },
     identity: createReviewSessionIdentity(snapshot),
+    reviewMode: "all",
+    reviewSurface: "rich",
     selectedPath: snapshot.files[0]?.path ?? null,
     snapshotId: snapshot.snapshotId,
     version: REVIEW_SESSION_VERSION,
@@ -110,9 +124,15 @@ export function parseReviewSession(
   if (raw == null) return createReviewSession(snapshot, autoCollapsedPaths);
 
   try {
-    const candidate = JSON.parse(raw) as Partial<ReviewSessionState>;
+    const candidate = JSON.parse(raw) as Omit<Partial<ReviewSessionState>, "version"> & {
+      version?: number;
+    };
     if (
-      candidate.version !== REVIEW_SESSION_VERSION ||
+      (candidate.version !== 1 &&
+        candidate.version !== 2 &&
+        candidate.version !== 3 &&
+        candidate.version !== 4 &&
+        candidate.version !== REVIEW_SESSION_VERSION) ||
       candidate.identity !== createReviewSessionIdentity(snapshot)
     ) {
       return createReviewSession(snapshot, autoCollapsedPaths);
@@ -123,8 +143,16 @@ export function parseReviewSession(
       collapsedPaths: sanitizeStringArray(candidate.collapsedPaths),
       commentExports: sanitizeCommentExports(candidate.commentExports),
       fileIdentities: sanitizeStringRecord(candidate.fileIdentities),
+      fileCommentDrafts: sanitizeStringRecord(candidate.fileCommentDrafts),
+      fileOrder:
+        candidate.fileOrder === "status" || candidate.fileOrder === "size"
+          ? candidate.fileOrder
+          : "path",
+      fileViewMode: candidate.fileViewMode === "list" ? "list" : "tree",
       filters: sanitizeFilters(candidate.filters),
       identity: candidate.identity,
+      reviewMode: candidate.reviewMode === "focus" ? "focus" : "all",
+      reviewSurface: candidate.reviewSurface === "accessible" ? "accessible" : "rich",
       selectedPath: typeof candidate.selectedPath === "string" ? candidate.selectedPath : null,
       snapshotId: typeof candidate.snapshotId === "string" ? candidate.snapshotId : "",
       version: REVIEW_SESSION_VERSION,
@@ -165,6 +193,17 @@ export function reconcileReviewSession(
 
   const nextComments = current.commentExports.map((comment) => {
     const renamedPath = renamedPaths.get(comment.filePath);
+    const nextPath = renamedPath ?? comment.filePath;
+    if (comment.scope === "file" && currentPaths.has(nextPath)) {
+      return renamedPath == null && comment.status !== "stale"
+        ? comment
+        : {
+            ...comment,
+            filePath: nextPath,
+            snapshotId: snapshot.snapshotId,
+            status: "open" as const,
+          };
+    }
     return changedPaths.has(comment.filePath) ||
       renamedPath != null ||
       !currentPaths.has(comment.filePath)
@@ -172,6 +211,11 @@ export function reconcileReviewSession(
       : comment;
   });
   const nextAnnotations = { ...current.annotationsByFile };
+  const nextFileCommentDrafts: Record<string, string> = {};
+  for (const [path, body] of Object.entries(current.fileCommentDrafts)) {
+    const nextPath = renamedPaths.get(path) ?? path;
+    if (currentPaths.has(nextPath)) nextFileCommentDrafts[nextPath] = body;
+  }
   for (const [previousPath, nextPath] of renamedPaths) {
     if (nextAnnotations[previousPath] == null) continue;
     nextAnnotations[nextPath] = nextAnnotations[previousPath];
@@ -198,6 +242,7 @@ export function reconcileReviewSession(
     collapsedPaths: nextCollapsed,
     commentExports: nextComments,
     fileIdentities: nextIdentities,
+    fileCommentDrafts: nextFileCommentDrafts,
     selectedPath,
     snapshotId: snapshot.snapshotId,
     viewedPaths: nextViewed,
@@ -242,6 +287,10 @@ export function reconcileCommentAnchors(
     if (comment.status !== "stale") return comment;
     const fileDiff = fileDiffs[comment.filePath];
     if (fileDiff == null) return comment;
+    if (comment.scope === "file") {
+      changed = true;
+      return { ...comment, snapshotId, status: "open" as const };
+    }
     const target = comment.contextLines.find((line) => line.target)?.content.trimEnd();
     if (target == null) return comment;
     const matches = findMatchingLines(fileDiff, comment.side, target);
@@ -317,6 +366,9 @@ function normalizeCurrentPaths(
   return {
     ...current,
     collapsedPaths: current.collapsedPaths.filter((path) => paths.has(path)),
+    fileCommentDrafts: Object.fromEntries(
+      Object.entries(current.fileCommentDrafts).filter(([path]) => paths.has(path)),
+    ),
     selectedPath:
       current.selectedPath != null && paths.has(current.selectedPath)
         ? current.selectedPath

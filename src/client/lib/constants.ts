@@ -1,6 +1,6 @@
 export const themeOptions = {
-  dark: "pierre-dark",
-  light: "pierre-light",
+  dark: "github-dark-high-contrast",
+  light: "github-light-high-contrast",
 } as const;
 
 export const highlighterLangs = [
