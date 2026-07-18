@@ -19,16 +19,26 @@ headers carried six controls including a `File operations` disclosure that expan
 header row, and the sidebar footer could not fit its four control groups, so the navigator wrapped
 to a second row and the filter button truncated to `Filter r…`.
 
-The third column keeps every capability and moves the per-file utilities behind one overflow menu,
-merges the navigator into a single segmented bar, and unifies the tool row on one size and radius.
-The shorter footer also returns two rows of file tree to the sidebar.
+The third column keeps every capability and reallocates the space by one rule: **persistent visual
+weight should be proportional to how often something is used.** Across a 79-file review you read
+the path and the counts constantly and toggle viewed roughly 79 times; you copy a path, open an
+editor, or revert a hunk a handful of times in total.
+
+So the header keeps the path, the counts, and `Viewed` — and nothing else at rest. The note button
+and overflow menu hold their layout space but stay transparent until the row is hovered, focused,
+or selected, which means no row ever shifts when they appear. The decorative file-type badge is
+gone: it rendered the same glyph for every file and repeated an answer the path already gives. Zero
+line counts (`-0 +0` on binary and mode-only changes) are no longer drawn.
 
 | Original (`main`) | This PR (`c68f316`) | Now |
 | --- | --- | --- |
 | ![Workspace on main](screenshots/compare/workspace-1-original.png) | ![Workspace as first written](screenshots/compare/workspace-2-codex.png) | ![Workspace after the interface pass](screenshots/compare/workspace-3-improved.png) |
 
-Per-file header controls, left to right: `Viewed` + `Actions` disclosure → `Viewed` + four icon
-buttons + `File operations` disclosure → `Viewed` + note button + overflow menu.
+Elements drawn per file header at rest: 8 → 10 → 4.
+
+The sidebar footer changed on the same principle: the navigator is one segmented bar rather than
+four wrapping groups, and the tool row is unified on one size and radius. The shorter footer
+returns two rows of file tree to the sidebar.
 
 ## Command palette — 1440 × 900
 

@@ -686,6 +686,36 @@ kbd {
   unicode-bidi: isolate;
 }
 
+/* Per-file actions are used a handful of times across a whole review, while the
+   header they sit in repeats once per file. They keep their layout space so
+   nothing shifts, but stay invisible until the row shows intent. */
+.app-file-actions {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.app-file-header:hover .app-file-actions,
+.app-file-header:focus-within .app-file-actions,
+.app-file-card[data-selected="true"] .app-file-actions,
+/* A portalled menu is outside the header, so hovering it would otherwise fade
+   its own trigger back out. */
+  .app-file-actions:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+
+/* Touch has no hover state to reveal with. */
+@media (hover: none) {
+  .app-file-actions {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-file-actions {
+    transition: none;
+  }
+}
+
 .app-viewed-button {
   position: relative;
 }
