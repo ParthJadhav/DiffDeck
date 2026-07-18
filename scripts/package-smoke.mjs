@@ -1,11 +1,15 @@
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createFixtureRepository } from "./fixture-factory.mjs";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// Read from package.json rather than a literal: the contract is that the
+// installed binary reports the packaged version, and a hardcoded value fails
+// every release bump for no real defect.
+const expectedVersion = JSON.parse(readFileSync(join(projectRoot, "package.json"), "utf8")).version;
 const temporaryRoot = mkdtempSync(join(tmpdir(), "diffdeck-package-smoke-"));
 const installRoot = join(temporaryRoot, "install");
 const fixture = createFixtureRepository("review");
@@ -39,8 +43,8 @@ try {
 
   const binary = join(installRoot, "node_modules", ".bin", "diffdeck");
   const version = execFileSync(binary, ["--version"], { encoding: "utf8" }).trim();
-  if (version !== "0.4.1")
-    throw new Error(`Installed binary reported unexpected version ${version}.`);
+  if (version !== expectedVersion)
+    throw new Error(`Installed binary reported version ${version}, expected ${expectedVersion}.`);
   const help = execFileSync(binary, ["--help"], { encoding: "utf8" });
   if (!help.includes("--watch") || !help.includes("--write") || !help.includes("--structural")) {
     throw new Error("Installed binary help is missing shipped options.");

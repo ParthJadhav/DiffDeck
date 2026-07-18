@@ -1,7 +1,6 @@
-# DiffDeck next release
+# DiffDeck 0.5.0
 
-These notes describe the verified changes after 0.4.1. The package version remains 0.4.1 until the
-release is intentionally cut.
+These notes describe the verified changes since 0.4.1.
 
 ## Faster review
 
@@ -37,6 +36,16 @@ release is intentionally cut.
   states use one documented language and visual system in `DESIGN.md`.
 - `@pierre/diffs` is upgraded to 1.2.12 and `@pierre/trees` to beta.5 after a compatibility,
   accessibility, worker, tree-selection, and bundle audit.
+- Per-file chrome is budgeted by how often it is used. A file header draws the path, its line
+  counts, and `Viewed`; the note button and an overflow menu holding copy path/link, open in editor,
+  and the staging operations hold their layout space but stay transparent until the row is hovered,
+  focused, or selected, so nothing shifts as they appear. They also reveal on touch, which has no
+  hover state, and while the row's own menu is open.
+- The sidebar review navigator is a single segmented bar that degrades by dropping the hunk counter
+  and then tightening its buttons, instead of wrapping to a second row and truncating the filter
+  label at the default sidebar width.
+- Three-way before/after screenshots for the whole interface, all rendered from one shared fixture,
+  live in `docs/PR_VISUAL_COMPARISON.md`.
 
 ## Correctness and hardening
 

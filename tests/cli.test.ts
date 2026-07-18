@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import packageJson from "../package.json" with { type: "json" };
 import { isCliEntrypoint } from "../src/server/cli.js";
 import {
   formatCliHelp,
@@ -40,11 +41,16 @@ describe("CLI parsing", () => {
   });
 
   test("formats informational help and version without consuming pathspec values", () => {
+    // Asserted against package.json rather than a literal: the contract is that
+    // the CLI reports the packaged version, and hardcoding it here fails every
+    // release bump for no real defect.
+    const packageVersion = packageJson.version;
+    expect(packageVersion).toMatch(/^\d+\.\d+\.\d+/);
     expect(formatCliHelp()).toContain("diffdeck --repo ../my-repo -- -- '*.ts'");
-    expect(readPackageVersion()).toBe("0.4.1");
+    expect(readPackageVersion()).toBe(packageVersion);
     expect(getCliInformationalOutput(["--help"])).toBe(formatCliHelp());
-    expect(getCliInformationalOutput(["-v"])).toBe("0.4.1");
-    expect(getCliInformationalOutput(["--version"])).toBe("0.4.1");
+    expect(getCliInformationalOutput(["-v"])).toBe(packageVersion);
+    expect(getCliInformationalOutput(["--version"])).toBe(packageVersion);
     expect(getCliInformationalOutput(["--", "--help"])).toBeNull();
     expect(getCliInformationalOutput(["HEAD~1", "HEAD"])).toBeNull();
   });
