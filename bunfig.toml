@@ -1,0 +1,4 @@
+[test]
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["src/server/cli.ts"]
+coverageThreshold = { lines = 0.85, functions = 0.85 }

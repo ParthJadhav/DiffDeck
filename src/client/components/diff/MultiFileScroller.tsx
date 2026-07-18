@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { SelectedLineRange } from "@pierre/diffs";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { DiffFileSummary } from "../../types.js";
+import { chooseVisiblePath } from "../../lib/visiblePath.js";
 import { Card } from "../ui/card.js";
 
 const VIRTUOSO_OVERSCAN_PX = 1200;
@@ -108,16 +109,22 @@ export function MultiFileScroller(props: {
     lastReportedPathRef.current = selectedPath;
     pinnedPathRef.current = selectedPath;
     suppressObserverUntilRef.current = performance.now() + 350;
-    const scrollToSelected = () => virtuosoRef.current?.scrollToIndex({ index, align: "start" });
+    let released = false;
+    const timers: number[] = [];
+    const scrollToSelected = () => {
+      if (!released) virtuosoRef.current?.scrollToIndex({ index, align: "start" });
+    };
     scrollToSelected();
     const animationFrame = window.requestAnimationFrame(scrollToSelected);
-    const retryTimer = window.setTimeout(scrollToSelected, 250);
+    for (const delay of [100, 250, 500, 1_000, 1_500]) {
+      timers.push(window.setTimeout(scrollToSelected, delay));
+    }
 
-    let released = false;
     const release = () => {
       if (released) return;
       released = true;
       pinnedPathRef.current = null;
+      for (const timer of timers) window.clearTimeout(timer);
       window.removeEventListener("wheel", release);
       window.removeEventListener("touchstart", release);
       window.removeEventListener("keydown", release);
@@ -125,11 +132,11 @@ export function MultiFileScroller(props: {
     window.addEventListener("wheel", release, { passive: true, once: true });
     window.addEventListener("touchstart", release, { passive: true, once: true });
     window.addEventListener("keydown", release, { once: true });
-    const timer = window.setTimeout(release, 1500);
     return () => {
+      if (handledScrollRequestRef.current === scrollRequest) {
+        handledScrollRequestRef.current = null;
+      }
       window.cancelAnimationFrame(animationFrame);
-      window.clearTimeout(retryTimer);
-      window.clearTimeout(timer);
       release();
     };
   }, [fileIndexByPath, scrollSignal, selectedPath]);
@@ -187,29 +194,18 @@ function installVisiblePathObserver(
         else visibility.delete(path);
       }
       if (performance.now() < refs.suppressObserverUntilRef.current) return;
-      if (refs.pinnedPathRef.current != null && visibility.has(refs.pinnedPathRef.current)) {
-        if (refs.lastReportedPathRef.current !== refs.pinnedPathRef.current) {
-          refs.lastReportedPathRef.current = refs.pinnedPathRef.current;
-          refs.onVisiblePathChange(refs.pinnedPathRef.current);
-        }
-        return;
-      }
-      refs.pinnedPathRef.current = null;
       const rootTop = root.getBoundingClientRect().top;
-      let above: { path: string; top: number } | null = null;
-      let below: { path: string; top: number } | null = null;
-      for (const [path, node] of visibility) {
-        const top = node.getBoundingClientRect().top - rootTop;
-        if (top <= aboveThreshold) {
-          if (above == null || top > above.top) above = { path, top };
-        } else if (below == null || top < below.top) {
-          below = { path, top };
-        }
-      }
-      const best = above ?? below;
-      if (best != null && best.path !== refs.lastReportedPathRef.current) {
-        refs.lastReportedPathRef.current = best.path;
-        refs.onVisiblePathChange(best.path);
+      const bestPath = chooseVisiblePath(
+        Array.from(visibility, ([path, node]) => ({
+          path,
+          top: node.getBoundingClientRect().top - rootTop,
+        })),
+        refs.pinnedPathRef.current,
+        aboveThreshold,
+      );
+      if (bestPath != null && bestPath !== refs.lastReportedPathRef.current) {
+        refs.lastReportedPathRef.current = bestPath;
+        refs.onVisiblePathChange(bestPath);
       }
     },
     { root, threshold: 0 },

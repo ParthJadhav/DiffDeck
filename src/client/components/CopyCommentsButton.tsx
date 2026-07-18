@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Download, Send, Trash2, X } from "lucide-react";
+import { Braces, Check, Copy, Download, Eye, FileText, Send, Trash2, X } from "lucide-react";
 import type { CommentExportRecord } from "../lib/commentExport.js";
 import { fetchWithCapability, withCapabilityToken } from "../lib/api.js";
 import {
@@ -8,6 +8,7 @@ import {
   formatReviewPacketMarkdown,
 } from "../lib/reviewPacket.js";
 import { cn } from "../lib/cn.js";
+import { copyTextToClipboard } from "../lib/clipboard.js";
 import { Badge } from "./ui/badge.js";
 import { Button } from "./ui/button.js";
 
@@ -31,6 +32,8 @@ export function CopyCommentsButton({
   viewedFiles: number;
 }) {
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [previewFormat, setPreviewFormat] = useState<"markdown" | "json">("markdown");
   const [clearConfirmation, setClearConfirmation] = useState({ active: false, commentCount: 0 });
   const commentCount = comments.length;
   const commentLabel = commentCount === 1 ? "comment" : "comments";
@@ -45,7 +48,10 @@ export function CopyCommentsButton({
 
   useEffect(() => {
     if (copyStatus === "idle") return;
-    const timer = window.setTimeout(() => setCopyStatus("idle"), 1600);
+    const timer = window.setTimeout(() => {
+      setCopyStatus("idle");
+      setStatusMessage("");
+    }, 1600);
     return () => window.clearTimeout(timer);
   }, [copyStatus]);
 
@@ -66,8 +72,10 @@ export function CopyCommentsButton({
     try {
       await copyTextToClipboard(copyText);
       setCopyStatus("copied");
+      setStatusMessage("Copied review packet");
     } catch {
       setCopyStatus("failed");
+      setStatusMessage("Unable to copy review packet");
     }
   };
 
@@ -90,8 +98,10 @@ export function CopyCommentsButton({
       });
       if (!response.ok) throw new Error("Terminal submission failed");
       setCopyStatus("copied");
+      setStatusMessage("Sent review packet to the terminal");
     } catch {
       setCopyStatus("failed");
+      setStatusMessage("Unable to send the review packet to the terminal");
     }
   };
 
@@ -140,6 +150,43 @@ export function CopyCommentsButton({
           </span>
         </Badge>
       </Button>
+      <details className="group rounded-lg border border-border bg-muted/20">
+        <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 rounded-lg px-2.5 text-[11px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+          <Eye aria-hidden="true" className="size-3.5 text-muted-foreground" />
+          <span className="min-w-0 flex-1">Preview exact packet</span>
+        </summary>
+        <div className="border-t border-border p-1.5">
+          <div className="mb-1.5 grid grid-cols-2 gap-1 rounded-md bg-muted p-0.5">
+            <Button
+              aria-pressed={previewFormat === "markdown"}
+              className="h-7 text-[10.5px]"
+              onClick={() => setPreviewFormat("markdown")}
+              size="xs"
+              variant={previewFormat === "markdown" ? "secondary" : "ghost"}
+            >
+              <FileText aria-hidden="true" />
+              Markdown
+            </Button>
+            <Button
+              aria-pressed={previewFormat === "json"}
+              className="h-7 text-[10.5px]"
+              onClick={() => setPreviewFormat("json")}
+              size="xs"
+              variant={previewFormat === "json" ? "secondary" : "ghost"}
+            >
+              <Braces aria-hidden="true" />
+              JSON
+            </Button>
+          </div>
+          <pre
+            aria-label={`Exact ${previewFormat} review packet`}
+            className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-background p-2 font-mono text-[9.5px] leading-4 text-foreground"
+            tabIndex={0}
+          >
+            {previewFormat === "markdown" ? copyText : jsonPacket}
+          </pre>
+        </div>
+      </details>
       <div className="grid grid-cols-2 gap-1.5">
         <form action={withCapabilityToken("/api/review-packet/download")} method="post">
           <input type="hidden" name="packet" value={jsonPacket} />
@@ -178,35 +225,8 @@ export function CopyCommentsButton({
         </span>
       </Button>
       <output className="sr-only" aria-live="polite">
-        {copyStatus === "copied"
-          ? "Copied comments"
-          : copyStatus === "failed"
-            ? "Unable to copy comments"
-            : ""}
+        {statusMessage}
       </output>
     </section>
   );
-}
-
-async function copyTextToClipboard(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText != null) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.top = "0";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-
-  try {
-    const copied = document.execCommand("copy");
-    if (!copied) throw new Error("Copy command failed");
-  } finally {
-    document.body.removeChild(textarea);
-  }
 }

@@ -15,16 +15,21 @@
     "build": "bun run build:client && bun run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "check": "bun run typecheck && bun run lint && bun run format:check && bun test && bun run build",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run verify:fixtures && bun test --coverage tests && bun run build && bun run verify:built-fixtures && bun run pack:dry-run && bun run smoke:package && bun run test:e2e:built",
     "dev": "./scripts/dev.sh",
     "dev:setup": "./scripts/setup-fake-repo.sh",
     "dev:reset": "REBUILD_FAKE_REPO=1 ./scripts/dev.sh",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "oxlint . --react-plugin --deny-warnings",
-    "pack:dry-run": "npm pack --dry-run",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts",
     "prepack": "bun run build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit"
+    "smoke:package": "node scripts/package-smoke.mjs",
+    "test:e2e": "bun run build && playwright test",
+    "test:e2e:built": "playwright test",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "verify:built-fixtures": "node scripts/verify-built-fixtures.mjs",
+    "verify:fixtures": "node scripts/verify-fixtures.mjs"
   },
   "keywords": [
     "diff",
@@ -49,8 +54,8 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@pierre/diffs": "^1.1.20",
-    "@pierre/trees": "^1.0.0-beta.3",
+    "@pierre/diffs": "^1.2.12",
+    "@pierre/trees": "^1.0.0-beta.5",
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -66,7 +71,9 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.4.13",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.2.4",
     "@types/express": "^5.0.3",
     "@types/node": "^24.9.0",

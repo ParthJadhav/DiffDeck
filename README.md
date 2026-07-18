@@ -4,10 +4,7 @@
 
 Open a Git diff in your browser from the terminal.
 
-<picture>
-  <source srcset="docs/diffdeck-demo.gif" type="image/gif" />
-  <img src="docs/diffdeck-infographic.png" alt="Diffdeck opens Git diffs in a local browser review workspace" />
-</picture>
+![DiffDeck's current desktop review workspace](e2e/__screenshots__/visual.e2e.ts/desktop-light-write.png)
 
 `diffdeck` starts a local web UI for the diff you ask Git for, then opens it in your browser. Use it when:
 
@@ -103,11 +100,31 @@ terminal that launched DiffDeck. Image changes support side-by-side, overlay, an
 Supported JavaScript manifests and lockfiles get a package-change summary with a source-diff
 fallback.
 
+Use the compact review navigator to move between visible files, unviewed files, and changed hunks,
+or switch to persisted focus mode when one file needs full attention. File navigation can be a
+directory tree or a virtualized flat list ordered by path, status, or change size. Diff settings can
+rebuild the Git patch while ignoring end-of-line spaces, spacing amount, all whitespace, or blank
+line changes.
+
+Each file header can create a file-level note, copy its repository-relative path or exact link, and
+open the configured editor at the selected line. The Review notes queue consolidates file and line
+notes for edit, delete, reopen, and source jumps. Before handoff, expand Preview exact packet to
+inspect the exact Markdown or versioned JSON that will be copied, downloaded, or sent to the launch
+terminal.
+
+The accessible linear patch is a first-class review surface with keyboard change navigation,
+coherent line announcements, comments, and existing note statuses. At narrow widths, Files and
+Review become two explicit places instead of squeezing the patch.
+
 ### Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
 | `j` / `k` | Next / previous visible file |
+| `Shift+j` / `Shift+k` | Next / previous unviewed file |
+| `n` / `p` | Next / previous changed hunk |
+| `f` | Toggle focus mode for the selected file |
+| `a` | Toggle the accessible linear patch for the selected file |
 | `v` | Toggle viewed for the selected file |
 | `c` | Start a comment at the first changed line |
 | `x` | Collapse or expand the selected file |
@@ -141,6 +158,11 @@ bun run check
 
 See [GitHub Releases](https://github.com/ParthJadhav/DiffDeck/releases) for the full version history. Highlights:
 
+- **Next release** — Review navigator/focus mode, safe deep links and file notes, Git-owned
+  whitespace modes, tree/flat ordering, review notes and exact packet preview, accessible patch,
+  responsive redesign, and exhaustive release hardening. See
+  [release notes](docs/RELEASE_NOTES.md) and
+  [verification evidence](docs/RELEASE_VERIFICATION_2026-07-16.md).
 - **0.3.8** — Refined the review UI with shared controls, icons, compact states, and better mobile diff layout.
 - **0.3.7** — Browser page refreshes now reload the current git status instead of reusing a cached session.
 - **0.2.0** — File-list virtualization for large diffs (23k+ files), survives non-ASCII patches, comment drafts persist across scroll.

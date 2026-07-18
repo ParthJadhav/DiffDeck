@@ -1,7 +1,10 @@
 export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithCapability(url, init);
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+    const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    const serverMessage =
+      typeof payload?.error === "string" && payload.error.trim().length > 0 ? payload.error : null;
+    throw new Error(serverMessage ?? `Request failed: ${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
 }

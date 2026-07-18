@@ -11,6 +11,8 @@ import {
 import { cleanLastNewline } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { LoaderCircle } from "lucide-react";
+import type { NavigateLineDetail } from "../../lib/diffDom.js";
+import { readDiffLocation } from "../../lib/deepLink.js";
 
 const ROW_HEIGHT = 20;
 const OVERSCAN = 16;
@@ -124,6 +126,27 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
   // 24k-line) hunk tree. Always start false — initialising from `!collapsed`
   // would render rows synchronously on mount and skip the deferral.
   const [renderRows, setRenderRows] = useState(false);
+  const [pendingTarget, setPendingTarget] = useState<NavigateLineDetail | null>(null);
+
+  useEffect(() => {
+    const handleNavigation = (event: Event) => {
+      const detail = (event as CustomEvent<NavigateLineDetail>).detail;
+      if (detail.path === fileDiff.name) setPendingTarget(detail);
+    };
+    window.addEventListener("diffdeck:navigate-line", handleNavigation);
+    return () => window.removeEventListener("diffdeck:navigate-line", handleNavigation);
+  }, [fileDiff.name]);
+
+  useEffect(() => {
+    const location = readDiffLocation(window.location.href);
+    if (location.file === fileDiff.name && location.line != null && location.side != null) {
+      setPendingTarget({
+        line: location.line,
+        path: fileDiff.name,
+        side: location.side,
+      });
+    }
+  }, [fileDiff.name, renderRows]);
 
   useEffect(() => {
     if (collapsed) {
@@ -141,6 +164,31 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
   const commitRange = useCallback((start: number, end: number) => {
     setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
   }, []);
+
+  useLayoutEffect(() => {
+    if (pendingTarget == null || rows.length === 0) return;
+    const index = rows.findIndex((row) => {
+      if (pendingTarget.side === "additions") {
+        return (row.kind === "add" || row.kind === "context") && row.newNum === pendingTarget.line;
+      }
+      return (row.kind === "delete" || row.kind === "context") && row.oldNum === pendingTarget.line;
+    });
+    const node = containerRef.current;
+    const scroller = findScrollParent(node);
+    if (index < 0 || node == null || scroller == null) return;
+    const rect = node.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    scroller.scrollTo({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      top:
+        scroller.scrollTop +
+        rect.top -
+        scrollerRect.top +
+        index * ROW_HEIGHT -
+        scroller.clientHeight / 2,
+    });
+    setPendingTarget(null);
+  }, [pendingTarget, rows]);
 
   useLayoutEffect(() => {
     if (!renderRows || rows.length === 0) {
@@ -253,7 +301,18 @@ function HeavyRow({ row, top }: { row: Row; top: number }) {
   const newNum = row.kind === "add" || row.kind === "context" ? row.newNum : null;
 
   return (
-    <div className={ROW_CLASS[row.kind]} style={{ top }}>
+    <div
+      className={ROW_CLASS[row.kind]}
+      data-line={newNum ?? oldNum}
+      data-line-type={
+        row.kind === "add"
+          ? "change-addition"
+          : row.kind === "delete"
+            ? "change-deletion"
+            : "context"
+      }
+      style={{ top }}
+    >
       <span className="app-heavy-num">{oldNum ?? ""}</span>
       <span className="app-heavy-num">{newNum ?? ""}</span>
       <span className="app-heavy-sigil">{ROW_SIGIL[row.kind]}</span>

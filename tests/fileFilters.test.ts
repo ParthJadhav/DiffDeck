@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { filterDiffFiles } from "../src/client/lib/fileFilters.js";
+import { filterDiffFiles, isDependencyPath } from "../src/client/lib/fileFilters.js";
 import { emptyReviewFilters } from "../src/client/lib/reviewSession.js";
 import type { DiffFileSummary } from "../src/client/types.js";
 
@@ -45,6 +45,11 @@ describe("file filters", () => {
         (f) => f.path,
       ),
     ).toEqual(["dist/app.min.js"]);
+  });
+
+  test("recognizes dependency manifests by basename without case sensitivity", () => {
+    expect(isDependencyPath("packages/app/Package.JSON")).toBe(true);
+    expect(isDependencyPath("packages/app/package.json.backup")).toBe(false);
   });
 });
 

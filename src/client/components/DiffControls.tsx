@@ -18,6 +18,7 @@ import {
 import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
 import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
+import type { DiffWhitespaceMode } from "../types.js";
 import { Button } from "./ui/button.js";
 import { Checkbox } from "./ui/checkbox.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog.js";
@@ -36,9 +37,12 @@ export interface DiffControlsProps {
   onOverflowChange: (value: OverflowMode) => void;
   onShowLineNumbersChange: (value: boolean) => void;
   onThemeTypeChange: (value: ThemeChoice) => void;
+  onWhitespaceModeChange: (value: DiffWhitespaceMode) => void;
   overflow: OverflowMode;
   showLineNumbers: boolean;
   themeType: ThemeChoice;
+  whitespaceMode: DiffWhitespaceMode;
+  whitespaceModeChanging: boolean;
 }
 
 function CheckLabel({
@@ -238,9 +242,12 @@ export function DiffControls(props: DiffControlsProps) {
     onOverflowChange,
     onShowLineNumbersChange,
     onThemeTypeChange,
+    onWhitespaceModeChange,
     overflow,
     showLineNumbers,
     themeType,
+    whitespaceMode,
+    whitespaceModeChanging,
   } = props;
 
   const [open, setOpen] = useState(false);
@@ -304,7 +311,7 @@ export function DiffControls(props: DiffControlsProps) {
 
   useEffect(() => {
     if (!open || !panelMounted) return;
-    const node = panelRef.current?.querySelector<HTMLElement>("button, input");
+    const node = panelRef.current?.querySelector<HTMLElement>("button, input, select");
     node?.focus();
     const onPointerDown = (event: MouseEvent) => {
       if (containerRef.current != null && !containerRef.current.contains(event.target as Node)) {
@@ -407,7 +414,30 @@ export function DiffControls(props: DiffControlsProps) {
                 />
               </ControlSection>
 
-              <ControlSection label="Options" index={4}>
+              <ControlSection label="Whitespace" index={4}>
+                <div className="rounded-lg border border-border bg-muted p-1">
+                  <select
+                    aria-label="Whitespace comparison mode"
+                    disabled={whitespaceModeChanging}
+                    value={whitespaceMode}
+                    onChange={(event) =>
+                      onWhitespaceModeChange(event.target.value as DiffWhitespaceMode)
+                    }
+                    className="h-8 w-full rounded-md border border-border bg-background px-2 text-[11.5px] font-medium text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <option value="normal">Show all whitespace changes</option>
+                    <option value="ignore-eol">Ignore end-of-line spaces</option>
+                    <option value="ignore-space-change">Ignore spacing amount</option>
+                    <option value="ignore-all">Ignore all whitespace</option>
+                    <option value="ignore-blank-lines">Ignore blank-line changes</option>
+                  </select>
+                  <p className="px-1 pb-0.5 pt-1 text-[10px] leading-4 text-muted-foreground">
+                    Rebuilds the patch and reconciles review progress.
+                  </p>
+                </div>
+              </ControlSection>
+
+              <ControlSection label="Options" index={5}>
                 <div className="app-control-grid grid grid-cols-2 gap-x-1 gap-y-0 rounded-lg border border-border bg-muted p-0.5">
                   <CheckLabel checked={showLineNumbers} onChange={onShowLineNumbersChange}>
                     Line nums
@@ -441,8 +471,8 @@ export function DiffControls(props: DiffControlsProps) {
         aria-haspopup="dialog"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
-          open && "text-foreground",
+          "app-sidebar-tool-button size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
+          open && "bg-accent text-foreground",
         )}
       >
         <Settings />

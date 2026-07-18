@@ -1,6 +1,13 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { GitStatus } from "@pierre/trees";
 
+export type DiffWhitespaceMode =
+  | "normal"
+  | "ignore-eol"
+  | "ignore-space-change"
+  | "ignore-all"
+  | "ignore-blank-lines";
+
 export interface DiffFileSummary {
   path: string;
   prevPath?: string;
@@ -19,6 +26,9 @@ export interface SessionPayload {
   currentDirectory: string;
   diffArgs: string[];
   files: DiffFileSummary[];
+  preferences?: {
+    whitespaceMode: DiffWhitespaceMode;
+  };
   capabilities?: {
     editor: boolean;
     structural: boolean;

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
-import { CheckSquare2, ChevronRight, FileText, Square } from "lucide-react";
+import { CheckSquare2, ChevronRight, Square } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import { Badge } from "../ui/badge.js";
 import { Button } from "../ui/button.js";
@@ -58,7 +58,6 @@ export function CustomFileHeader({
             )}
           />
         </Button>
-        <FileIcon />
         <PathLabel path={fileDiff.name} />
         {hasMergeConflicts ? (
           <Badge variant="warning" className="shrink-0 text-[10px] uppercase">
@@ -66,19 +65,26 @@ export function CustomFileHeader({
           </Badge>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 font-mono text-[11.5px] leading-none tabular-nums">
-        {counts.deletions > 0 || counts.additions === 0 ? (
-          <span className="text-diff-deleted">-{counts.deletions}</span>
-        ) : null}
-        {counts.additions > 0 || counts.deletions === 0 ? (
-          <span className="text-diff-added">+{counts.additions}</span>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="flex items-center gap-1.5 font-mono text-[11.5px] leading-none tabular-nums">
+          {counts.deletions > 0 ? (
+            <span className="text-diff-deleted">-{counts.deletions}</span>
+          ) : null}
+          {counts.additions > 0 ? (
+            <span className="text-diff-added">+{counts.additions}</span>
+          ) : null}
+        </span>
+        {/* Occasional actions hold their space but stay invisible until the row
+            is hovered, focused, or selected, so 79 file headers do not each
+            render a permanent cluster of icons. */}
+        {actions != null ? (
+          <div className="app-file-actions flex items-center">{actions}</div>
         ) : null}
         <ViewedButton
           filePath={fileDiff.name}
           viewed={viewed}
           onClick={() => onViewedChange(!viewed)}
         />
-        {actions}
       </div>
     </div>
   );
@@ -256,18 +262,12 @@ function PathLabel({ path }: { path: string }) {
   );
 }
 
-function FileIcon() {
-  return (
-    <Badge
-      aria-hidden="true"
-      variant="outline"
-      className="h-5 shrink-0 border-info-border/75 bg-info-muted px-1 text-info-foreground"
-    >
-      <FileText className="size-3" />
-    </Badge>
-  );
-}
-
+/**
+ * The review loop's primary control, so it keeps its text label and a fixed
+ * rightmost position that never shifts as sibling controls appear. It drops the
+ * resting border a bordered pill would repeat down the whole file list; colour
+ * carries the checked state instead.
+ */
 function ViewedButton({
   filePath,
   onClick,
@@ -279,16 +279,16 @@ function ViewedButton({
 }) {
   return (
     <Button
-      variant={viewed ? "secondary" : "outline"}
+      variant="ghost"
       size="sm"
       aria-label={viewed ? `Mark ${filePath} unviewed` : `Mark ${filePath} viewed`}
       aria-pressed={viewed}
       onClick={onClick}
       className={cn(
-        "app-viewed-button ml-1 h-7 gap-1.5 px-2 font-sans text-[11.5px] leading-none",
+        "app-viewed-button ml-0.5 h-7 gap-1.5 px-2 font-sans text-[11.5px] leading-none",
         viewed
-          ? "border-info-border/80 bg-info-muted text-info-foreground hover:bg-info-muted/80"
-          : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
+          ? "bg-info-muted text-info-foreground hover:bg-info-muted/80"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground",
       )}
     >
       <ViewedIcon checked={viewed} />

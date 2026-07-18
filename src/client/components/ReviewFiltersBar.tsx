@@ -303,14 +303,13 @@ export function ReviewFiltersBar({
         aria-haspopup="dialog"
         onClick={() => setOpen((value) => !value)}
         className={cn(
-          "app-review-filter-trigger h-8 w-full min-w-0 justify-start gap-2 rounded-lg px-2.5 text-[11.5px]",
+          "app-review-filter-trigger h-8 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-[12px]",
           open && "border-ring/60 bg-accent text-foreground",
         )}
       >
-        <SlidersHorizontal className="size-3.5 text-muted-foreground" />
-        <span className="app-review-filter-label truncate">Filter review</span>
-        <span className="app-review-filter-label-compact hidden">Filter</span>
-        <span className="app-review-filter-count ml-auto font-mono text-[10px] tabular-nums text-muted-foreground">
+        <SlidersHorizontal className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="app-review-filter-label truncate">Filter</span>
+        <span className="app-review-filter-count ml-auto shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
           {resultCount}/{totalCount}
         </span>
         {activeCount > 0 ? (
