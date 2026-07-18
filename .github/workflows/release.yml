@@ -51,7 +51,13 @@ jobs:
             exit 1
           fi
 
-      - name: Typecheck, lint, format check, and build
+      # `check` runs the Playwright suite, so the release job needs the same
+      # browser runtimes CI installs. Without this the publish fails after the
+      # tag already exists.
+      - name: Install browser runtimes
+        run: bunx playwright install --with-deps chromium firefox webkit
+
+      - name: Full release check
         run: bun run check
 
       - name: Publish to npm via Trusted Publishing
