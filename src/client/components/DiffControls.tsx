@@ -471,8 +471,8 @@ export function DiffControls(props: DiffControlsProps) {
         aria-haspopup="dialog"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
-          open && "text-foreground",
+          "app-sidebar-tool-button size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
+          open && "bg-accent text-foreground",
         )}
       >
         <Settings />

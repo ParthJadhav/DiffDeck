@@ -13,6 +13,12 @@ import type { ReviewMode } from "../lib/reviewSession.js";
 import { cn } from "../lib/cn.js";
 import { Button } from "./ui/button.js";
 
+/**
+ * File and hunk stepping, rendered as one segmented bar. Four separately
+ * bordered groups did not fit the sidebar at its default width and wrapped
+ * into a ragged second row, so the groups share a single frame and the hunk
+ * counter drops out first when the sidebar is narrow.
+ */
 export function ReviewNavigator({
   hunkNavigation,
   navigation,
@@ -32,111 +38,118 @@ export function ReviewNavigator({
     if (path != null) onSelectPath(path);
   };
 
+  const hunkSuffix =
+    hunkNavigation.total === 0
+      ? ""
+      : hunkNavigation.position === 0
+        ? ` — ${hunkNavigation.total} in this file`
+        : ` — ${hunkNavigation.position} of ${hunkNavigation.total}`;
+
   return (
     <nav
       aria-label="Review navigation"
-      className="app-review-navigator flex min-w-0 flex-wrap items-center gap-1.5"
+      className="app-review-navigator flex h-8 min-w-0 items-center rounded-md border border-border bg-background"
     >
-      <div className="flex h-8 shrink-0 items-center rounded-md border border-border bg-background">
-        <NavigatorButton
-          disabled={navigation.previousPath == null}
-          label="Previous visible file"
-          shortcut="K"
-          onClick={() => select(navigation.previousPath)}
-        >
-          <ChevronLeft />
-        </NavigatorButton>
-        <output
-          aria-label={
-            navigation.position === 0
-              ? `No file selected, ${navigation.total} visible files`
-              : `File ${navigation.position} of ${navigation.total}`
-          }
-          className="min-w-10 border-x border-border px-1 text-center font-mono text-[10px] tabular-nums text-muted-foreground"
-        >
-          {navigation.position}/{navigation.total}
-        </output>
-        <NavigatorButton
-          disabled={navigation.nextPath == null}
-          label="Next visible file"
-          shortcut="J"
-          onClick={() => select(navigation.nextPath)}
-        >
-          <ChevronRight />
-        </NavigatorButton>
-      </div>
+      <NavigatorButton
+        disabled={navigation.previousPath == null}
+        label="Previous visible file"
+        shortcut="K"
+        onClick={() => select(navigation.previousPath)}
+      >
+        <ChevronLeft />
+      </NavigatorButton>
+      <output
+        aria-label={
+          navigation.position === 0
+            ? `No file selected, ${navigation.total} visible files`
+            : `File ${navigation.position} of ${navigation.total}`
+        }
+        className="min-w-10 flex-1 px-1 text-center font-mono text-[11px] tabular-nums text-muted-foreground"
+      >
+        {navigation.position}/{navigation.total}
+      </output>
+      <NavigatorButton
+        disabled={navigation.nextPath == null}
+        label="Next visible file"
+        shortcut="J"
+        onClick={() => select(navigation.nextPath)}
+      >
+        <ChevronRight />
+      </NavigatorButton>
 
-      <div className="flex h-8 shrink-0 items-center rounded-md border border-border bg-background">
-        <NavigatorButton
-          disabled={hunkNavigation.previous == null}
-          label="Previous changed hunk"
-          shortcut="P"
-          onClick={() => {
-            if (hunkNavigation.previous != null) onNavigateHunk(hunkNavigation.previous);
-          }}
-        >
-          <ChevronUp />
-        </NavigatorButton>
-        <output
-          aria-label={
-            hunkNavigation.position === 0
-              ? `${hunkNavigation.total} changed hunks`
-              : `Hunk ${hunkNavigation.position} of ${hunkNavigation.total}`
-          }
-          className="min-w-10 border-x border-border px-1 text-center font-mono text-[10px] tabular-nums text-muted-foreground"
-        >
-          H {hunkNavigation.position}/{hunkNavigation.total}
-        </output>
-        <NavigatorButton
-          disabled={hunkNavigation.next == null}
-          label="Next changed hunk"
-          shortcut="N"
-          onClick={() => {
-            if (hunkNavigation.next != null) onNavigateHunk(hunkNavigation.next);
-          }}
-        >
-          <ChevronDown />
-        </NavigatorButton>
-      </div>
+      <Divider />
 
-      <div className="flex h-8 shrink-0 items-center rounded-md border border-border bg-background">
-        <NavigatorButton
-          disabled={navigation.previousUnviewedPath == null}
-          label="Previous unviewed file"
-          shortcut="Shift+K"
-          onClick={() => select(navigation.previousUnviewedPath)}
-        >
-          <SkipBack />
-        </NavigatorButton>
-        <span aria-hidden="true" className="h-4 w-px bg-border" />
-        <NavigatorButton
-          disabled={navigation.nextUnviewedPath == null}
-          label="Next unviewed file"
-          shortcut="Shift+J"
-          onClick={() => select(navigation.nextUnviewedPath)}
-        >
-          <SkipForward />
-        </NavigatorButton>
-      </div>
+      <NavigatorButton
+        disabled={navigation.previousUnviewedPath == null}
+        label="Previous unviewed file"
+        shortcut="Shift+K"
+        onClick={() => select(navigation.previousUnviewedPath)}
+      >
+        <SkipBack />
+      </NavigatorButton>
+      <NavigatorButton
+        disabled={navigation.nextUnviewedPath == null}
+        label="Next unviewed file"
+        shortcut="Shift+J"
+        onClick={() => select(navigation.nextUnviewedPath)}
+      >
+        <SkipForward />
+      </NavigatorButton>
+
+      <Divider />
+
+      <NavigatorButton
+        disabled={hunkNavigation.previous == null}
+        label="Previous changed hunk"
+        shortcut="P"
+        suffix={hunkSuffix}
+        onClick={() => {
+          if (hunkNavigation.previous != null) onNavigateHunk(hunkNavigation.previous);
+        }}
+      >
+        <ChevronUp />
+      </NavigatorButton>
+      <output
+        aria-hidden="true"
+        className="app-review-hunk-count min-w-0 px-0.5 text-center font-mono text-[11px] tabular-nums text-muted-foreground"
+      >
+        {hunkNavigation.position}/{hunkNavigation.total}
+      </output>
+      <NavigatorButton
+        disabled={hunkNavigation.next == null}
+        label="Next changed hunk"
+        shortcut="N"
+        suffix={hunkSuffix}
+        onClick={() => {
+          if (hunkNavigation.next != null) onNavigateHunk(hunkNavigation.next);
+        }}
+      >
+        <ChevronDown />
+      </NavigatorButton>
+
+      <Divider />
 
       <Button
         aria-label={reviewMode === "focus" ? "Show all visible files" : "Focus selected file"}
         aria-pressed={reviewMode === "focus"}
+        className={cn(
+          "app-nav-button size-7 shrink-0 rounded-sm text-muted-foreground hover:text-foreground",
+          reviewMode === "focus" && "bg-accent text-info-foreground",
+        )}
         disabled={navigation.position === 0}
         onClick={() => onReviewModeChange(reviewMode === "focus" ? "all" : "focus")}
-        size="xs"
+        size="icon"
         title={reviewMode === "focus" ? "Show all files (F)" : "Focus selected file (F)"}
-        variant={reviewMode === "focus" ? "secondary" : "outline"}
-        className={cn(
-          "app-review-focus-button ml-auto h-8 min-w-0 gap-1.5 px-2",
-          reviewMode === "focus" && "text-info-foreground",
-        )}
+        variant="ghost"
       >
         <Focus />
-        <span className="app-review-focus-label">{reviewMode === "focus" ? "All" : "Focus"}</span>
       </Button>
     </nav>
   );
+}
+
+function Divider() {
+  return <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />;
 }
 
 function NavigatorButton({
@@ -145,21 +158,23 @@ function NavigatorButton({
   label,
   onClick,
   shortcut,
+  suffix = "",
 }: {
   children: React.ReactNode;
   disabled: boolean;
   label: string;
   onClick: () => void;
   shortcut: string;
+  suffix?: string;
 }) {
   return (
     <Button
       aria-label={label}
-      className="size-7 rounded-sm text-muted-foreground hover:text-foreground"
+      className="app-nav-button size-7 shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
       disabled={disabled}
       onClick={onClick}
       size="icon"
-      title={`${label} (${shortcut})`}
+      title={`${label} (${shortcut})${suffix}`}
       variant="ghost"
     >
       {children}

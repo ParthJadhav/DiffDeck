@@ -591,7 +591,7 @@ function DiffDeckSession({
           }
           title="Toggle accessible patch view (A)"
           className={cn(
-            "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-[background-color,color,scale] hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "app-sidebar-tool-button inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-[background-color,color,scale] hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             reviewSession.state.reviewSurface === "accessible" && "bg-accent text-foreground",
           )}
         >
@@ -603,10 +603,9 @@ function DiffDeckSession({
           title="Reset review state"
           aria-label="Reset review state"
           onClick={() => setResetConfirmationOpen(true)}
-          className="app-reset-review-button inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-muted-foreground transition-[background-color,color,scale] hover:bg-destructive/10 hover:text-destructive active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="app-sidebar-tool-button inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-[background-color,color,scale] hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <RotateCcw aria-hidden="true" className="size-3.5" />
-          <span className="app-reset-review-label">Reset</span>
         </button>
       </div>
     </div>

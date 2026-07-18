@@ -43,8 +43,7 @@ import { CustomFileHeader } from "./diff/CustomFileHeader.js";
 import { HeavyFileDiff } from "./diff/HeavyFileDiff.js";
 import { ImageDiff } from "./diff/ImageDiff.js";
 import { DependencyDiff } from "./diff/DependencyDiff.js";
-import { FileReviewActions } from "./diff/FileReviewActions.js";
-import { FileUtilities } from "./diff/FileUtilities.js";
+import { FileActions } from "./diff/FileActions.js";
 import { installHunkExpansionFallback } from "./diff/hunkExpansionFallback.js";
 import { MultiFileScroller } from "./diff/MultiFileScroller.js";
 import type { ReviewSurface } from "../lib/reviewSession.js";
@@ -458,24 +457,18 @@ const FileDiffSection = memo(function FileDiffSection({
 
   const headerActions = useMemo(
     () => (
-      <div className="flex items-center gap-0.5">
-        <FileUtilities
-          editorEnabled={capabilities?.editor === true}
-          fileCommentDraft={fileCommentDraft}
-          onFileCommentDraftChange={(body) => onFileCommentDraftChange(file.path, body)}
-          onFileCommentSubmit={handleFileCommentSubmit}
-          path={file.path}
-        />
-        <FileReviewActions
-          capabilities={capabilities}
-          hunkCount={fileDiff?.hunks.length ?? 0}
-          onReload={onSessionReload}
-          onStructuralChange={setStructuralOutput}
-          path={file.path}
-          snapshotId={snapshotId}
-          structuralActive={structuralOutput != null}
-        />
-      </div>
+      <FileActions
+        capabilities={capabilities}
+        fileCommentDraft={fileCommentDraft}
+        hunkCount={fileDiff?.hunks.length ?? 0}
+        onFileCommentDraftChange={(body) => onFileCommentDraftChange(file.path, body)}
+        onFileCommentSubmit={handleFileCommentSubmit}
+        onReload={onSessionReload}
+        onStructuralChange={setStructuralOutput}
+        path={file.path}
+        snapshotId={snapshotId}
+        structuralActive={structuralOutput != null}
+      />
     ),
     [
       capabilities,

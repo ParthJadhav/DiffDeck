@@ -250,15 +250,16 @@ test("destructive confirmations are modal, scoped, cancellable, and restore focu
   await expect(reset).toBeFocused();
 
   const selectedFile = page.locator('[data-file-path][aria-current="location"]').first();
-  await selectedFile.getByText("File operations", { exact: true }).click();
-  const revert = selectedFile.getByRole("button", { name: "Revert", exact: true });
-  await revert.click();
+  const fileActions = selectedFile.getByRole("button", { name: /^More actions for / });
+  await fileActions.click();
+  // The menu is portalled to the body, so its items are queried off the page.
+  await page.getByRole("button", { name: "Revert whole file", exact: true }).click();
   const revertDialog = page.getByRole("dialog", { name: "Revert whole file?" });
   await expect(revertDialog).toContainText("permanently discards the displayed whole file");
   await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(revertDialog).toBeHidden();
-  await expect(revert).toBeFocused();
+  await expect(fileActions).toBeFocused();
 });
 
 test("accessible patch supports keyboard change navigation and the shared note model", async ({
@@ -308,9 +309,14 @@ test("file utilities and the notes hub preserve an exact review handoff", async 
   const file = page.locator('[data-file-path="src/app.ts"]');
   await expect(file).toBeVisible();
 
-  await file.getByRole("button", { name: "Copy path for src/app.ts" }).click();
+  // Copy actions live behind the per-file overflow menu, which portals its
+  // items to the body and closes on select.
+  const fileActions = file.getByRole("button", { name: "More actions for src/app.ts" });
+  await fileActions.click();
+  await page.getByRole("button", { name: "Copy path for src/app.ts" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("src/app.ts");
-  await file.getByRole("button", { name: "Copy link to src/app.ts" }).click();
+  await fileActions.click();
+  await page.getByRole("button", { name: "Copy link to src/app.ts" }).click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain("file=src%2Fapp.ts");
@@ -320,7 +326,8 @@ test("file utilities and the notes hub preserve an exact review handoff", async 
       value: () => Promise.reject(new Error("permission denied")),
     });
   });
-  await file.getByRole("button", { name: "Copy path for src/app.ts" }).click();
+  await fileActions.click();
+  await page.getByRole("button", { name: "Copy path for src/app.ts" }).click();
   await expect(page.getByText("Unable to copy file path", { exact: true })).toBeVisible();
 
   await file.getByRole("button", { name: "Add file-level note to src/app.ts" }).click();

@@ -27,7 +27,7 @@ test("desktop light write-enabled review visual", async ({ diagnostics, page }) 
     localStorage.setItem("diffdeck.settings.themeType", JSON.stringify("light"));
   });
   await openReview(page);
-  await expect(page.getByText("File operations", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /^More actions for / }).first()).toBeVisible();
   await expect(page).toHaveScreenshot("desktop-light-write.png", screenshotOptions);
 });
 
