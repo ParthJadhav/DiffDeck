@@ -102,10 +102,14 @@ export function getRawDiff(repoRoot: string, diffArgs: string[]): string {
   // core.quotePath=false keeps non-ASCII paths as raw UTF-8 instead of C-style
   // octal escapes wrapped in quotes. Git still quotes control characters such
   // as tabs and newlines; those headers are normalized before processPatch.
+  // Explicit prefixes keep repository/global diff.srcPrefix and diff.dstPrefix
+  // settings from changing the header format that the normalizer consumes.
   return runGit(repoRoot, [
     "-c",
     "core.quotePath=false",
     "diff",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
     "--find-renames",
     "--submodule=diff",
     "--binary",
@@ -120,6 +124,8 @@ export function getRawDiffAsync(repoRoot: string, diffArgs: string[]): Promise<s
     "-c",
     "core.quotePath=false",
     "diff",
+    "--src-prefix=a/",
+    "--dst-prefix=b/",
     "--find-renames",
     "--submodule=diff",
     "--binary",
@@ -508,6 +514,18 @@ function normalizeRawGitDiffForParser(rawDiff: string): ParserNormalizedDiff {
   return { rawDiff: rawDiffForParser, filePaths };
 }
 
+function assertResolvedParserPaths(rawDiff: string, normalizedDiff: ParserNormalizedDiff): void {
+  const unresolvedIndex = normalizedDiff.filePaths.findIndex((paths) => paths == null);
+  if (unresolvedIndex === -1) return;
+
+  const context = describeRawDiffFiles(rawDiff, normalizedDiff.filePaths)[unresolvedIndex];
+  throw new DiffdeckError("Unable to resolve a changed file path.", [
+    context == null ? `file ${unresolvedIndex + 1}` : formatDiffFileContext(context),
+    ...(context == null ? [] : [`header: ${context.header}`]),
+    "DiffDeck did not expose its internal parser placeholder as a repository file.",
+  ]);
+}
+
 function mapChangeTypeToGitStatus(type: FileDiffMetadata["type"]): GitStatus {
   switch (type) {
     case "new":
@@ -767,6 +785,7 @@ export function buildDiffSessionFromRawDiff(
   if (parseableRawDiff.trim().length > 0) {
     const normalizedDiff = normalizeRawGitDiffForParser(parseableRawDiff);
     logRawDiffContext(logger, parseableRawDiff, normalizedDiff);
+    assertResolvedParserPaths(parseableRawDiff, normalizedDiff);
     let parsedPatch: ReturnType<typeof processPatch>;
     try {
       parsedPatch = processPatch(normalizedDiff.rawDiff, "diffdeck", true);

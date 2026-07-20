@@ -210,6 +210,34 @@ describe("buildDiffSession", () => {
     }
   });
 
+  test("ignores repository diff prefixes without exposing parser placeholder paths", () => {
+    const repo = mkdtempSync(join(tmpdir(), "diffdeck-custom-prefix-"));
+    tempRepos.push(repo);
+    runGit(repo, ["init", "-q", "-b", "master"]);
+    runGit(repo, ["config", "user.email", "test@example.com"]);
+    runGit(repo, ["config", "user.name", "Test"]);
+
+    writeFileSync(join(repo, "script.sh"), "#!/bin/sh\n");
+    runGit(repo, ["add", "."]);
+    runGit(repo, ["commit", "-qm", "baseline"]);
+    runGit(repo, ["update-index", "--chmod=+x", "script.sh"]);
+    runGit(repo, ["commit", "-qm", "make executable"]);
+
+    runGit(repo, ["config", "diff.srcPrefix", "old/"]);
+    runGit(repo, ["config", "diff.dstPrefix", "new/"]);
+
+    const rawDiff = getRawDiff(repo, ["master~1", "master"]);
+    expect(rawDiff).toStartWith("diff --git a/script.sh b/script.sh");
+    expect(rawDiff).not.toContain("diff --git old/script.sh new/script.sh");
+
+    const session = buildDiffSession(repo, repo, ["master~1", "master"]);
+    expect(session.files.map((file) => file.path)).toEqual(["script.sh"]);
+    expect([...session.fileDiffs.keys()]).toEqual(["script.sh"]);
+    expect(session.files.some((file) => file.path.startsWith(".diffdeck-parser-path/"))).toBe(
+      false,
+    );
+  });
+
   test("classifies binary changes and unresolved merge conflicts", () => {
     const binaryRepo = mkdtempSync(join(tmpdir(), "diffdeck-binary-"));
     tempRepos.push(binaryRepo);
@@ -325,6 +353,22 @@ describe("buildDiffSession", () => {
       expect(details).toContain("nearest raw diff lines:");
       expect(details.some((line) => line.includes("diff --git a/file.txt"))).toBe(true);
     }
+  });
+
+  test("rejects unresolved parser paths instead of exposing internal placeholders", () => {
+    const repo = mkdtempSync(join(tmpdir(), "diffdeck-unresolved-path-"));
+    tempRepos.push(repo);
+    runGit(repo, ["init", "-q", "-b", "main"]);
+    const rawDiff = [
+      "diff --git old/script.sh new/script.sh",
+      "old mode 100644",
+      "new mode 100755",
+      "",
+    ].join("\n");
+
+    expect(() => buildDiffSessionFromRawDiff(repo, repo, ["main"], rawDiff)).toThrow(
+      "Unable to resolve a changed file path.",
+    );
   });
 
   test("keeps partial metadata when worktree hydration inputs disappear", () => {
