@@ -262,6 +262,28 @@ test("destructive confirmations are modal, scoped, cancellable, and restore focu
   await expect(fileActions).toBeFocused();
 });
 
+test("rich diff gutter control opens the line comment composer", async ({ diagnostics, page }) => {
+  void diagnostics;
+  await page.goto("/?file=src%2Fapp.ts");
+  const file = page.locator('[data-file-path="src/app.ts"]');
+  await expect(file).toBeVisible();
+
+  const changedLineNumber = file
+    .locator('diffs-container [data-line-type="change-addition"][data-column-number]')
+    .first();
+  await changedLineNumber.hover();
+
+  const addComment = file.locator("diffs-container [data-utility-button]");
+  await expect(addComment).toBeVisible();
+  await addComment.click();
+
+  const composer = file.getByRole("textbox", { name: /^Comment on additions line / });
+  await expect(composer).toBeVisible();
+  await composer.fill("Keep this contract explicit.");
+  await file.getByRole("button", { name: "Comment", exact: true }).click();
+  await expect(file.getByText("Keep this contract explicit.", { exact: true })).toBeVisible();
+});
+
 test("accessible patch supports keyboard change navigation and the shared note model", async ({
   diagnostics,
   page,

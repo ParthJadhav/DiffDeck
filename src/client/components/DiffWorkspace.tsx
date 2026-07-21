@@ -732,6 +732,10 @@ const FileDiffSection = memo(function FileDiffSection({
       collapsed,
       enableGutterUtility: !hasOpenCommentForm,
       enableLineSelection: !hasOpenCommentForm,
+      // Pierre 1.2 routes gutter-button pointer events through this callback.
+      // The selection-end handler below owns opening the composer so gutter and
+      // dragged line selections continue to share one comment path.
+      onGutterUtilityClick: () => {},
       onLineSelectionEnd: handleLineSelectionEnd,
       onPostRender: handlePostRender,
     }),

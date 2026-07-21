@@ -1,19 +1,19 @@
-# DiffDeck 0.5.1
+# DiffDeck 0.5.2
 
-This patch release fixes internal parser paths appearing as changed files when comparing revisions.
+This patch release restores the add-comment button in the rich diff after the Pierre 1.2 upgrade.
 
 ## Fixes
 
-- Force stable `a/` and `b/` prefixes for Git diff output, overriding repository or global
-  `diff.srcPrefix` and `diff.dstPrefix` settings.
-- Prevent the parser's internal `.diffdeck-parser-path` placeholders from reaching the file tree.
-  If an unsupported Git header cannot be resolved, DiffDeck now reports a bounded error instead of
-  displaying a fake repository path.
+- Register the gutter utility callback required by `@pierre/diffs` 1.2 so clicking the `+` control
+  once again opens the line comment composer.
+- Keep gutter clicks and dragged line selections on the same comment-creation path, preserving
+  selection state, comment anchors, and existing composer behavior.
 
 ## Verification
 
-- Added a regression repository that compares `master~1` with `master` under custom Git diff
-  prefixes. A mode-only change now resolves to `script.sh` instead of
-  `.diffdeck-parser-path/0-new`.
-- Added a fail-closed regression test for unresolved parser paths.
-- Verified unit/integration tests, typechecking, linting, formatting, and the production build.
+- Added a Chromium regression test that hovers a changed line, clicks the gutter `+`, enters a
+  comment, saves it, and verifies the saved note inline.
+- Reproduced the failure against 0.5.1 before the fix and verified the complete flow in the live
+  application after the fix.
+- Verified unit/integration tests, typechecking, linting, formatting, packaging, and the production
+  build.
