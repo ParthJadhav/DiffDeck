@@ -37,8 +37,22 @@ jobs:
       - name: Install browser runtimes
         run: bunx playwright install --with-deps chromium firefox webkit
 
-      - name: Typecheck, lint, format check, and build
+      # `check` is the full release gate: typecheck, lint, format, unit
+      # tests, fixtures, build, packaging, and the complete Playwright e2e
+      # suite (flows, mutations, visual, and cross-browser core specs).
+      - name: Full check including Playwright e2e suite
         run: bun run check
+
+      - name: Upload Playwright traces and report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+          if-no-files-found: ignore
 
   package-smoke:
     name: Package smoke / Node ${{ matrix.node-version }}

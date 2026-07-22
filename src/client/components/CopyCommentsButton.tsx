@@ -97,6 +97,9 @@ export function CopyCommentsButton({
         method: "POST",
       });
       if (!response.ok) throw new Error("Terminal submission failed");
+      // Consume the body so the browser does not report the completed request
+      // as aborted when the page later navigates away.
+      await response.text();
       setCopyStatus("copied");
       setStatusMessage("Sent review packet to the terminal");
     } catch {

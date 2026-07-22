@@ -83,6 +83,12 @@ export function ReviewFiltersBar({
   }, [open]);
 
   useEffect(() => {
+    const handleOpenRequest = () => setOpen(true);
+    window.addEventListener("diffdeck:open-filters", handleOpenRequest);
+    return () => window.removeEventListener("diffdeck:open-filters", handleOpenRequest);
+  }, []);
+
+  useEffect(() => {
     if (open) {
       setPanelMounted(true);
       return;

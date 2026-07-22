@@ -14,8 +14,15 @@ export const test = base.extend<{ diagnostics: string[] }>({
         request.method() === "GET" &&
         (url.pathname === "/api/file-diff" || url.pathname === "/api/image") &&
         request.failure()?.errorText === "net::ERR_ABORTED";
+      // Chromium reports the form-post download navigation as an aborted
+      // request even though the attachment downloads successfully.
+      const intentionalDownloadNavigation =
+        request.method() === "POST" &&
+        url.pathname === "/api/review-packet/download" &&
+        request.failure()?.errorText === "net::ERR_ABORTED";
       if (
         intentionalSurfaceCancellation ||
+        intentionalDownloadNavigation ||
         (url.pathname === "/api/events" && request.failure()?.errorText === "net::ERR_ABORTED")
       ) {
         return;

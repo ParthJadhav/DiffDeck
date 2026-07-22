@@ -91,7 +91,9 @@ export function CommandMenu({
       const key = event.key.toLowerCase();
       if (event.key === "/") {
         event.preventDefault();
-        document.getElementById("diffdeck-review-filter")?.focus();
+        const filterInput = document.getElementById("diffdeck-review-filter");
+        if (filterInput != null) filterInput.focus();
+        else window.dispatchEvent(new Event("diffdeck:open-filters"));
       } else if (key === "j") {
         event.preventDefault();
         selectPath(event.shiftKey ? navigation.nextUnviewedPath : navigation.nextPath);

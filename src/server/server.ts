@@ -563,11 +563,16 @@ function applyWriteAction(
       ? { ok: true }
       : { ok: false, error: applied.stderr || "Git rejected the selected hunk." };
   }
+  // Renamed files occupy two index entries; acting on only the new path
+  // would leave the old path's staged deletion dangling.
+  const summary = session.files.find((file) => file.path === path);
+  const paths =
+    summary?.prevPath != null && summary.prevPath !== path ? [path, summary.prevPath] : [path];
   const args =
     action === "stage"
-      ? ["add", "--", path]
+      ? ["add", "--", ...paths]
       : action === "unstage"
-        ? ["restore", "--staged", "--", path]
+        ? ["restore", "--staged", "--", ...paths]
         : mode === "cached"
           ? ["restore", "--source=HEAD", "--staged", "--worktree", "--", path]
           : ["restore", "--worktree", "--", path];

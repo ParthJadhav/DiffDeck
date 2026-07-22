@@ -9,6 +9,7 @@ import { DiffControls, type DiffControlsProps } from "./components/DiffControls.
 import { CopyCommentsButton } from "./components/CopyCommentsButton.js";
 import { CommandMenu } from "./components/CommandMenu.js";
 import { ReviewFiltersBar } from "./components/ReviewFiltersBar.js";
+import { ReReviewSummary } from "./components/ReReviewSummary.js";
 import { ReviewNotesHub } from "./components/ReviewNotesHub.js";
 import { ReviewNavigator } from "./components/ReviewNavigator.js";
 import { ShellState } from "./components/ShellState.js";
@@ -200,14 +201,31 @@ function DiffDeckSession({
     retryPath,
   } = useFileDiff();
 
-  useEffect(() => {
+  // Reset the diff cache during render rather than in an effect: comment
+  // reconciliation must never observe diffs fetched for a previous snapshot,
+  // or stale notes would be re-anchored against outdated content.
+  const [diffCacheRevision, setDiffCacheRevision] = useState(revision);
+  if (diffCacheRevision !== revision) {
+    setDiffCacheRevision(revision);
     resetFileDiffs();
-  }, [resetFileDiffs, revision]);
+  }
+
+  const requestSessionFileDiff = useCallback(
+    (path: string) => {
+      // Virtualized cards can outlive their session entry for one paint after
+      // a write action removes a file; requesting those paths would 404.
+      if (sessionFilesByPath.has(path)) requestPath(path);
+    },
+    [requestPath, sessionFilesByPath],
+  );
 
   useEffect(() => {
     if (selectedPath == null) return;
     const selectedFile = sessionFilesByPath.get(selectedPath);
-    if (selectedFile?.hasMergeConflicts === true || selectedFile?.isBinary === true) return;
+    // A write action can remove the selected file from the session before the
+    // selection is renormalized; requesting its diff would 404.
+    if (selectedFile == null) return;
+    if (selectedFile.hasMergeConflicts === true || selectedFile.isBinary === true) return;
     requestPath(selectedPath);
   }, [requestPath, selectedPath, sessionFilesByPath]);
 
@@ -526,7 +544,7 @@ function DiffDeckSession({
     onCommentDeleted: handleCommentDeleted,
     onCommentSaved: handleCommentSaved,
     onFileCommentDraftChange: reviewSession.setFileCommentDraft,
-    onRequestFileDiff: requestPath,
+    onRequestFileDiff: requestSessionFileDiff,
     onRetryFileDiff: retryPath,
     onReviewSurfaceChange: reviewSession.setReviewSurface,
     onViewedFileChange: handleViewedFileChange,
@@ -553,6 +571,10 @@ function DiffDeckSession({
         onReviewModeChange={reviewSession.setReviewMode}
         onSelectPath={handleTreeSelection}
         reviewMode={reviewSession.state.reviewMode}
+      />
+      <ReReviewSummary
+        comments={orderedCommentExports}
+        onRemoveStatus={reviewSession.removeCommentsByStatus}
       />
       <ReviewNotesHub
         comments={orderedCommentExports}

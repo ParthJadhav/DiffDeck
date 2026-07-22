@@ -60,5 +60,16 @@ jobs:
       - name: Full release check
         run: bun run check
 
+      - name: Upload Playwright traces and report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Publish to npm via Trusted Publishing
         run: npm publish --access public --ignore-scripts
