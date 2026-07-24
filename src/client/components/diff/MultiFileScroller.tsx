@@ -127,11 +127,14 @@ export function MultiFileScroller(props: {
       for (const timer of timers) window.clearTimeout(timer);
       window.removeEventListener("wheel", release);
       window.removeEventListener("touchstart", release);
-      window.removeEventListener("keydown", release);
+      window.removeEventListener("keydown", releaseOnScrollKey);
+    };
+    const releaseOnScrollKey = (event: KeyboardEvent) => {
+      if (isScrollIntentKey(event)) release();
     };
     window.addEventListener("wheel", release, { passive: true, once: true });
     window.addEventListener("touchstart", release, { passive: true, once: true });
-    window.addEventListener("keydown", release, { once: true });
+    window.addEventListener("keydown", releaseOnScrollKey);
     return () => {
       if (handledScrollRequestRef.current === scrollRequest) {
         handledScrollRequestRef.current = null;
@@ -171,6 +174,27 @@ export function MultiFileScroller(props: {
       className="app-virtuoso h-full"
     />
   );
+}
+
+function isScrollIntentKey(event: KeyboardEvent) {
+  if (
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement ||
+    event.target instanceof HTMLSelectElement
+  ) {
+    return false;
+  }
+  return [
+    "ArrowDown",
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "End",
+    "Home",
+    "PageDown",
+    "PageUp",
+    " ",
+  ].includes(event.key);
 }
 
 function installVisiblePathObserver(
