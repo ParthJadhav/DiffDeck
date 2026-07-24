@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { Command } from "cmdk";
 import { toast } from "sonner";
 import { readDiffLocation } from "../lib/deepLink.js";
@@ -76,77 +76,63 @@ export function CommandMenu({
     toast.success("Opened selected file in editor.");
   }, [editorEnabled, selectedPath]);
 
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (shouldIgnoreShortcutEvent(event)) return;
+    const commandPalette = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+    if (commandPalette || event.key === "?") {
+      event.preventDefault();
+      restoreFocusRef.current = document.activeElement as HTMLElement | null;
+      setQuery("");
+      setOpen(true);
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (event.key === "/") {
+      event.preventDefault();
+      const filterInput = document.getElementById("diffdeck-review-filter");
+      if (filterInput != null) filterInput.focus();
+      else window.dispatchEvent(new Event("diffdeck:open-filters"));
+    } else if (key === "j") {
+      event.preventDefault();
+      selectPath(event.shiftKey ? navigation.nextUnviewedPath : navigation.nextPath);
+    } else if (key === "k") {
+      event.preventDefault();
+      selectPath(event.shiftKey ? navigation.previousUnviewedPath : navigation.previousPath);
+    } else if (key === "f" && selectedPath != null) {
+      event.preventDefault();
+      onReviewModeChange(reviewMode === "focus" ? "all" : "focus");
+    } else if (key === "a" && selectedPath != null) {
+      event.preventDefault();
+      onReviewSurfaceChange(reviewSurface === "accessible" ? "rich" : "accessible");
+    } else if (key === "n" && hunkNavigation.next != null) {
+      event.preventDefault();
+      onNavigateHunk(hunkNavigation.next);
+    } else if (key === "p" && hunkNavigation.previous != null) {
+      event.preventDefault();
+      onNavigateHunk(hunkNavigation.previous);
+    } else if (key === "v" && selectedPath != null) {
+      event.preventDefault();
+      onViewedChange(selectedPath, !viewedPaths.has(selectedPath));
+    } else if (key === "x" && selectedPath != null) {
+      event.preventDefault();
+      onCollapsedChange(selectedPath, !collapsedPaths.has(selectedPath));
+    } else if (key === "c" && selectedPath != null) {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent("diffdeck:add-comment", { detail: selectedPath }));
+    } else if (key === "s") {
+      event.preventDefault();
+      window.dispatchEvent(new Event("diffdeck:open-settings"));
+    } else if (key === "o") {
+      event.preventDefault();
+      void openEditor().catch((error) => toast.error(String(error)));
+    }
+  });
+
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (shouldIgnoreShortcutEvent(event)) return;
-      const commandPalette = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
-      if (commandPalette || event.key === "?") {
-        event.preventDefault();
-        restoreFocusRef.current = document.activeElement as HTMLElement | null;
-        setQuery("");
-        setOpen(true);
-        return;
-      }
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const key = event.key.toLowerCase();
-      if (event.key === "/") {
-        event.preventDefault();
-        const filterInput = document.getElementById("diffdeck-review-filter");
-        if (filterInput != null) filterInput.focus();
-        else window.dispatchEvent(new Event("diffdeck:open-filters"));
-      } else if (key === "j") {
-        event.preventDefault();
-        selectPath(event.shiftKey ? navigation.nextUnviewedPath : navigation.nextPath);
-      } else if (key === "k") {
-        event.preventDefault();
-        selectPath(event.shiftKey ? navigation.previousUnviewedPath : navigation.previousPath);
-      } else if (key === "f" && selectedPath != null) {
-        event.preventDefault();
-        onReviewModeChange(reviewMode === "focus" ? "all" : "focus");
-      } else if (key === "a" && selectedPath != null) {
-        event.preventDefault();
-        onReviewSurfaceChange(reviewSurface === "accessible" ? "rich" : "accessible");
-      } else if (key === "n" && hunkNavigation.next != null) {
-        event.preventDefault();
-        onNavigateHunk(hunkNavigation.next);
-      } else if (key === "p" && hunkNavigation.previous != null) {
-        event.preventDefault();
-        onNavigateHunk(hunkNavigation.previous);
-      } else if (key === "v" && selectedPath != null) {
-        event.preventDefault();
-        onViewedChange(selectedPath, !viewedPaths.has(selectedPath));
-      } else if (key === "x" && selectedPath != null) {
-        event.preventDefault();
-        onCollapsedChange(selectedPath, !collapsedPaths.has(selectedPath));
-      } else if (key === "c" && selectedPath != null) {
-        event.preventDefault();
-        window.dispatchEvent(new CustomEvent("diffdeck:add-comment", { detail: selectedPath }));
-      } else if (key === "s") {
-        event.preventDefault();
-        window.dispatchEvent(new Event("diffdeck:open-settings"));
-      } else if (key === "o") {
-        event.preventDefault();
-        void openEditor().catch((error) => toast.error(String(error)));
-      }
-    };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
-  }, [
-    collapsedPaths,
-    hunkNavigation,
-    onCollapsedChange,
-    onNavigateHunk,
-    onReviewModeChange,
-    onReviewSurfaceChange,
-    onViewedChange,
-    navigation,
-    openEditor,
-    reviewMode,
-    reviewSurface,
-    selectPath,
-    selectedPath,
-    viewedPaths,
-  ]);
+  }, []);
 
   useEffect(() => {
     if (!open) restoreFocusRef.current?.focus();
