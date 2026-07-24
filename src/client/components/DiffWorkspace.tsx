@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useReducer,
   useRef,
@@ -184,6 +185,32 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     };
   }, []);
 
+  const handleShortcutComment = useEffectEvent((event: Event) => {
+    const path = (event as CustomEvent<string>).detail;
+    const fileDiff = fileDiffs[path];
+    if (fileDiff == null) return;
+    const target = getHunkTargets(fileDiff)[0];
+    if (target == null) return;
+    onAnnotationsChange(path, (current) => {
+      if (
+        current.some(
+          (annotation) =>
+            annotation.side === target.side &&
+            annotation.lineNumber === target.line &&
+            annotation.metadata.kind === "comment-form",
+        )
+      ) {
+        return current;
+      }
+      return [...current, createCommentAnnotation(target.side, target.line)];
+    });
+  });
+
+  useEffect(() => {
+    window.addEventListener("diffdeck:add-comment", handleShortcutComment);
+    return () => window.removeEventListener("diffdeck:add-comment", handleShortcutComment);
+  }, []);
+
   const diffOptions = useMemo(
     () => ({
       collapsedContextThreshold: 1,
@@ -352,29 +379,7 @@ const idleUnresolvedFileState: UnresolvedFileState = {
   loading: false,
 };
 
-const FileDiffSection = memo(function FileDiffSection({
-  collapsed,
-  capabilities,
-  commentAnnotations,
-  diffOptions,
-  file,
-  fileCommentDraft,
-  fileDiff,
-  fileDiffError,
-  onAnnotationsChange,
-  onCollapsedChange,
-  onCommentDeleted,
-  onCommentSaved,
-  onFileCommentDraftChange,
-  onRetryFileDiff,
-  onSessionReload,
-  onSelectedLinesChange,
-  onViewedChange,
-  selectedLines,
-  sessionRevision,
-  snapshotId,
-  viewed,
-}: {
+type FileDiffSectionProps = {
   collapsed: boolean;
   capabilities?: SessionPayload["capabilities"];
   commentAnnotations: CommentAnnotation[];
@@ -399,7 +404,39 @@ const FileDiffSection = memo(function FileDiffSection({
   sessionRevision: number;
   snapshotId: string;
   viewed: boolean;
-}) {
+};
+
+const FileDiffSection = memo(function FileDiffSection(props: FileDiffSectionProps) {
+  return <FileDiffSectionContent key={`${props.file.path}:${props.sessionRevision}`} {...props} />;
+});
+
+function FileDiffSectionContent(props: FileDiffSectionProps) {
+  return <FileDiffSectionView {...useFileDiffSectionModel(props)} />;
+}
+
+function useFileDiffSectionModel({
+  collapsed,
+  capabilities,
+  commentAnnotations,
+  diffOptions,
+  file,
+  fileCommentDraft,
+  fileDiff,
+  fileDiffError,
+  onAnnotationsChange,
+  onCollapsedChange,
+  onCommentDeleted,
+  onCommentSaved,
+  onFileCommentDraftChange,
+  onRetryFileDiff,
+  onSessionReload,
+  onSelectedLinesChange,
+  onViewedChange,
+  selectedLines,
+  sessionRevision,
+  snapshotId,
+  viewed,
+}: FileDiffSectionProps) {
   const [unresolvedState, dispatchUnresolvedState] = useReducer(
     (_current: UnresolvedFileState, next: UnresolvedFileState) => next,
     idleUnresolvedFileState,
@@ -423,8 +460,6 @@ const FileDiffSection = memo(function FileDiffSection({
   );
 
   const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
-
-  useEffect(() => setStructuralOutput(null), [file.path, sessionRevision]);
 
   useEffect(() => {
     if (collapsed || fileDiff == null || isHeavyFile) return;
@@ -568,7 +603,10 @@ const FileDiffSection = memo(function FileDiffSection({
   );
 
   const commentAnnotationsRef = useRef(commentAnnotations);
-  commentAnnotationsRef.current = commentAnnotations;
+
+  useEffect(() => {
+    commentAnnotationsRef.current = commentAnnotations;
+  }, [commentAnnotations]);
 
   const addCommentAtLine = useCallback(
     (side: AnnotationSide, lineNumber: number) => {
@@ -588,17 +626,6 @@ const FileDiffSection = memo(function FileDiffSection({
     },
     [filePath, onAnnotationsChange],
   );
-
-  useEffect(() => {
-    const handleShortcutComment = (event: Event) => {
-      if ((event as CustomEvent<string>).detail !== filePath || fileDiff == null) return;
-      const target = getHunkTargets(fileDiff)[0];
-      if (target == null) return;
-      addCommentAtLine(target.side, target.line);
-    };
-    window.addEventListener("diffdeck:add-comment", handleShortcutComment);
-    return () => window.removeEventListener("diffdeck:add-comment", handleShortcutComment);
-  }, [addCommentAtLine, fileDiff, filePath]);
 
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
@@ -762,6 +789,46 @@ const FileDiffSection = memo(function FileDiffSection({
     ],
   );
 
+  return {
+    collapsed,
+    commentAnnotations,
+    file,
+    fileDiff,
+    fileDiffError,
+    fileDiffOptions,
+    handleHeaderCollapsedChange,
+    handleHeaderViewedChange,
+    headerActions,
+    isHeavyFile,
+    onRetryFileDiff,
+    renderCommentAnnotation,
+    renderHeader,
+    selectedLines,
+    structuralOutput,
+    unresolvedState,
+    viewed,
+  };
+}
+
+function FileDiffSectionView({
+  collapsed,
+  commentAnnotations,
+  file,
+  fileDiff,
+  fileDiffError,
+  fileDiffOptions,
+  handleHeaderCollapsedChange,
+  handleHeaderViewedChange,
+  headerActions,
+  isHeavyFile,
+  onRetryFileDiff,
+  renderCommentAnnotation,
+  renderHeader,
+  selectedLines,
+  structuralOutput,
+  unresolvedState,
+  viewed,
+}: ReturnType<typeof useFileDiffSectionModel>) {
   if (file.hasMergeConflicts === true) {
     if (unresolvedState.error != null) {
       return (
@@ -950,7 +1017,7 @@ const FileDiffSection = memo(function FileDiffSection({
   ) : (
     sourceDiff
   );
-});
+}
 
 const IMAGE_EXTENSIONS = new Set([
   "png",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import { fetchJson } from "../lib/api.js";
 import type { DiffWhitespaceMode, SessionPayload } from "../types.js";
@@ -15,10 +15,31 @@ export interface UseSessionResult {
   setError: (message: string | null) => void;
 }
 
+interface SessionActivity {
+  loading: boolean;
+  refreshing: boolean;
+}
+
+type SessionActivityAction = { type: "start"; initial: boolean } | { type: "finish" };
+
+function reduceSessionActivity(
+  state: SessionActivity,
+  action: SessionActivityAction,
+): SessionActivity {
+  if (action.type === "finish") {
+    return state.loading || state.refreshing ? { loading: false, refreshing: false } : state;
+  }
+  return action.initial
+    ? { loading: true, refreshing: false }
+    : { loading: false, refreshing: true };
+}
+
 export function useSession(): UseSessionResult {
   const [session, setSession] = useState<SessionPayload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [activity, dispatchActivity] = useReducer(reduceSessionActivity, {
+    loading: true,
+    refreshing: false,
+  });
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const requestIdRef = useRef(0);
@@ -32,11 +53,7 @@ export function useSession(): UseSessionResult {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
-    if (useInitialLoadingState) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
+    dispatchActivity({ type: "start", initial: useInitialLoadingState });
     setError(null);
 
     try {
@@ -60,8 +77,7 @@ export function useSession(): UseSessionResult {
       }
     } finally {
       if (requestIdRef.current === requestId) {
-        setLoading(false);
-        setRefreshing(false);
+        dispatchActivity({ type: "finish" });
       }
     }
   }, []);
@@ -81,7 +97,7 @@ export function useSession(): UseSessionResult {
   const setWhitespaceMode = useCallback(async (mode: DiffWhitespaceMode) => {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setRefreshing(true);
+    dispatchActivity({ type: "start", initial: false });
     setError(null);
     try {
       const nextSession = await fetchJson<SessionPayload>("/api/preferences", {
@@ -101,14 +117,14 @@ export function useSession(): UseSessionResult {
         });
       }
     } finally {
-      if (requestIdRef.current === requestId) setRefreshing(false);
+      if (requestIdRef.current === requestId) dispatchActivity({ type: "finish" });
     }
   }, []);
 
   return {
     session,
-    loading,
-    refreshing,
+    loading: activity.loading,
+    refreshing: activity.refreshing,
     error,
     revision,
     refresh,

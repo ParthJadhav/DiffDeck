@@ -1,4 +1,12 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   Columns2,
   FileCode2,
@@ -259,8 +267,7 @@ export function DiffControls(props: DiffControlsProps) {
   const panelRef = useRef<HTMLDialogElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
-  const updatePanelPositionRef = useRef<() => void>(() => {});
-  updatePanelPositionRef.current = () => {
+  const updatePanelPosition = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect == null) return;
 
@@ -277,11 +284,10 @@ export function DiffControls(props: DiffControlsProps) {
       position: "fixed",
       width,
     });
-  };
+  }, []);
 
   useLayoutEffect(() => {
     if (!open) return;
-    const updatePanelPosition = () => updatePanelPositionRef.current();
     updatePanelPosition();
     window.addEventListener("resize", updatePanelPosition);
     window.addEventListener("scroll", updatePanelPosition, true);
@@ -289,7 +295,7 @@ export function DiffControls(props: DiffControlsProps) {
       window.removeEventListener("resize", updatePanelPosition);
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
-  }, [open]);
+  }, [open, updatePanelPosition]);
 
   useEffect(() => {
     if (open) {

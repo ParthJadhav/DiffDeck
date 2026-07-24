@@ -333,7 +333,7 @@ function MenuItem({
   );
 }
 
-export function shouldIgnoreShortcutEvent(event: Event): boolean {
+function shouldIgnoreShortcutEvent(event: Event): boolean {
   return event.composedPath().some((target) => {
     if (!(target instanceof HTMLElement)) return false;
     return (

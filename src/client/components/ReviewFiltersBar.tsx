@@ -1,4 +1,12 @@
-import { type CSSProperties, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import type { ReviewFilters } from "../lib/reviewSession.js";
 import { cn } from "../lib/cn.js";
@@ -52,8 +60,7 @@ export function ReviewFiltersBar({
   const set = <K extends keyof ReviewFilters>(key: K, value: ReviewFilters[K]) =>
     onChange({ ...filters, [key]: value });
 
-  const updatePanelPositionRef = useRef<() => void>(() => {});
-  updatePanelPositionRef.current = () => {
+  const updatePanelPosition = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect == null) return;
 
@@ -68,11 +75,10 @@ export function ReviewFiltersBar({
       position: "fixed",
       width,
     });
-  };
+  }, []);
 
   useLayoutEffect(() => {
     if (!open) return;
-    const updatePanelPosition = () => updatePanelPositionRef.current();
     updatePanelPosition();
     window.addEventListener("resize", updatePanelPosition);
     window.addEventListener("scroll", updatePanelPosition, true);
@@ -80,7 +86,7 @@ export function ReviewFiltersBar({
       window.removeEventListener("resize", updatePanelPosition);
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
-  }, [open]);
+  }, [open, updatePanelPosition]);
 
   useEffect(() => {
     const handleOpenRequest = () => setOpen(true);
@@ -299,35 +305,65 @@ export function ReviewFiltersBar({
         </Dialog>
       ) : null}
 
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="outline"
-        aria-label={`Filter review, showing ${resultCount} of ${totalCount} files${activeCount > 0 ? `, ${activeCount} active` : ""}`}
-        aria-expanded={open}
-        aria-controls={panelId}
-        aria-haspopup="dialog"
+      <FilterTrigger
+        activeCount={activeCount}
         onClick={() => setOpen((value) => !value)}
-        className={cn(
-          "app-review-filter-trigger h-8 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-[12px]",
-          open && "border-ring/60 bg-accent text-foreground",
-        )}
-      >
-        <SlidersHorizontal className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="app-review-filter-label truncate">Filter</span>
-        <span className="app-review-filter-count ml-auto shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-          {resultCount}/{totalCount}
-        </span>
-        {activeCount > 0 ? (
-          <span
-            aria-hidden="true"
-            className="grid size-4 shrink-0 place-items-center rounded-full bg-info text-[9px] font-semibold text-background"
-          >
-            {activeCount}
-          </span>
-        ) : null}
-      </Button>
+        open={open}
+        panelId={panelId}
+        ref={triggerRef}
+        resultCount={resultCount}
+        totalCount={totalCount}
+      />
     </div>
+  );
+}
+
+function FilterTrigger({
+  activeCount,
+  onClick,
+  open,
+  panelId,
+  ref,
+  resultCount,
+  totalCount,
+}: {
+  activeCount: number;
+  onClick: () => void;
+  open: boolean;
+  panelId: string;
+  ref: React.Ref<HTMLButtonElement>;
+  resultCount: number;
+  totalCount: number;
+}) {
+  return (
+    <Button
+      ref={ref}
+      type="button"
+      variant="outline"
+      aria-label={`Filter review, showing ${resultCount} of ${totalCount} files${activeCount > 0 ? `, ${activeCount} active` : ""}`}
+      aria-expanded={open}
+      aria-controls={panelId}
+      aria-haspopup="dialog"
+      onClick={onClick}
+      className={cn(
+        "app-review-filter-trigger h-8 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-[12px]",
+        open && "border-ring/60 bg-accent text-foreground",
+      )}
+    >
+      <SlidersHorizontal className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="app-review-filter-label truncate">Filter</span>
+      <span className="app-review-filter-count ml-auto shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {resultCount}/{totalCount}
+      </span>
+      {activeCount > 0 ? (
+        <span
+          aria-hidden="true"
+          className="grid size-4 shrink-0 place-items-center rounded-full bg-info text-[9px] font-semibold text-background"
+        >
+          {activeCount}
+        </span>
+      ) : null}
+    </Button>
   );
 }
 

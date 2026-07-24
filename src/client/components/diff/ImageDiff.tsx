@@ -20,13 +20,18 @@ export function ImageDiff({ path }: { path: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadSide(path, "old"), loadSide(path, "new")])
-      .then(([oldSide, newSide]) => {
+    const loadImages = async () => {
+      try {
+        const [oldSide, newSide] = await Promise.all([
+          loadSide(path, "old"),
+          loadSide(path, "new"),
+        ]);
         if (!cancelled) setSides({ old: oldSide, new: newSide });
-      })
-      .catch((reason) => {
+      } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
-      });
+      }
+    };
+    void loadImages();
     return () => {
       cancelled = true;
     };

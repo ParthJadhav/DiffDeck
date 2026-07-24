@@ -28,8 +28,11 @@ export function useLocalStorage<T>(
 
   const serializeRef = useRef(serialize);
   const deserializeRef = useRef(deserialize);
-  serializeRef.current = serialize;
-  deserializeRef.current = deserialize;
+
+  useEffect(() => {
+    serializeRef.current = serialize;
+    deserializeRef.current = deserialize;
+  }, [deserialize, serialize]);
 
   const [value, setValue] = useState<T>(() => readFromStorage(key, initialValue, deserialize));
 

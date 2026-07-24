@@ -22,6 +22,10 @@ export function useWatchEvents(enabled: boolean, onReload: () => void, autoRefre
     const handleError = () => toast.error("Diff watch connection was interrupted.");
     source.addEventListener("snapshot", handleSnapshot);
     source.addEventListener("error", handleError);
-    return () => source.close();
+    return () => {
+      source.removeEventListener("snapshot", handleSnapshot);
+      source.removeEventListener("error", handleError);
+      source.close();
+    };
   }, [autoRefresh, enabled, onReload]);
 }

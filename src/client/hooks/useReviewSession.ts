@@ -51,13 +51,17 @@ export interface UseReviewSessionResult {
 export function useReviewSession(
   snapshot: ReviewSessionSnapshot,
   autoCollapsedPaths: readonly string[],
+  fileDiffs: Parameters<typeof reconcileCommentAnchors>[1],
   preferredSelectedPath?: string | null,
 ): UseReviewSessionResult {
   const identity = useMemo(() => createReviewSessionIdentity(snapshot), [snapshot]);
   const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
   const autoCollapsedRef = useRef(autoCollapsedPaths);
-  autoCollapsedRef.current = autoCollapsedPaths;
+
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+    autoCollapsedRef.current = autoCollapsedPaths;
+  }, [autoCollapsedPaths, snapshot]);
 
   const [state, setState] = useState<ReviewSessionState>(() =>
     readStoredSession(identity, snapshot, autoCollapsedPaths, preferredSelectedPath),
@@ -80,6 +84,25 @@ export function useReviewSession(
       // Review state remains usable in memory if storage is unavailable or full.
     }
   }, [identity, state]);
+
+  useEffect(() => {
+    setState((current) => {
+      const commentExports = reconcileCommentAnchors(
+        current.commentExports,
+        fileDiffs,
+        snapshot.snapshotId,
+      );
+      if (commentExports === current.commentExports) return current;
+      return {
+        ...current,
+        annotationsByFile: reconcileAnnotationsToComments(
+          current.annotationsByFile,
+          commentExports,
+        ),
+        commentExports,
+      };
+    });
+  }, [fileDiffs, snapshot.snapshotId]);
 
   const collapsedPaths = useMemo(() => new Set(state.collapsedPaths), [state.collapsedPaths]);
   const viewedPaths = useMemo(() => new Set(state.viewedPaths), [state.viewedPaths]);
@@ -139,11 +162,12 @@ export function useReviewSession(
 
   const removeCommentsByStatus = useCallback((status: "resolved" | "stale") => {
     setState((current) => {
-      const removedIds = new Set(
-        current.commentExports
-          .filter((comment) => comment.status === status)
-          .map((comment) => comment.id),
-      );
+      const removedIds = new Set<string>();
+      for (const comment of current.commentExports) {
+        if (comment.status === status) {
+          removedIds.add(comment.id);
+        }
+      }
       if (removedIds.size === 0) return current;
       return {
         ...current,
@@ -200,11 +224,11 @@ export function useReviewSession(
   }, []);
 
   const reconcileComments = useCallback(
-    (fileDiffs: Parameters<typeof reconcileCommentAnchors>[1], snapshotId: string) => {
+    (nextFileDiffs: Parameters<typeof reconcileCommentAnchors>[1], snapshotId: string) => {
       setState((current) => {
         const commentExports = reconcileCommentAnchors(
           current.commentExports,
-          fileDiffs,
+          nextFileDiffs,
           snapshotId,
         );
         if (commentExports === current.commentExports) return current;

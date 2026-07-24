@@ -7,8 +7,22 @@ const DEFAULT_PORT = 4321;
 
 export function readPackageVersion(): string {
   const packageJsonPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../package.json");
-  const { version } = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version: string };
-  return version;
+  const rawPackageJson = readFileSync(packageJsonPath, "utf-8");
+  let packageJson: unknown;
+  try {
+    packageJson = JSON.parse(rawPackageJson);
+  } catch (error) {
+    throw new Error(`Unable to parse package metadata at ${packageJsonPath}.`, { cause: error });
+  }
+  if (
+    typeof packageJson !== "object" ||
+    packageJson == null ||
+    !("version" in packageJson) ||
+    typeof packageJson.version !== "string"
+  ) {
+    throw new Error(`Package metadata at ${packageJsonPath} does not contain a valid version.`);
+  }
+  return packageJson.version;
 }
 
 export function formatCliHelp(): string {

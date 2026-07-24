@@ -86,21 +86,27 @@ export function App() {
   );
 }
 
-function DiffDeckSession({
-  refresh,
-  reload,
-  refreshing,
-  revision,
-  session,
-  setWhitespaceMode,
-}: {
+type DiffDeckSessionProps = {
   refresh: () => void;
   reload: () => void;
   refreshing: boolean;
   revision: number;
   session: SessionPayload;
   setWhitespaceMode: (mode: DiffWhitespaceMode) => Promise<void>;
-}) {
+};
+
+function DiffDeckSession(props: DiffDeckSessionProps) {
+  return <DiffDeckSessionView {...useDiffDeckSessionModel(props)} />;
+}
+
+function useDiffDeckSessionModel({
+  refresh,
+  reload,
+  refreshing,
+  revision,
+  session,
+  setWhitespaceMode,
+}: DiffDeckSessionProps) {
   const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
   const [themeType, setThemeType] = useLocalStorage<ThemeChoice>(
     "diffdeck.settings.themeType",
@@ -146,22 +152,42 @@ function DiffDeckSession({
     }),
     [canonicalFiles, session.diffArgs, session.repoRoot, session.snapshotId],
   );
-  const autoCollapsedPaths = useMemo(() => getAutoCollapsedPaths(canonicalFiles), [canonicalFiles]);
   const [preferredSelectedPath] = useState(() =>
     new URLSearchParams(window.location.search).get("file"),
   );
-  const reviewSession = useReviewSession(reviewSnapshot, autoCollapsedPaths, preferredSelectedPath);
+  const autoCollapsedPaths = useMemo(
+    () => getAutoCollapsedPaths(canonicalFiles).filter((path) => path !== preferredSelectedPath),
+    [canonicalFiles, preferredSelectedPath],
+  );
+  const {
+    fileDiffErrors,
+    fileDiffs,
+    requestPath,
+    reset: resetFileDiffs,
+    retryPath,
+  } = useFileDiff();
+  const reviewSession = useReviewSession(
+    reviewSnapshot,
+    autoCollapsedPaths,
+    fileDiffs,
+    preferredSelectedPath,
+  );
   const orderedFiles = useMemo(
     () => orderDiffFiles(session.files, reviewSession.state.fileOrder),
     [reviewSession.state.fileOrder, session.files],
   );
   const [initialDiffLocation] = useState(() => readDiffLocation(window.location.href));
-  const [selectedLocation, setSelectedLocation] = useState<Pick<
-    HunkTarget,
-    "line" | "side"
-  > | null>(() => {
-    return initialDiffLocation.line != null && initialDiffLocation.side != null
-      ? { line: initialDiffLocation.line, side: initialDiffLocation.side }
+  const [storedSelectedLocation, setSelectedLocation] = useState<
+    ({ path: string } & Pick<HunkTarget, "line" | "side">) | null
+  >(() => {
+    return initialDiffLocation.file != null &&
+      initialDiffLocation.line != null &&
+      initialDiffLocation.side != null
+      ? {
+          line: initialDiffLocation.line,
+          path: initialDiffLocation.file,
+          side: initialDiffLocation.side,
+        }
       : null;
   });
   const [scrollSignal, setScrollSignal] = useState(0);
@@ -169,10 +195,16 @@ function DiffDeckSession({
   const supportsSplitDiff = useMediaQuery("(min-width: 900px)");
   const effectiveDiffStyle = supportsSplitDiff ? diffStyle : "unified";
   const selectedPath = reviewSession.state.selectedPath;
+  const selectedLocation = useMemo(
+    () =>
+      storedSelectedLocation?.path === selectedPath
+        ? { line: storedSelectedLocation.line, side: storedSelectedLocation.side }
+        : null,
+    [selectedPath, storedSelectedLocation],
+  );
   const collapsedFilePaths = reviewSession.collapsedPaths;
   const viewedFilePaths = reviewSession.viewedPaths;
   const commentExports = reviewSession.state.commentExports;
-  const reconcileComments = reviewSession.reconcileComments;
   const deepLinkIdentityRef = useRef<string | null>(null);
   const visibleFiles = useMemo(
     () => filterDiffFiles(orderedFiles, reviewSession.state.filters, viewedFilePaths),
@@ -192,14 +224,6 @@ function DiffDeckSession({
     root.classList.toggle("light", themeType === "light");
     root.classList.toggle("dark", themeType === "dark");
   }, [themeType]);
-
-  const {
-    fileDiffErrors,
-    fileDiffs,
-    requestPath,
-    reset: resetFileDiffs,
-    retryPath,
-  } = useFileDiff();
 
   // Reset the diff cache during render rather than in an effect: comment
   // reconciliation must never observe diffs fetched for a previous snapshot,
@@ -230,10 +254,6 @@ function DiffDeckSession({
   }, [requestPath, selectedPath, sessionFilesByPath]);
 
   useEffect(() => {
-    reconcileComments(fileDiffs, session.snapshotId);
-  }, [fileDiffs, reconcileComments, session.snapshotId]);
-
-  useEffect(() => {
     if (deepLinkIdentityRef.current === reviewSession.state.identity) return;
     deepLinkIdentityRef.current = reviewSession.state.identity;
     const requestedPath = new URLSearchParams(window.location.search).get("file");
@@ -254,14 +274,20 @@ function DiffDeckSession({
           ? { line: location.line, path, side: location.side }
           : null;
       setSelectedLocation(
-        lineLocation == null ? null : { line: lineLocation.line, side: lineLocation.side },
+        lineLocation == null
+          ? null
+          : { line: lineLocation.line, path: lineLocation.path, side: lineLocation.side },
       );
+      if (lineLocation != null && collapsedFilePaths.has(path)) {
+        reviewSession.setCollapsed(path, false);
+        requestPath(path);
+      }
       reviewSession.setSelectedPath(path);
       setScrollSignal((current) => current + 1);
     };
     window.addEventListener("popstate", restoreLocation);
     return () => window.removeEventListener("popstate", restoreLocation);
-  }, [orderedFiles, reviewSession, sessionFilesByPath]);
+  }, [collapsedFilePaths, orderedFiles, requestPath, reviewSession, sessionFilesByPath]);
 
   useEffect(() => {
     if (selectedPath != null && visibleFiles.some((file) => file.path === selectedPath)) return;
@@ -269,17 +295,8 @@ function DiffDeckSession({
   }, [reviewSession, selectedPath, visibleFiles]);
 
   useEffect(() => {
-    if (selectedPath != null && selectedLocation != null && collapsedFilePaths.has(selectedPath)) {
-      reviewSession.setCollapsed(selectedPath, false);
-      requestPath(selectedPath);
-    }
-  }, [collapsedFilePaths, requestPath, reviewSession, selectedLocation, selectedPath]);
-
-  useEffect(() => {
     const nextHref = buildSelectedFileUrl(window.location.href, selectedPath);
     window.history.replaceState(null, "", nextHref);
-    const nextLocation = readDiffLocation(nextHref);
-    if (nextLocation.line == null || nextLocation.side == null) setSelectedLocation(null);
   }, [selectedPath]);
 
   useEffect(() => {
@@ -288,7 +305,7 @@ function DiffDeckSession({
         event as CustomEvent<{ line: number; path: string; side: HunkTarget["side"] }>
       ).detail;
       if (detail.path !== selectedPath) return;
-      setSelectedLocation({ line: detail.line, side: detail.side });
+      setSelectedLocation({ line: detail.line, path: detail.path, side: detail.side });
       window.history.replaceState(
         null,
         "",
@@ -352,7 +369,7 @@ function DiffDeckSession({
       const status = comment.status ?? "open";
       const scope = comment.scope ?? "line";
       if (scope === "line" && status === "open") {
-        const target = { line: comment.lineNumber, side: comment.side };
+        const target = { line: comment.lineNumber, path: comment.filePath, side: comment.side };
         setSelectedLocation(target);
         window.history.replaceState(
           null,
@@ -432,7 +449,7 @@ function DiffDeckSession({
     (target: HunkTarget) => {
       if (selectedPath == null) return;
       if (collapsedFilePaths.has(selectedPath)) handleCollapsedFileChange(selectedPath, false);
-      setSelectedLocation(target);
+      setSelectedLocation({ ...target, path: selectedPath });
       window.history.replaceState(
         null,
         "",
@@ -562,6 +579,62 @@ function DiffDeckSession({
     viewedFilePaths,
   } satisfies DiffWorkspaceProps;
 
+  return {
+    collapsedFilePaths,
+    controlsProps,
+    handleClearAllComments,
+    handleCollapsedFileChange,
+    handleHubCommentDelete,
+    handleHubCommentUpdate,
+    handleJumpToComment,
+    handleNavigateHunk,
+    handleTreeSelection,
+    handleViewedFileChange,
+    hunkNavigation,
+    isDesktopLayout,
+    orderedCommentExports,
+    orderedFiles,
+    resetConfirmationOpen,
+    reviewNavigation,
+    reviewSession,
+    selectedPath,
+    session,
+    setResetConfirmationOpen,
+    sidebarProps,
+    themeType,
+    viewedFilePaths,
+    visibleFiles,
+    workspaceProps,
+  };
+}
+
+function DiffDeckSessionView({
+  collapsedFilePaths,
+  controlsProps,
+  handleClearAllComments,
+  handleCollapsedFileChange,
+  handleHubCommentDelete,
+  handleHubCommentUpdate,
+  handleJumpToComment,
+  handleNavigateHunk,
+  handleTreeSelection,
+  handleViewedFileChange,
+  hunkNavigation,
+  isDesktopLayout,
+  orderedCommentExports,
+  orderedFiles,
+  resetConfirmationOpen,
+  reviewNavigation,
+  reviewSession,
+  selectedPath,
+  session,
+  setResetConfirmationOpen,
+  sidebarProps,
+  themeType,
+  viewedFilePaths,
+  visibleFiles,
+  workspaceProps,
+}: ReturnType<typeof useDiffDeckSessionModel>) {
   const sidebarFooter = (
     <div className="flex flex-col gap-2">
       <ReviewNavigator
@@ -700,15 +773,13 @@ function DiffDeckLayout({
     { diff: 80, files: 20 },
   );
   const [narrowNavigationOpen, setNarrowNavigationOpen] = useState(false);
-  const previousNarrowPathRef = useRef(sidebarProps.selectedPath);
-
-  useEffect(() => {
-    const previousPath = previousNarrowPathRef.current;
-    previousNarrowPathRef.current = sidebarProps.selectedPath;
-    if (narrowNavigationOpen && previousPath !== sidebarProps.selectedPath) {
+  const handleNarrowSelectPath = useCallback(
+    (path: string) => {
+      sidebarProps.onSelectPath(path);
       setNarrowNavigationOpen(false);
-    }
-  }, [narrowNavigationOpen, sidebarProps.selectedPath]);
+    },
+    [sidebarProps],
+  );
 
   const selectedLabel = sidebarProps.selectedPath?.split("/").at(-1) ?? "No file selected";
 
@@ -760,7 +831,11 @@ function DiffDeckLayout({
           </nav>
           <div className="min-h-0 overflow-hidden">
             {narrowNavigationOpen ? (
-              <Sidebar {...sidebarProps} footer={sidebarFooter} />
+              <Sidebar
+                {...sidebarProps}
+                footer={sidebarFooter}
+                onSelectPath={handleNarrowSelectPath}
+              />
             ) : (
               <DiffWorkspace {...workspaceProps} />
             )}

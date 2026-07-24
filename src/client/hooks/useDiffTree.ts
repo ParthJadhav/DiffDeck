@@ -22,7 +22,10 @@ export function useDiffTree({
   const previousSelectedPathsRef = useRef<Set<string>>(new Set());
   const suppressSelectionFireRef = useRef(false);
   const onSelectionChangeRef = useRef(onSelectionChange);
-  onSelectionChangeRef.current = onSelectionChange;
+
+  useEffect(() => {
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onSelectionChange]);
 
   const filePaths = useMemo(() => session?.files.map((file) => file.path) ?? [], [session]);
 

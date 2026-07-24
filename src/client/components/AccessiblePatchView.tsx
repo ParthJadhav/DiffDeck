@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import {
   ArrowDown,
@@ -22,16 +22,7 @@ import { Textarea } from "./ui/textarea.js";
 
 const MAX_ACCESSIBLE_ROWS = 2_000;
 
-export function AccessiblePatchView({
-  comments,
-  error,
-  file,
-  fileDiff,
-  onAnnotationsChange,
-  onCommentSaved,
-  onRetry,
-  onReturnToRich,
-}: {
+type AccessiblePatchViewProps = {
   comments: readonly CommentExportRecord[];
   error?: string;
   file: DiffFileSummary;
@@ -43,7 +34,28 @@ export function AccessiblePatchView({
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRetry: (path: string) => void;
   onReturnToRich: () => void;
-}) {
+};
+
+export function AccessiblePatchView(props: AccessiblePatchViewProps) {
+  const readiness = props.fileDiff == null ? "pending" : "ready";
+  return (
+    <AccessiblePatchViewContent
+      key={`${props.file.path}:${props.file.diffId}:${readiness}`}
+      {...props}
+    />
+  );
+}
+
+function AccessiblePatchViewContent({
+  comments,
+  error,
+  file,
+  fileDiff,
+  onAnnotationsChange,
+  onCommentSaved,
+  onRetry,
+  onReturnToRich,
+}: AccessiblePatchViewProps) {
   const allRows = useMemo(
     () => (fileDiff == null ? [] : buildAccessiblePatchRows(fileDiff)),
     [fileDiff],
@@ -57,22 +69,12 @@ export function AccessiblePatchView({
       ),
     [rows],
   );
-  const [currentChange, setCurrentChange] = useState(-1);
+  const [currentChange, setCurrentChange] = useState(() =>
+    findInitialChange(changedRows, file.path),
+  );
   const [composer, setComposer] = useState<{ body: string; key: string } | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
-
-  useEffect(() => {
-    const location = readDiffLocation(window.location.href);
-    const index = changedRows.findIndex(
-      (row) =>
-        location.file === file.path &&
-        location.side === row.side &&
-        location.line === lineForChangedRow(row),
-    );
-    setCurrentChange(index);
-    setComposer(null);
-  }, [changedRows, file.path]);
 
   useEffect(() => {
     mainRef.current?.focus({ preventScroll: true });
@@ -123,21 +125,23 @@ export function AccessiblePatchView({
         : Math.min(changedRows.length - 1, currentChange + 1);
   const previousIndex = currentChange <= 0 ? -1 : currentChange - 1;
 
+  const focusChangeFromKeyboard = useEffectEvent(focusChange);
+
   useEffect(() => {
     const navigateByKeyboard = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       if (event.key === "]" && nextIndex !== -1 && nextIndex !== currentChange) {
         event.preventDefault();
-        focusChange(nextIndex);
+        focusChangeFromKeyboard(nextIndex);
       } else if (event.key === "[" && previousIndex !== -1) {
         event.preventDefault();
-        focusChange(previousIndex);
+        focusChangeFromKeyboard(previousIndex);
       }
     };
     window.addEventListener("keydown", navigateByKeyboard);
     return () => window.removeEventListener("keydown", navigateByKeyboard);
-  }, [currentChange, focusChange, nextIndex, previousIndex]);
+  }, [currentChange, nextIndex, previousIndex]);
 
   const copyLineLink = async (row: Extract<AccessiblePatchRow, { side: string }>) => {
     const href = window.location.href;
@@ -267,158 +271,17 @@ export function AccessiblePatchView({
           onReturn={onReturnToRich}
         />
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
-          {allRows.length > rows.length ? (
-            <div
-              role="status"
-              className="sticky top-0 z-10 flex gap-2 border-b border-amber-500/30 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-950 dark:bg-amber-950 dark:text-amber-100"
-            >
-              <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                Showing the first {rows.length.toLocaleString()} of{" "}
-                {allRows.length.toLocaleString()} patch rows to keep assistive reading responsive.
-                Use the rich diff for the remainder.
-              </span>
-            </div>
-          ) : null}
-          <div
-            aria-hidden="true"
-            className="grid grid-cols-[1.5rem_3.5rem_3.5rem_minmax(0,1fr)] border-b border-border bg-muted/40 px-2 py-1 font-mono text-[9px] uppercase text-muted-foreground"
-          >
-            <span>Type</span>
-            <span>Old</span>
-            <span>New</span>
-            <span>Content</span>
-          </div>
-          <ol aria-label={`Unified patch lines for ${file.path}`} className="m-0 list-none p-0">
-            {rows.map((row) => {
-              if (row.kind === "hunk") {
-                return (
-                  <li
-                    key={row.key}
-                    className="border-y border-border bg-accent/40 px-3 py-1.5 font-mono text-[11px] text-muted-foreground"
-                  >
-                    <span className="sr-only">Hunk header: </span>
-                    {row.content}
-                  </li>
-                );
-              }
-              const changed = row.kind === "addition" || row.kind === "deletion";
-              const line = changed ? lineForChangedRow(row) : null;
-              let rowComments: CommentExportRecord[] = [];
-              if (row.kind === "addition" || row.kind === "deletion") {
-                rowComments = comments.filter(
-                  (comment) =>
-                    comment.filePath === file.path &&
-                    (comment.scope ?? "line") === "line" &&
-                    comment.side === row.side &&
-                    comment.lineNumber === line,
-                );
-              }
-              return (
-                <li
-                  key={row.key}
-                  ref={(element) => {
-                    if (element == null) rowRefs.current.delete(row.key);
-                    else rowRefs.current.set(row.key, element);
-                  }}
-                  data-accessible-patch-row={row.key}
-                  tabIndex={-1}
-                  className={cn(
-                    "group border-b border-border/60 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                    row.kind === "addition" && "bg-diff-added/8",
-                    row.kind === "deletion" && "bg-diff-deleted/8",
-                  )}
-                >
-                  <span className="sr-only">{announceRow(row)}</span>
-                  <div
-                    aria-hidden="true"
-                    className="grid min-h-7 grid-cols-[1.5rem_3.5rem_3.5rem_minmax(0,1fr)] items-start px-2 font-mono text-[11px] leading-7"
-                  >
-                    <span
-                      className={cn(
-                        row.kind === "addition" && "text-diff-added",
-                        row.kind === "deletion" && "text-diff-deleted",
-                      )}
-                    >
-                      {prefixForRow(row)}
-                    </span>
-                    <span className="text-muted-foreground tabular-nums">{row.oldLine ?? ""}</span>
-                    <span className="text-muted-foreground tabular-nums">{row.newLine ?? ""}</span>
-                    <code className="min-w-0 overflow-x-auto whitespace-pre pr-2">
-                      {row.content || " "}
-                    </code>
-                  </div>
-                  {changed ? (
-                    <div className="flex flex-wrap items-center gap-1 border-t border-border/40 px-2 py-1">
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => setComposer({ body: "", key: row.key })}
-                      >
-                        <MessageSquarePlus aria-hidden="true" />
-                        Comment{rowComments.length > 0 ? ` (${rowComments.length})` : ""}
-                      </Button>
-                      <Button size="xs" variant="ghost" onClick={() => void copyLineLink(row)}>
-                        <Link aria-hidden="true" />
-                        Copy link
-                      </Button>
-                    </div>
-                  ) : null}
-                  {changed && rowComments.length > 0 ? (
-                    <aside
-                      aria-label={`Review notes for ${row.side === "additions" ? "new" : "old"} line ${line}`}
-                      className="space-y-1 border-t border-border bg-muted/25 px-2 py-1.5"
-                    >
-                      {rowComments.map((comment) => (
-                        <article
-                          key={comment.id}
-                          className="rounded-md border border-border bg-background px-2 py-1.5"
-                        >
-                          <p className="whitespace-pre-wrap text-[11px] leading-4 text-foreground">
-                            {comment.body}
-                          </p>
-                          <p className="mt-0.5 text-[10px] capitalize text-muted-foreground">
-                            {comment.status ?? "open"} note
-                          </p>
-                        </article>
-                      ))}
-                    </aside>
-                  ) : null}
-                  {changed && composer?.key === row.key ? (
-                    <div className="border-t border-border bg-background p-2">
-                      <label className="text-[11px] font-medium">
-                        Comment on {row.side === "additions" ? "new" : "old"} line{" "}
-                        {lineForChangedRow(row)}
-                        <Textarea
-                          autoFocus
-                          className="mt-1 min-h-20 resize-y text-xs"
-                          onChange={(event) =>
-                            setComposer({ body: event.target.value, key: row.key })
-                          }
-                          placeholder="What should change?"
-                          value={composer.body}
-                        />
-                      </label>
-                      <div className="mt-1.5 flex gap-1">
-                        <Button
-                          disabled={composer.body.trim().length === 0}
-                          onClick={() => saveComment(row)}
-                          size="xs"
-                        >
-                          Add note
-                        </Button>
-                        <Button onClick={() => setComposer(null)} size="xs" variant="ghost">
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+        <AccessiblePatchRows
+          allRowCount={allRows.length}
+          comments={comments}
+          composer={composer}
+          filePath={file.path}
+          onComposerChange={setComposer}
+          onCopyLineLink={copyLineLink}
+          onSaveComment={saveComment}
+          rowRefs={rowRefs}
+          rows={rows}
+        />
       )}
       <output className="sr-only" aria-live="polite">
         {currentChange >= 0
@@ -426,6 +289,182 @@ export function AccessiblePatchView({
           : "No changed line selected"}
       </output>
     </main>
+  );
+}
+
+function AccessiblePatchRows({
+  allRowCount,
+  comments,
+  composer,
+  filePath,
+  onComposerChange,
+  onCopyLineLink,
+  onSaveComment,
+  rowRefs,
+  rows,
+}: {
+  allRowCount: number;
+  comments: readonly CommentExportRecord[];
+  composer: { body: string; key: string } | null;
+  filePath: string;
+  onComposerChange: (composer: { body: string; key: string } | null) => void;
+  onCopyLineLink: (row: Extract<AccessiblePatchRow, { side: string }>) => Promise<void>;
+  onSaveComment: (row: Extract<AccessiblePatchRow, { side: string }>) => void;
+  rowRefs: React.RefObject<Map<string, HTMLLIElement>>;
+  rows: readonly AccessiblePatchRow[];
+}) {
+  return (
+    <div className="min-h-0 flex-1 overflow-auto overscroll-contain">
+      {allRowCount > rows.length ? (
+        <div
+          role="status"
+          className="sticky top-0 z-10 flex gap-2 border-b border-amber-500/30 bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-950 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Showing the first {rows.length.toLocaleString()} of {allRowCount.toLocaleString()} patch
+            rows to keep assistive reading responsive. Use the rich diff for the remainder.
+          </span>
+        </div>
+      ) : null}
+      <div
+        aria-hidden="true"
+        className="grid grid-cols-[1.5rem_3.5rem_3.5rem_minmax(0,1fr)] border-b border-border bg-muted/40 px-2 py-1 font-mono text-[9px] uppercase text-muted-foreground"
+      >
+        <span>Type</span>
+        <span>Old</span>
+        <span>New</span>
+        <span>Content</span>
+      </div>
+      <ol aria-label={`Unified patch lines for ${filePath}`} className="m-0 list-none p-0">
+        {rows.map((row) => {
+          if (row.kind === "hunk") {
+            return (
+              <li
+                key={row.key}
+                className="border-y border-border bg-accent/40 px-3 py-1.5 font-mono text-[11px] text-muted-foreground"
+              >
+                <span className="sr-only">Hunk header: </span>
+                {row.content}
+              </li>
+            );
+          }
+          const changed = row.kind === "addition" || row.kind === "deletion";
+          const line = changed ? lineForChangedRow(row) : null;
+          const rowComments =
+            row.kind === "addition" || row.kind === "deletion"
+              ? comments.filter(
+                  (comment) =>
+                    comment.filePath === filePath &&
+                    (comment.scope ?? "line") === "line" &&
+                    comment.side === row.side &&
+                    comment.lineNumber === line,
+                )
+              : [];
+          return (
+            <li
+              key={row.key}
+              ref={(element) => {
+                if (element == null) rowRefs.current.delete(row.key);
+                else rowRefs.current.set(row.key, element);
+              }}
+              data-accessible-patch-row={row.key}
+              tabIndex={-1}
+              className={cn(
+                "group border-b border-border/60 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                row.kind === "addition" && "bg-diff-added/8",
+                row.kind === "deletion" && "bg-diff-deleted/8",
+              )}
+            >
+              <span className="sr-only">{announceRow(row)}</span>
+              <div
+                aria-hidden="true"
+                className="grid min-h-7 grid-cols-[1.5rem_3.5rem_3.5rem_minmax(0,1fr)] items-start px-2 font-mono text-[11px] leading-7"
+              >
+                <span
+                  className={cn(
+                    row.kind === "addition" && "text-diff-added",
+                    row.kind === "deletion" && "text-diff-deleted",
+                  )}
+                >
+                  {prefixForRow(row)}
+                </span>
+                <span className="text-muted-foreground tabular-nums">{row.oldLine ?? ""}</span>
+                <span className="text-muted-foreground tabular-nums">{row.newLine ?? ""}</span>
+                <code className="min-w-0 overflow-x-auto whitespace-pre pr-2">
+                  {row.content || " "}
+                </code>
+              </div>
+              {changed ? (
+                <div className="flex flex-wrap items-center gap-1 border-t border-border/40 px-2 py-1">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => onComposerChange({ body: "", key: row.key })}
+                  >
+                    <MessageSquarePlus aria-hidden="true" />
+                    Comment{rowComments.length > 0 ? ` (${rowComments.length})` : ""}
+                  </Button>
+                  <Button size="xs" variant="ghost" onClick={() => void onCopyLineLink(row)}>
+                    <Link aria-hidden="true" />
+                    Copy link
+                  </Button>
+                </div>
+              ) : null}
+              {changed && rowComments.length > 0 ? (
+                <aside
+                  aria-label={`Review notes for ${row.side === "additions" ? "new" : "old"} line ${line}`}
+                  className="space-y-1 border-t border-border bg-muted/25 px-2 py-1.5"
+                >
+                  {rowComments.map((comment) => (
+                    <article
+                      key={comment.id}
+                      className="rounded-md border border-border bg-background px-2 py-1.5"
+                    >
+                      <p className="whitespace-pre-wrap text-[11px] leading-4 text-foreground">
+                        {comment.body}
+                      </p>
+                      <p className="mt-0.5 text-[10px] capitalize text-muted-foreground">
+                        {comment.status ?? "open"} note
+                      </p>
+                    </article>
+                  ))}
+                </aside>
+              ) : null}
+              {changed && composer?.key === row.key ? (
+                <div className="border-t border-border bg-background p-2">
+                  <label className="text-[11px] font-medium">
+                    Comment on {row.side === "additions" ? "new" : "old"} line{" "}
+                    {lineForChangedRow(row)}
+                    <Textarea
+                      autoFocus
+                      className="mt-1 min-h-20 resize-y text-xs"
+                      onChange={(event) =>
+                        onComposerChange({ body: event.target.value, key: row.key })
+                      }
+                      placeholder="What should change?"
+                      value={composer.body}
+                    />
+                  </label>
+                  <div className="mt-1.5 flex gap-1">
+                    <Button
+                      disabled={composer.body.trim().length === 0}
+                      onClick={() => onSaveComment(row)}
+                      size="xs"
+                    >
+                      Add note
+                    </Button>
+                    <Button onClick={() => onComposerChange(null)} size="xs" variant="ghost">
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -440,6 +479,19 @@ function AccessibleUnavailable({ message, onReturn }: { message: string; onRetur
         </Button>
       </div>
     </div>
+  );
+}
+
+function findInitialChange(
+  changedRows: readonly Extract<AccessiblePatchRow, { kind: "addition" | "deletion" }>[],
+  filePath: string,
+): number {
+  const location = readDiffLocation(window.location.href);
+  return changedRows.findIndex(
+    (row) =>
+      location.file === filePath &&
+      location.side === row.side &&
+      location.line === lineForChangedRow(row),
   );
 }
 

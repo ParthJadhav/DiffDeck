@@ -58,12 +58,11 @@ export function Sidebar({
     const root = treeHostRef.current;
     if (root == null) return;
 
-    let shadowObserver: MutationObserver | null = null;
+    let disconnectShadowObserver: (() => void) | null = null;
     const patchTreeInternals = () => {
       const shadowRoot = root.querySelector("file-tree-container")?.shadowRoot;
-      if (shadowRoot != null && shadowObserver == null) {
-        shadowObserver = new MutationObserver(patchTreeInternals);
-        shadowObserver.observe(shadowRoot, { childList: true, subtree: true });
+      if (shadowRoot != null && disconnectShadowObserver == null) {
+        disconnectShadowObserver = observeMutations(shadowRoot, patchTreeInternals);
       }
 
       const input = shadowRoot?.querySelector<HTMLInputElement>("[data-file-tree-search-input]");
@@ -85,11 +84,10 @@ export function Sidebar({
     };
 
     patchTreeInternals();
-    const observer = new MutationObserver(patchTreeInternals);
-    observer.observe(root, { childList: true, subtree: true });
+    const disconnectRootObserver = observeMutations(root, patchTreeInternals);
     return () => {
-      observer.disconnect();
-      shadowObserver?.disconnect();
+      disconnectRootObserver();
+      disconnectShadowObserver?.();
     };
   }, [treeModel]);
 
@@ -236,6 +234,12 @@ export function Sidebar({
       {footer != null ? <div className="app-sidebar-footer px-3 py-2.5">{footer}</div> : null}
     </aside>
   );
+}
+
+function observeMutations(target: Node, callback: MutationCallback): () => void {
+  const observer = new MutationObserver(callback);
+  observer.observe(target, { childList: true, subtree: true });
+  return () => observer.disconnect();
 }
 
 function patchFlattenedPathLabels(root: ShadowRoot) {
