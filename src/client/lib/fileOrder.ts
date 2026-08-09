@@ -19,7 +19,6 @@ export function orderDiffFiles(
 ): DiffFileSummary[] {
   if (order === "path") return orderByTreePath(files);
 
-  const ordered: DiffFileSummary[] = [];
   const compare = (left: DiffFileSummary, right: DiffFileSummary) => {
     if (order === "size") {
       const sizeDifference = right.additions + right.deletions - (left.additions + left.deletions);
@@ -32,12 +31,11 @@ export function orderDiffFiles(
     }
     return left.path.localeCompare(right.path);
   };
-  for (const file of files) {
-    const index = ordered.findIndex((current) => compare(file, current) < 0);
-    if (index === -1) ordered.push(file);
-    else ordered.splice(index, 0, file);
-  }
-  return ordered;
+  const ordered = [...files];
+  // Oxlint recommends toSorted(), but the project's current TypeScript lib
+  // target does not include ES2023 array methods. This mutates only our copy.
+  // oxlint-disable-next-line unicorn/no-array-sort
+  return ordered.sort(compare);
 }
 
 function orderByTreePath(files: readonly DiffFileSummary[]): DiffFileSummary[] {

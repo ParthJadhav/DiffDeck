@@ -396,13 +396,11 @@ function sanitizeStringArray(value: unknown): string[] {
 }
 
 function sortedStrings(values: Iterable<string>): string[] {
-  const result: string[] = [];
-  for (const value of values) {
-    const index = result.findIndex((current) => current.localeCompare(value) > 0);
-    if (index === -1) result.push(value);
-    else result.splice(index, 0, value);
-  }
-  return result;
+  const result = Array.from(values);
+  // Oxlint recommends toSorted(), but the project's current TypeScript lib
+  // target does not include ES2023 array methods. This mutates only our copy.
+  // oxlint-disable-next-line unicorn/no-array-sort
+  return result.sort((left, right) => left.localeCompare(right));
 }
 
 function sanitizeStringRecord(value: unknown): Record<string, string> {

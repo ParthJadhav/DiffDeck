@@ -22,6 +22,7 @@ const first: ReviewSessionSnapshot = {
   repoRoot: "/repo",
   snapshotId: "snapshot-1",
 };
+const LARGE_FILE_COUNT = 23_000;
 
 describe("ReviewSession", () => {
   test("uses repository and diff arguments as the durable identity", () => {
@@ -47,6 +48,44 @@ describe("ReviewSession", () => {
       },
     ];
     expect(parseReviewSession(serializeReviewSession(state), first)).toEqual(state);
+  });
+
+  test("reconciles 23,000 persisted viewed and collapsed paths in deterministic order", () => {
+    const files = Array.from({ length: LARGE_FILE_COUNT }, (_, index) => {
+      const padded = String(index).padStart(5, "0");
+      return {
+        diffId: `diff-${padded}`,
+        path: `src/group-${padded.slice(0, 2)}/file-${padded}.ts`,
+      };
+    });
+    const snapshot: ReviewSessionSnapshot = {
+      diffArgs: ["--cached"],
+      files,
+      repoRoot: "/large-repo",
+      snapshotId: "large-before",
+    };
+    const paths = files.map((item) => item.path);
+    const changedPath = paths[Math.floor(LARGE_FILE_COUNT / 2)]!;
+    const state = createReviewSession(snapshot);
+    state.collapsedPaths = reverseCopy(paths.filter((path) => path !== changedPath));
+    state.collapsedPaths.push(paths[0]!, "removed.ts");
+    state.viewedPaths = reverseCopy(paths);
+    state.viewedPaths.push(paths[0]!, "removed.ts");
+
+    const reconciled = parseReviewSession(
+      serializeReviewSession(state),
+      {
+        ...snapshot,
+        files: files.map((item) =>
+          item.path === changedPath ? { ...item, diffId: `${item.diffId}-changed` } : item,
+        ),
+        snapshotId: "large-after",
+      },
+      [changedPath],
+    );
+
+    expect(reconciled.collapsedPaths).toEqual(paths);
+    expect(reconciled.viewedPaths).toEqual(paths.filter((path) => path !== changedPath));
   });
 
   test("migrates version 1 through 4 persistence without losing review progress", () => {
@@ -305,6 +344,12 @@ function comment(filePath: string, content = "target") {
     lineNumber: 1,
     side: "additions" as const,
   };
+}
+
+function reverseCopy<T>(values: readonly T[]): T[] {
+  const result: T[] = [];
+  for (let index = values.length - 1; index >= 0; index -= 1) result.push(values[index]!);
+  return result;
 }
 
 function fullDiff(name: string, additionLines: string[]): FileDiffMetadata {
