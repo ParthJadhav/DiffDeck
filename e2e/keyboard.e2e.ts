@@ -38,10 +38,12 @@ async function openGutterComposer(page: Page) {
   const lineNumber = file
     .locator('diffs-container [data-line-type="change-addition"][data-column-number]')
     .first();
-  const box = await lineNumber.boundingBox();
-  if (box == null) throw new Error("changed line number is not visible");
-  await page.mouse.move(box.x + 2, box.y + box.height / 2, { steps: 4 });
+  // The diff renders asynchronously; boundingBox() does not wait, so settle
+  // visibility first (slower CI runners hit this).
+  await expect(lineNumber).toBeVisible();
+  await lineNumber.hover();
   const utility = file.locator("diffs-container [data-utility-button]").first();
+  await expect(utility).toBeVisible();
   const utilityBox = await utility.boundingBox();
   if (utilityBox == null) throw new Error("gutter utility button did not appear");
   await page.mouse.click(utilityBox.x + utilityBox.width / 2, utilityBox.y + utilityBox.height / 2);
