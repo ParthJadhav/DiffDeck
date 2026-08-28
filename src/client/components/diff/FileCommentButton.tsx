@@ -2,7 +2,9 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { createPortal } from "react-dom";
 import { MessageSquarePlus, X } from "lucide-react";
 import { toast } from "sonner";
+import { focusTextEnd, isSubmitShortcut } from "../../lib/keyboard.js";
 import { Button } from "../ui/button.js";
+import { ComposerHint } from "./ComposerHint.js";
 import {
   Dialog,
   DialogContent,
@@ -62,7 +64,7 @@ export function FileCommentButton({
 
   useEffect(() => {
     if (!open) return;
-    panelRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
+    focusTextEnd(panelRef.current?.querySelector<HTMLTextAreaElement>("textarea") ?? null);
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (
@@ -146,10 +148,17 @@ export function FileCommentButton({
                   aria-label={`File-level note for ${path}`}
                   className="mt-3 min-h-24 resize-y"
                   onChange={(event) => onDraftChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (isSubmitShortcut(event.nativeEvent)) {
+                      event.preventDefault();
+                      submit();
+                    }
+                  }}
                   placeholder="What should change in this file?"
                   value={draft}
                 />
-                <DialogFooter className="mt-3 flex-row justify-end">
+                <DialogFooter className="mt-3 flex-row items-center justify-end gap-2">
+                  <ComposerHint action="add" />
                   <Button
                     onClick={() => {
                       setOpen(false);

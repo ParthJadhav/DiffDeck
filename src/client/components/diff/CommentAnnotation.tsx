@@ -1,9 +1,11 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { focusTextEnd, isSubmitShortcut } from "../../lib/keyboard.js";
 import { Badge } from "../ui/badge.js";
 import { Button } from "../ui/button.js";
 import { Card, CardContent, CardFooter, CardHeader } from "../ui/card.js";
 import { Textarea } from "../ui/textarea.js";
 import type { CommentAnnotation } from "./commentAnnotationModel.js";
+import { ComposerHint } from "./ComposerHint.js";
 
 export const CommentAnnotationView = memo(function CommentAnnotationView({
   annotation,
@@ -21,10 +23,12 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   onSubmit: (id: string, body: string) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const { body, id, kind, previousBody } = annotation.metadata;
   const isEditing = previousBody !== undefined;
   const [draftBody, setDraftBody] = useState(body);
   const draftBodyRef = useRef(body);
+  const previousKindRef = useRef(kind);
 
   useEffect(() => {
     setDraftBody(body);
@@ -47,19 +51,21 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   }, [body, id, kind, onBodyChange]);
 
   useEffect(() => {
-    if (kind !== "comment-form") return;
-    const el = textareaRef.current;
-    if (el == null) return;
-    el.focus();
-    if (isEditing) {
-      const end = el.value.length;
-      el.setSelectionRange(end, end);
+    const previousKind = previousKindRef.current;
+    previousKindRef.current = kind;
+    if (kind === "comment-form") {
+      focusTextEnd(textareaRef.current);
+      return;
     }
+    // Saving or cancelling an edit hands the keyboard back to the shortcut
+    // layer. Keep focus on the note so the reviewer's place stays visible
+    // instead of dropping to <body>.
+    if (previousKind === "comment-form") cardRef.current?.focus({ preventScroll: true });
   }, [kind, isEditing]);
 
   if (kind === "comment") {
     return (
-      <CommentCard id={id} variant="saved">
+      <CommentCard id={id} ref={cardRef} variant="saved">
         <CardHeader className="-mt-0.5 flex h-6 flex-row items-center gap-2 gap-y-0 p-0 text-xs leading-none">
           <span className="font-semibold text-foreground">You</span>
           <span className="text-muted-foreground">now</span>
@@ -94,7 +100,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
   }
 
   return (
-    <CommentCard id={id} variant="form">
+    <CommentCard id={id} ref={cardRef} variant="form">
       <CardHeader className="mb-2 flex flex-row items-center gap-2 gap-y-0 p-0 text-xs">
         <span className="font-semibold text-foreground">
           {isEditing ? "Edit comment" : "New comment"}
@@ -110,6 +116,18 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
         ref={textareaRef}
         value={draftBody}
         onChange={(event) => handleDraftChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (isSubmitShortcut(event.nativeEvent)) {
+            event.preventDefault();
+            onSubmit(id, draftBodyRef.current);
+          } else if (event.key === "Escape") {
+            // Leave the composer without discarding the draft: focus moves to
+            // the card, so shortcuts work again and the text stays in view.
+            event.preventDefault();
+            flushDraftBody();
+            cardRef.current?.focus({ preventScroll: true });
+          }
+        }}
         onBlur={(event) => {
           const nextFocus = event.relatedTarget;
           if (nextFocus instanceof Node && event.currentTarget.parentElement?.contains(nextFocus)) {
@@ -121,13 +139,14 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
         placeholder="Leave a comment"
         className="app-comment-textarea resize-y font-sans"
       />
-      <CardFooter className="mt-3 gap-2 p-0">
+      <CardFooter className="mt-3 items-center gap-2 p-0">
         <Button size="sm" className="font-sans" onClick={() => onSubmit(id, draftBody)}>
           {isEditing ? "Save" : "Comment"}
         </Button>
         <Button size="sm" variant="ghost" className="font-sans" onClick={() => onCancel(id)}>
           Cancel
         </Button>
+        <ComposerHint action={isEditing ? "save" : "comment"} />
       </CardFooter>
     </CommentCard>
   );
@@ -136,14 +155,17 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
 function CommentCard({
   children,
   id,
+  ref,
   variant,
 }: {
   children: ReactNode;
   id: string;
+  ref: React.Ref<HTMLDivElement>;
   variant: "saved" | "form";
 }) {
   return (
     <Card
+      ref={ref}
       data-comment-id={id}
       data-variant={variant}
       tabIndex={-1}

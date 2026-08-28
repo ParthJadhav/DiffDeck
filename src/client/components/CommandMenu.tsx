@@ -3,6 +3,7 @@ import { Command } from "cmdk";
 import { toast } from "sonner";
 import { readDiffLocation } from "../lib/deepLink.js";
 import { openInEditor } from "../lib/editor.js";
+import { shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
 import type { HunkNavigation, HunkTarget } from "../lib/hunkNavigation.js";
 import type { ReviewNavigation } from "../lib/reviewNavigation.js";
 import type { ReviewMode, ReviewSurface } from "../lib/reviewSession.js";
@@ -81,6 +82,7 @@ export function CommandMenu({
     const commandPalette = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
     if (commandPalette || event.key === "?") {
       event.preventDefault();
+      if (event.repeat) return;
       restoreFocusRef.current = document.activeElement as HTMLElement | null;
       setQuery("");
       setOpen(true);
@@ -88,6 +90,10 @@ export function CommandMenu({
     }
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
+    // Holding a key may step through files and hunks, but must never flip a
+    // toggle back and forth or open the same panel repeatedly.
+    const steps = key === "j" || key === "k" || key === "n" || key === "p";
+    if (event.repeat && !steps) return;
     if (event.key === "/") {
       event.preventDefault();
       const filterInput = document.getElementById("diffdeck-review-filter");
@@ -317,15 +323,4 @@ function MenuItem({
       ) : null}
     </Command.Item>
   );
-}
-
-function shouldIgnoreShortcutEvent(event: Event): boolean {
-  return event.composedPath().some((target) => {
-    if (!(target instanceof HTMLElement)) return false;
-    return (
-      target.isContentEditable ||
-      target.matches("input, textarea, select, [role='textbox']") ||
-      target.closest("[data-diffdeck-shortcuts-disabled]") != null
-    );
-  });
 }

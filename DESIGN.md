@@ -107,6 +107,24 @@ annotation composer (80), and modal confirmation (top layer).
 - **Review notes:** open, stale, and resolved are textually named. Stale notes can be edited/reopened;
   resolved notes retain context. Jump focuses the source annotation.
 
+## Keyboard ownership
+
+One policy, implemented once in `src/client/lib/keyboard.ts` and used by every key handler:
+
+1. **Text entry wins.** Focus in an input, textarea, select, or contenteditable — including inside
+   open shadow roots — means every key is typing. No single-key shortcut fires, and nothing may
+   move focus out of a text field programmatically (deep-link landing, re-renders, refreshes).
+2. **Overlays own the keyboard.** A modal dialog, or focus inside a popover, menu, or the command
+   palette, silences single-key shortcuts until it closes. `Esc` is the universal exit.
+3. **Otherwise shortcuts run.** Single letters step and toggle; `Cmd/Ctrl+K` and `?` open the
+   palette. Auto-repeat only steps (`j`/`k`/`n`/`p`), never toggles. IME composition keystrokes are
+   never shortcuts.
+
+Every composer shows how to hand the keyboard back — `Cmd/Ctrl+Enter` to finish, `Esc` to leave
+with the draft intact — and focus lands on the note afterwards, not on `<body>`. Editing places the
+caret at the end of existing text. Check a new key handler against `e2e/keyboard.e2e.ts`, which
+types character by character into every text surface and asserts nothing else moved.
+
 ## State language
 
 | Situation | Message pattern | Recovery |

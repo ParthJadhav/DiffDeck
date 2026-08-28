@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { SelectedLineRange } from "@pierre/diffs";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import type { DiffFileSummary } from "../../types.js";
+import { isTextEntryEvent } from "../../lib/keyboard.js";
 import { chooseVisiblePath } from "../../lib/visiblePath.js";
 import { Card } from "../ui/card.js";
 
@@ -177,13 +178,7 @@ export function MultiFileScroller(props: {
 }
 
 function isScrollIntentKey(event: KeyboardEvent) {
-  if (
-    event.target instanceof HTMLInputElement ||
-    event.target instanceof HTMLTextAreaElement ||
-    event.target instanceof HTMLSelectElement
-  ) {
-    return false;
-  }
+  if (isTextEntryEvent(event)) return false;
   return [
     "ArrowDown",
     "ArrowLeft",

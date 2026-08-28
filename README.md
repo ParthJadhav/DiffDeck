@@ -132,8 +132,15 @@ Review become two explicit places instead of squeezing the patch.
 | `s` | Open diff settings |
 | `o` | Open the selected file in the configured editor |
 | `?` or `Cmd/Ctrl+K` | Open the command palette and shortcut reference |
+| `Cmd/Ctrl+Enter` | Submit the comment, note, or edit you are typing |
+| `Esc` | Leave a comment box with the draft intact, or close the open panel |
 
-Shortcuts are suppressed while typing in an input, selection, or comment field.
+Typing always wins. While focus is in any text field — a comment box, the path filter, the file
+search, the command palette, or a native select — every key is text and no single-key shortcut
+fires. Open dialogs, popovers, and menus own the keyboard until they close (`Esc`). Holding a key
+steps through files and hunks but never flips a toggle back and forth, and IME composition
+keystrokes are never shortcuts. Each comment box shows how to hand the keyboard back:
+`Cmd/Ctrl+Enter` to finish, `Esc` to leave.
 
 ## Security and repository writes
 

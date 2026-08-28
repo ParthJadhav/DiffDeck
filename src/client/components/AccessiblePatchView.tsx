@@ -16,7 +16,9 @@ import { buildDiffDeepLink, hasCapabilityToken, readDiffLocation } from "../lib/
 import { cn } from "../lib/cn.js";
 import type { ReviewAnnotation } from "../lib/reviewSession.js";
 import type { DiffFileSummary } from "../types.js";
+import { isSubmitShortcut, shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
 import { createCommentAnnotation } from "./diff/commentAnnotationModel.js";
+import { ComposerHint } from "./diff/ComposerHint.js";
 import { Button } from "./ui/button.js";
 import { Textarea } from "./ui/textarea.js";
 
@@ -129,8 +131,7 @@ function AccessiblePatchViewContent({
 
   useEffect(() => {
     const navigateByKeyboard = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
+      if (shouldIgnoreShortcutEvent(event)) return;
       if (event.key === "]" && nextIndex !== -1 && nextIndex !== currentChange) {
         event.preventDefault();
         focusChangeFromKeyboard(nextIndex);
@@ -442,11 +443,21 @@ function AccessiblePatchRows({
                       onChange={(event) =>
                         onComposerChange({ body: event.target.value, key: row.key })
                       }
+                      onKeyDown={(event) => {
+                        if (isSubmitShortcut(event.nativeEvent)) {
+                          event.preventDefault();
+                          if (composer.body.trim().length > 0) onSaveComment(row);
+                        } else if (event.key === "Escape") {
+                          event.preventDefault();
+                          onComposerChange(null);
+                          rowRefs.current.get(row.key)?.focus({ preventScroll: true });
+                        }
+                      }}
                       placeholder="What should change?"
                       value={composer.body}
                     />
                   </label>
-                  <div className="mt-1.5 flex gap-1">
+                  <div className="mt-1.5 flex items-center gap-1">
                     <Button
                       disabled={composer.body.trim().length === 0}
                       onClick={() => onSaveComment(row)}
@@ -457,6 +468,7 @@ function AccessiblePatchRows({
                     <Button onClick={() => onComposerChange(null)} size="xs" variant="ghost">
                       Cancel
                     </Button>
+                    <ComposerHint action="add" />
                   </div>
                 </div>
               ) : null}

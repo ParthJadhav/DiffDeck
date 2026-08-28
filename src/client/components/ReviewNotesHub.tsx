@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import type { CommentExportRecord } from "../lib/commentExport.js";
 import { cn } from "../lib/cn.js";
+import { focusTextEnd, isSubmitShortcut } from "../lib/keyboard.js";
+import { ComposerHint } from "./diff/ComposerHint.js";
 import { Button } from "./ui/button.js";
 import { Textarea } from "./ui/textarea.js";
 
@@ -39,6 +41,25 @@ export function ReviewNotesHub({
         : comments.filter((comment) => (comment.status ?? "open") === filter),
     [comments, filter],
   );
+
+  // Leaving the editor returns focus to the note card, so the reviewer's place
+  // in the queue survives and global shortcuts are live again.
+  const focusNote = (id: string) => {
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`[data-note-id="${CSS.escape(id)}"]`)
+        ?.focus({ preventScroll: true });
+    });
+  };
+  const saveEdit = (comment: CommentExportRecord, body: string) => {
+    onUpdate({ ...comment, body: body.trim() });
+    setEditing(null);
+    focusNote(comment.id);
+  };
+  const cancelEdit = (id: string) => {
+    setEditing(null);
+    focusNote(id);
+  };
 
   if (comments.length === 0) return null;
 
@@ -84,7 +105,9 @@ export function ReviewNotesHub({
               return (
                 <article
                   key={comment.id}
-                  className="rounded-md border border-border bg-background p-2"
+                  data-note-id={comment.id}
+                  tabIndex={-1}
+                  className="rounded-md border border-border bg-background p-2 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span
@@ -111,27 +134,34 @@ export function ReviewNotesHub({
                     <div className="mt-2">
                       <Textarea
                         aria-label={`Edit note for ${comment.filePath}`}
-                        autoFocus
+                        ref={focusTextEnd}
                         className="min-h-20 resize-y text-xs"
                         value={editing.body}
                         onChange={(event) =>
                           setEditing({ body: event.target.value, id: comment.id })
                         }
+                        onKeyDown={(event) => {
+                          if (isSubmitShortcut(event.nativeEvent)) {
+                            event.preventDefault();
+                            if (editing.body.trim().length > 0) saveEdit(comment, editing.body);
+                          } else if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelEdit(comment.id);
+                          }
+                        }}
                       />
-                      <div className="mt-1.5 flex gap-1">
+                      <div className="mt-1.5 flex items-center gap-1">
                         <Button
                           size="xs"
                           disabled={editing.body.trim().length === 0}
-                          onClick={() => {
-                            onUpdate({ ...comment, body: editing.body.trim() });
-                            setEditing(null);
-                          }}
+                          onClick={() => saveEdit(comment, editing.body)}
                         >
                           Save
                         </Button>
-                        <Button size="xs" variant="ghost" onClick={() => setEditing(null)}>
+                        <Button size="xs" variant="ghost" onClick={() => cancelEdit(comment.id)}>
                           Cancel
                         </Button>
+                        <ComposerHint action="save" />
                       </div>
                     </div>
                   ) : (

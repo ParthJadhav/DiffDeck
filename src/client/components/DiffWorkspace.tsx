@@ -596,7 +596,7 @@ function useFileDiffSectionModel({
         side: location.side,
       } satisfies NavigateLineDetail;
       window.requestAnimationFrame(() => {
-        scrollToRenderedDiffLine(detail);
+        scrollToRenderedDiffLine(detail, { source: "render" });
       });
     },
     [filePath],
@@ -661,6 +661,13 @@ function useFileDiffSectionModel({
       });
       onSelectedLinesChange(filePath, null);
       diffOptions?.onLineSelected?.(null);
+      // Discarding a new composer unmounts the focused textarea; keep focus in
+      // the workspace instead of dropping it on <body>.
+      window.requestAnimationFrame(() => {
+        if (document.activeElement === document.body) {
+          document.getElementById("main")?.focus({ preventScroll: true });
+        }
+      });
     },
     [diffOptions, filePath, onAnnotationsChange, onSelectedLinesChange],
   );
