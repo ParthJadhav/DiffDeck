@@ -179,3 +179,7 @@ See [GitHub Releases](https://github.com/ParthJadhav/DiffDeck/releases) for the 
 ## License
 
 MIT
+
+## Author
+
+Created by [Parth Jadhav](https://www.parthjadhav.com/).
