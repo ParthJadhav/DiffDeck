@@ -151,6 +151,7 @@ test("200% zoom, reduced motion, and forced colors retain the primary path", asy
 
   await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Files", exact: true }).click();
+  await page.getByRole("button", { name: "Diff settings" }).click();
   const reset = page.getByRole("button", { name: "Reset review state" });
   await reset.focus();
   await page.keyboard.press("Shift+Tab");
@@ -240,14 +241,15 @@ test("destructive confirmations are modal, scoped, cancellable, and restore focu
   page,
 }) => {
   void diagnostics;
-  const reset = page.getByRole("button", { name: "Reset review state" });
-  await reset.click();
+  const settings = page.getByRole("button", { name: "Diff settings", exact: true });
+  await settings.click();
+  await page.getByRole("button", { name: "Reset review state" }).click();
   const resetDialog = page.getByRole("dialog", { name: "Reset all review progress?" });
   await expect(resetDialog).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(resetDialog).toBeHidden();
-  await expect(reset).toBeFocused();
+  await expect(settings).toBeFocused();
 
   const selectedFile = page.locator('[data-file-path][aria-current="location"]').first();
   const fileActions = selectedFile.getByRole("button", { name: /^More actions for / });
@@ -357,7 +359,7 @@ test("file utilities and the notes hub preserve an exact review handoff", async 
     .getByRole("textbox", { name: "File-level note for src/app.ts" })
     .fill("Review API shape");
   await page.getByRole("button", { name: "Add note" }).click();
-  await page.getByText("Review notes", { exact: true }).click();
+  await page.getByRole("tab", { name: /^Notes/ }).click();
   await expect(page.getByText("Review API shape", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit note in src/app.ts" }).click();
   const editor = page.getByRole("textbox", { name: "Edit note for src/app.ts" });
@@ -402,7 +404,9 @@ test("focus, file view, ordering, and whitespace preferences persist honestly", 
 
   await page.getByRole("button", { name: "Show all visible files" }).click();
   await page.getByRole("button", { name: "Flat file view" }).click();
+  await page.getByRole("button", { name: /^Filter review, showing/ }).click();
   await page.getByRole("combobox", { name: "Review file order" }).selectOption("status");
+  await page.getByRole("button", { name: "Close review filters" }).click();
   await page.getByRole("button", { name: "Diff settings" }).click();
   const preferenceUpdated = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/preferences" && response.ok(),
@@ -419,7 +423,9 @@ test("focus, file view, ordering, and whitespace preferences persist honestly", 
     "aria-pressed",
     "true",
   );
+  await page.getByRole("button", { name: /^Filter review, showing/ }).click();
   await expect(page.getByRole("combobox", { name: "Review file order" })).toHaveValue("status");
+  await page.getByRole("button", { name: "Close review filters" }).click();
   await page.getByRole("button", { name: "Diff settings" }).click();
   await expect(page.getByRole("combobox", { name: "Whitespace comparison mode" })).toHaveValue(
     "ignore-eol",

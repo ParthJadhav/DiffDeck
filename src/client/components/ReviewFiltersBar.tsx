@@ -8,7 +8,8 @@ import {
   useState,
 } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
-import type { ReviewFilters } from "../lib/reviewSession.js";
+import { anchoredPanelPlacement, type PanelSide } from "../lib/anchoredPanel.js";
+import type { FileOrder, ReviewFilters } from "../lib/reviewSession.js";
 import { cn } from "../lib/cn.js";
 import { Button } from "./ui/button.js";
 import { Checkbox } from "./ui/checkbox.js";
@@ -36,13 +37,17 @@ const emptyFilters: ReviewFilters = {
 };
 
 export function ReviewFiltersBar({
+  fileOrder,
   filters,
   onChange,
+  onFileOrderChange,
   resultCount,
   totalCount,
 }: {
+  fileOrder: FileOrder;
   filters: ReviewFilters;
   onChange: (filters: ReviewFilters) => void;
+  onFileOrderChange: (order: FileOrder) => void;
   resultCount: number;
   totalCount: number;
 }) {
@@ -50,6 +55,7 @@ export function ReviewFiltersBar({
   const [open, setOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
+  const [panelSide, setPanelSide] = useState<PanelSide>("below");
   const panelId = useId();
   const titleId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -63,18 +69,9 @@ export function ReviewFiltersBar({
   const updatePanelPosition = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect == null) return;
-
-    const margin = 12;
-    const width = Math.min(336, window.innerWidth - margin * 2);
-    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
-
-    setPanelStyle({
-      bottom: margin,
-      left,
-      maxHeight: Math.max(280, window.innerHeight - margin * 2),
-      position: "fixed",
-      width,
-    });
+    const placement = anchoredPanelPlacement(rect, 336, 280);
+    setPanelSide(placement.side);
+    setPanelStyle(placement.style);
   }, []);
 
   useLayoutEffect(() => {
@@ -130,12 +127,13 @@ export function ReviewFiltersBar({
   }, [open, panelMounted]);
 
   return (
-    <div ref={containerRef} className="app-review-filter-container min-w-0 flex-1">
+    <div ref={containerRef} className="flex shrink-0">
       {panelMounted ? (
         <Dialog
           open
           ref={panelRef}
           aria-labelledby={titleId}
+          data-side={panelSide}
           data-state={open ? "open" : "closed"}
           id={panelId}
           style={{ ...panelStyle, overscrollBehavior: "contain" }}
@@ -162,6 +160,19 @@ export function ReviewFiltersBar({
             </DialogHeader>
 
             <div className="space-y-3">
+              <FilterField label="Review order">
+                <select
+                  aria-label="Review file order"
+                  value={fileOrder}
+                  onChange={(event) => onFileOrderChange(event.target.value as FileOrder)}
+                  className="app-filter-input h-9 w-full rounded-lg border border-input bg-background px-2 text-[11.5px] outline-none focus:border-ring focus:ring-2 focus:ring-ring/20"
+                >
+                  <option value="path">By path — follows the folder tree</option>
+                  <option value="status">By status — conflicts, then modified, added…</option>
+                  <option value="size">By change size — largest first</option>
+                </select>
+              </FilterField>
+
               <FilterField label="Path contains">
                 <div className="relative">
                   <Search
@@ -339,26 +350,24 @@ function FilterTrigger({
     <Button
       ref={ref}
       type="button"
-      variant="outline"
+      variant="ghost"
+      size="icon"
       aria-label={`Filter review, showing ${resultCount} of ${totalCount} files${activeCount > 0 ? `, ${activeCount} active` : ""}`}
       aria-expanded={open}
       aria-controls={panelId}
       aria-haspopup="dialog"
+      title="Filter and order the review"
       onClick={onClick}
       className={cn(
-        "app-review-filter-trigger h-8 w-full min-w-0 justify-start gap-2 rounded-md px-2.5 text-[12px]",
-        open && "border-ring/60 bg-accent text-foreground",
+        "relative size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
+        (open || activeCount > 0) && "bg-accent text-foreground",
       )}
     >
-      <SlidersHorizontal className="size-3.5 shrink-0 text-muted-foreground" />
-      <span className="app-review-filter-label truncate">Filter</span>
-      <span className="app-review-filter-count ml-auto shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
-        {resultCount}/{totalCount}
-      </span>
+      <SlidersHorizontal aria-hidden="true" />
       {activeCount > 0 ? (
         <span
           aria-hidden="true"
-          className="grid size-4 shrink-0 place-items-center rounded-full bg-info text-[9px] font-semibold text-background"
+          className="absolute -right-0.5 -top-0.5 grid size-3.5 place-items-center rounded-full bg-info text-[8.5px] font-semibold leading-none text-background"
         >
           {activeCount}
         </span>
@@ -400,7 +409,7 @@ function FilterCheck({
   );
 }
 
-function countActiveFilters(filters: ReviewFilters): number {
+export function countActiveFilters(filters: ReviewFilters): number {
   return [
     filters.binary,
     filters.conflicts,

@@ -330,6 +330,11 @@ kbd {
   .app-review-progress > span {
     background: Highlight;
   }
+
+  .app-file-row[data-selected] .app-file-row-main {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 @keyframes shell-pulse {
@@ -355,52 +360,366 @@ kbd {
   }
 }
 
-.app-file-tree {
-  --trees-bg-override: oklch(var(--app-sidebar));
-  --trees-bg-muted-override: oklch(var(--app-sidebar-control));
-  --trees-border-color-override: oklch(var(--border) / 0.64);
-  --trees-fg-override: oklch(var(--foreground));
-  --trees-fg-muted-override: oklch(var(--muted-foreground));
-  --trees-selected-bg-override: oklch(var(--app-sidebar-selected));
-  --trees-selected-fg-override: oklch(var(--foreground));
-  --trees-selected-focused-border-color-override: oklch(var(--info-border));
-  --trees-search-bg-override: oklch(var(--app-sidebar-control));
-  --trees-search-fg-override: oklch(var(--foreground));
-  --trees-scrollbar-thumb-override: oklch(var(--border));
-  --trees-focus-ring-color-override: oklch(var(--ring));
-  --trees-border-radius-override: 0.375rem;
-  --trees-padding-inline-override: 0.75rem;
-  --trees-item-margin-x-override: 0.125rem;
-  --trees-item-padding-x-override: 0.5rem;
-  --trees-status-added-override: oklch(var(--diff-added));
-  --trees-status-deleted-override: oklch(var(--diff-deleted));
-  --trees-status-modified-override: oklch(var(--diff-modified));
-  --trees-status-renamed-override: oklch(var(--diff-renamed));
-  --trees-git-added-color-override: oklch(var(--diff-added));
-  --trees-git-deleted-color-override: oklch(var(--diff-deleted));
-  --trees-git-modified-color-override: oklch(var(--diff-modified));
-  --trees-git-renamed-color-override: oklch(var(--diff-renamed));
-  --trees-git-untracked-color-override: oklch(var(--diff-added));
-  font-size: 0.8125rem;
-}
-
 .app-sidebar {
   background: oklch(var(--app-sidebar));
 }
 
 .app-sidebar-header {
   container-type: inline-size;
-  box-shadow: inset 0 -1px 0 oklch(var(--border) / 0.62);
+}
+
+/* Headings balance-wrap globally; the repo name must truncate on one line. */
+.app-sidebar-repo {
+  text-wrap: nowrap;
+}
+
+@container (max-width: 12.5rem) {
+  .app-sidebar-totals {
+    display: none;
+  }
+}
+
+/* Underline tabs: quiet, and the selected section reads at a glance. */
+.app-sidebar-tabs {
+  box-shadow: inset 0 -1px 0 oklch(var(--border) / 0.7);
+}
+
+.app-sidebar-tab {
+  position: relative;
+  color: oklch(var(--muted-foreground));
+  transition: color 120ms ease;
+}
+
+.app-sidebar-tab:hover {
+  color: oklch(var(--foreground));
+}
+
+.app-sidebar-tab[aria-selected="true"] {
+  color: oklch(var(--foreground));
+}
+
+.app-sidebar-tab::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: oklch(var(--foreground));
+  opacity: 0;
+  transform: scaleX(0.6);
+  transition:
+    opacity 140ms cubic-bezier(0.2, 0, 0, 1),
+    transform 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-sidebar-tab[aria-selected="true"]::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.app-sidebar-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px oklch(var(--ring));
+  border-radius: 4px;
+}
+
+.app-tab-count {
+  min-width: 1.125rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 999px;
+  background: oklch(var(--app-sidebar-control));
+  box-shadow: inset 0 0 0 1px oklch(var(--border) / 0.7);
+  color: oklch(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.app-sidebar-tab[aria-selected="true"] .app-tab-count {
+  color: oklch(var(--foreground));
+}
+
+.app-segmented {
+  background: oklch(var(--app-sidebar-control));
+  box-shadow: inset 0 0 0 1px oklch(var(--border) / 0.62);
+}
+
+.app-segmented-item {
+  color: oklch(var(--muted-foreground));
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.app-segmented-item:hover:not(:disabled) {
+  color: oklch(var(--foreground));
+}
+
+.app-segmented-item[aria-pressed="true"] {
+  background: oklch(var(--app-surface-raised));
+  color: oklch(var(--foreground));
+  box-shadow:
+    0 1px 2px oklch(var(--foreground) / 0.08),
+    inset 0 0 0 1px oklch(var(--border) / 0.62);
+}
+
+.app-segmented-item:disabled {
+  opacity: 0.45;
+}
+
+.app-segmented-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px oklch(var(--ring));
+}
+
+.app-file-search {
+  background: oklch(var(--app-sidebar-control));
+  box-shadow: inset 0 0 0 1px oklch(var(--border) / 0.62);
+  transition: box-shadow 120ms ease;
+}
+
+.app-file-search:focus-within {
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--ring) / 0.7),
+    0 0 0 3px oklch(var(--ring) / 0.12);
+}
+
+.app-file-search-hint {
+  min-width: 1rem;
+  height: 1rem;
+  font-size: 10px;
+}
+
+.app-file-search:focus-within .app-file-search-hint {
+  visibility: hidden;
+}
+
+.app-filter-notice {
+  background: oklch(var(--info-muted));
+  box-shadow: inset 0 0 0 1px oklch(var(--info-border) / 0.7);
+  color: oklch(var(--info-foreground));
+}
+
+/* File rows: one 28px line each. Status letter, name, optional folder (flat
+   mode), note count, line stat, then the viewed toggle at the far edge. */
+.app-file-list {
+  container-type: inline-size;
+}
+
+.app-file-row {
+  position: relative;
+  display: flex;
+  height: 28px;
+  align-items: center;
+  padding-inline: 0.375rem;
+}
+
+.app-file-row-main {
+  display: flex;
+  min-width: 0;
+  height: 26px;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.375rem;
+  padding-left: calc(0.375rem + var(--row-depth, 0) * 0.75rem);
+  padding-right: 1.75rem;
+  border-radius: 0.375rem;
+  color: oklch(var(--foreground));
+  font-size: 12.5px;
+  text-align: left;
+  transition:
+    background-color 100ms ease,
+    color 100ms ease;
+}
+
+.app-file-row-main:hover {
+  background: oklch(var(--accent));
+}
+
+.app-file-row-main:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px oklch(var(--ring));
+}
+
+.app-file-row[data-selected] .app-file-row-main {
+  background: oklch(var(--app-sidebar-selected));
+  box-shadow: inset 2px 0 0 oklch(var(--info));
+}
+
+.app-file-row[data-selected] .app-file-row-main:focus-visible {
+  box-shadow:
+    inset 2px 0 0 oklch(var(--info)),
+    inset 0 0 0 2px oklch(var(--ring));
+}
+
+.app-directory-row {
+  padding-right: 0.5rem;
+  color: oklch(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.app-directory-row:hover {
+  color: oklch(var(--foreground));
+}
+
+.app-file-status {
+  width: 0.75rem;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.app-file-name {
+  flex: 0 1 auto;
+}
+
+.app-file-dir {
+  color: oklch(var(--muted-foreground));
+  font-size: 11px;
+  direction: rtl;
+  text-align: left;
+  unicode-bidi: plaintext;
+}
+
+.app-file-row[data-viewed] .app-file-name {
+  color: oklch(var(--muted-foreground));
+}
+
+.app-file-match {
+  border-radius: 2px;
+  background: oklch(var(--warning) / 0.28);
+  color: inherit;
+}
+
+.app-file-notes {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.1875rem;
+  color: oklch(var(--info-foreground));
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-file-stat {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-file-row[data-viewed] .app-file-stat {
+  opacity: 0.6;
+}
+
+@container (max-width: 14rem) {
+  .app-file-stat,
+  .app-file-dir {
+    display: none;
+  }
+}
+
+@container (max-width: 11rem) {
+  .app-file-notes {
+    display: none;
+  }
+}
+
+/* Viewed toggle: a quiet ring that reads as a checklist, filled when done. */
+.app-file-viewed {
+  position: absolute;
+  right: 0.8125rem;
+  top: 50%;
+  display: grid;
+  width: 0.875rem;
+  height: 0.875rem;
+  place-items: center;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.5px oklch(var(--muted-foreground) / 0.38);
+  color: oklch(var(--background));
+  transform: translateY(-50%);
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease,
+    scale 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-file-viewed::before {
+  content: "";
+  position: absolute;
+  inset: -0.4375rem;
+}
+
+.app-file-viewed svg {
+  width: 0.5625rem;
+  height: 0.5625rem;
+}
+
+.app-file-viewed:hover {
+  box-shadow: inset 0 0 0 1.5px oklch(var(--foreground) / 0.7);
+}
+
+.app-file-viewed:active {
+  scale: 0.88;
+}
+
+.app-file-viewed[aria-pressed="true"] {
+  background: oklch(var(--diff-added));
+  box-shadow: none;
+}
+
+.app-file-viewed:focus-visible {
+  outline: 2px solid oklch(var(--ring));
+  outline-offset: 2px;
+}
+
+.app-note-actions {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.app-note-card:hover .app-note-actions,
+.app-note-card:focus-within .app-note-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .app-note-actions {
+    opacity: 1;
+  }
+}
+
+.app-note-card[data-status="stale"] {
+  border-color: oklch(var(--warning-border) / 0.8);
+}
+
+.app-notes-footer {
+  box-shadow: inset 0 1px 0 oklch(var(--border) / 0.7);
+}
+
+.app-handoff-hint {
+  opacity: 0.6;
+}
+
+@container (max-width: 14rem) {
+  .app-handoff-hint {
+    display: none;
+  }
 }
 
 .app-sidebar-footer {
   background: oklch(var(--app-sidebar));
   box-shadow: inset 0 1px 0 oklch(var(--border) / 0.7);
   container-type: inline-size;
-}
-
-.app-sidebar-tool-row {
-  min-width: 0;
 }
 
 .app-review-navigator {
@@ -425,11 +744,6 @@ kbd {
   }
 }
 
-.app-review-filter-trigger,
-.app-sidebar-tool-button {
-  box-shadow: 0 1px 1px oklch(var(--foreground) / 0.025);
-}
-
 .app-menu-popover {
   box-shadow: var(--app-shadow-popover);
   animation: app-menu-in 120ms cubic-bezier(0.2, 0, 0, 1);
@@ -446,6 +760,11 @@ kbd {
   .app-menu-popover {
     animation: none;
   }
+}
+
+.app-filter-popover[data-side="below"],
+.app-settings-popover[data-side="below"] {
+  transform-origin: top left;
 }
 
 .app-filter-popover {
@@ -471,6 +790,11 @@ kbd {
   transition-duration: 100ms;
 }
 
+.app-filter-popover[data-side="below"]:not([data-state="open"]),
+.app-settings-popover[data-side="below"]:not([data-state="open"]) {
+  transform: translateY(-0.25rem) scale(0.99);
+}
+
 .app-filter-label {
   color: oklch(var(--muted-foreground));
   font-size: 0.625rem;
@@ -487,33 +811,6 @@ kbd {
     background-color 120ms ease;
 }
 
-@container (max-width: 15rem) {
-  .app-review-filter-count {
-    display: none;
-  }
-}
-
-@container (max-width: 12rem) {
-  .app-review-filter-label {
-    display: none;
-  }
-
-  .app-review-filter-container {
-    flex: 0 0 auto;
-    width: 2rem;
-  }
-
-  .app-review-filter-trigger {
-    width: 2rem;
-    padding-inline: 0;
-  }
-}
-
-.app-sidebar-review-status {
-  background: oklch(var(--app-sidebar));
-  box-shadow: inset 0 1px 0 oklch(var(--border) / 0.62);
-}
-
 .app-review-progress {
   background: oklch(var(--app-sidebar-control));
   box-shadow: inset 0 0 0 1px oklch(var(--border) / 0.58);
@@ -521,18 +818,13 @@ kbd {
 
 .app-review-progress > span {
   background: oklch(var(--info));
-  transition: width 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    width 240ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 240ms ease;
 }
 
-.app-sidebar-refresh-button {
-  width: 1.75rem;
-  height: 1.75rem;
-}
-
-@container (max-width: 16rem) {
-  .app-file-count-label {
-    display: none;
-  }
+.app-review-progress[data-complete] > span {
+  background: oklch(var(--diff-added));
 }
 
 .app-copy-status {
@@ -562,37 +854,10 @@ kbd {
   animation: app-comment-actions-in 220ms cubic-bezier(0.2, 0, 0, 1) both;
 }
 
-.app-comment-action-badge {
-  background: oklch(var(--background) / 0.18);
-  color: oklch(var(--background));
-  box-shadow: inset 0 0 0 1px oklch(var(--background) / 0.14);
-}
-
 @keyframes app-comment-actions-in {
   from {
     opacity: 0;
     transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.app-copy-comment-actions > :nth-child(1) {
-  animation: app-comment-action-row-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
-  animation-delay: 0ms;
-}
-
-.app-copy-comment-actions > :nth-child(2) {
-  animation: app-comment-action-row-in 240ms cubic-bezier(0.2, 0, 0, 1) both;
-  animation-delay: 80ms;
-}
-
-@keyframes app-comment-action-row-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
   }
   to {
     opacity: 1;

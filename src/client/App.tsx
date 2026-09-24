@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import { Toaster, toast } from "sonner";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
-import { Accessibility, ArrowLeft, Files, RotateCcw } from "lucide-react";
-import { Sidebar, type SidebarProps } from "./components/Sidebar.js";
+import { Accessibility, ArrowLeft, Files } from "lucide-react";
+import { FOCUS_FILE_SEARCH_EVENT, Sidebar, type SidebarProps } from "./components/Sidebar.js";
 import { DiffWorkspace, type DiffWorkspaceProps } from "./components/DiffWorkspace.js";
 import { DiffControls, type DiffControlsProps } from "./components/DiffControls.js";
-import { CopyCommentsButton } from "./components/CopyCommentsButton.js";
 import { CommandMenu } from "./components/CommandMenu.js";
-import { ReviewFiltersBar } from "./components/ReviewFiltersBar.js";
 import { ReReviewSummary } from "./components/ReReviewSummary.js";
 import { ReviewNotesHub } from "./components/ReviewNotesHub.js";
 import { ReviewNavigator } from "./components/ReviewNavigator.js";
+import { HandoffBar, PacketPreview } from "./components/ReviewHandoff.js";
 import { ShellState } from "./components/ShellState.js";
 import { ConfirmationDialog } from "./components/ui/confirmation-dialog.js";
 import { Button } from "./components/ui/button.js";
@@ -19,7 +18,6 @@ import { useSession } from "./hooks/useSession.js";
 import { useFileDiff } from "./hooks/useFileDiff.js";
 import { useReviewSession } from "./hooks/useReviewSession.js";
 import { useWatchEvents } from "./hooks/useWatchEvents.js";
-import { useDiffTree } from "./hooks/useDiffTree.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useMediaQuery } from "./hooks/useMediaQuery.js";
 import { highlighterLangs, themeOptions } from "./lib/constants.js";
@@ -209,10 +207,6 @@ function useDiffDeckSessionModel({
   const visibleFiles = useMemo(
     () => filterDiffFiles(orderedFiles, reviewSession.state.filters, viewedFilePaths),
     [orderedFiles, reviewSession.state.filters, viewedFilePaths],
-  );
-  const visibleSession = useMemo(
-    () => ({ ...session, files: visibleFiles }),
-    [session, visibleFiles],
   );
   const reviewNavigation = useMemo(
     () => getReviewNavigation(visibleFiles, selectedPath, viewedFilePaths),
@@ -428,13 +422,6 @@ function useDiffDeckSessionModel({
 
   const handleClearAllComments = reviewSession.clearComments;
 
-  const treeModel = useDiffTree({
-    session: visibleSession,
-    selectedPath,
-    viewedPaths: viewedFilePaths,
-    onSelectionChange: handleTreeSelection,
-  });
-
   const selectedFile =
     selectedPath == null ? null : (visibleFiles.find((file) => file.path === selectedPath) ?? null);
   const hunkNavigation = useMemo(
@@ -517,31 +504,49 @@ function useDiffDeckSessionModel({
   const diffTotals = useMemo(() => {
     let additions = 0;
     let deletions = 0;
-    for (const file of visibleFiles) {
+    for (const file of orderedFiles) {
       additions += file.additions;
       deletions += file.deletions;
     }
     return { additions, deletions };
-  }, [visibleFiles]);
+  }, [orderedFiles]);
+
+  const noteCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const comment of commentExports) {
+      counts.set(comment.filePath, (counts.get(comment.filePath) ?? 0) + 1);
+    }
+    return counts;
+  }, [commentExports]);
+
+  const viewedCount = useMemo(
+    () => orderedFiles.filter((file) => viewedFilePaths.has(file.path)).length,
+    [orderedFiles, viewedFilePaths],
+  );
 
   const sidebarProps = {
     diffArgs: session.diffArgs,
     fileOrder: reviewSession.state.fileOrder,
-    fileCount: visibleFiles.length,
     files: visibleFiles,
     fileViewMode: reviewSession.state.fileViewMode,
+    filters: reviewSession.state.filters,
+    noteCounts,
+    notesCount: commentExports.length,
     onFileOrderChange: reviewSession.setFileOrder,
     onFileViewModeChange: reviewSession.setFileViewMode,
+    onFiltersChange: reviewSession.setFilters,
     onRefresh: refresh,
     onSelectPath: handleTreeSelection,
+    onViewedChange: handleViewedFileChange,
     refreshing,
+    repoRoot: session.repoRoot,
     selectedPath,
+    staleNotesCount: commentExports.filter((comment) => comment.status === "stale").length,
     totalFileCount: orderedFiles.length,
     totals: diffTotals,
-    treeModel,
-    viewedCount: visibleFiles.filter((file) => viewedFilePaths.has(file.path)).length,
+    viewedCount,
     viewedPaths: viewedFilePaths,
-  } satisfies Omit<SidebarProps, "footer">;
+  } satisfies Omit<SidebarProps, "footer" | "headerActions" | "notesPanel">;
 
   const workspaceProps = {
     annotationsByFile: reviewSession.state.annotationsByFile,
@@ -635,76 +640,64 @@ function DiffDeckSessionView({
   visibleFiles,
   workspaceProps,
 }: ReturnType<typeof useDiffDeckSessionModel>) {
-  const sidebarFooter = (
-    <div className="flex flex-col gap-2">
-      <ReviewNavigator
-        hunkNavigation={hunkNavigation}
-        navigation={reviewNavigation}
-        onNavigateHunk={handleNavigateHunk}
-        onReviewModeChange={reviewSession.setReviewMode}
-        onSelectPath={handleTreeSelection}
-        reviewMode={reviewSession.state.reviewMode}
-      />
-      <ReReviewSummary
-        comments={orderedCommentExports}
-        onRemoveStatus={reviewSession.removeCommentsByStatus}
-      />
-      <ReviewNotesHub
-        comments={orderedCommentExports}
-        onDelete={handleHubCommentDelete}
-        onJump={handleJumpToComment}
-        onUpdate={handleHubCommentUpdate}
-      />
-      <CopyCommentsButton
-        comments={orderedCommentExports}
-        diffArgs={session.diffArgs}
-        onClearAll={handleClearAllComments}
-        repoRoot={session.repoRoot}
-        snapshotId={session.snapshotId}
-        totalFiles={orderedFiles.length}
-        viewedFiles={viewedFilePaths.size}
-      />
-      <div className="app-sidebar-tool-row flex items-center gap-1.5">
-        <ReviewFiltersBar
-          filters={reviewSession.state.filters}
-          onChange={reviewSession.setFilters}
-          resultCount={visibleFiles.length}
-          totalCount={orderedFiles.length}
+  const packetSource = {
+    comments: orderedCommentExports,
+    diffArgs: session.diffArgs,
+    repoRoot: session.repoRoot,
+    snapshotId: session.snapshotId,
+    totalFiles: orderedFiles.length,
+    viewedFiles: viewedFilePaths.size,
+  };
+  const accessible = reviewSession.state.reviewSurface === "accessible";
+  const sidebar = {
+    ...sidebarProps,
+    footer: (
+      <>
+        <ReviewNavigator
+          hunkNavigation={hunkNavigation}
+          navigation={reviewNavigation}
+          onNavigateHunk={handleNavigateHunk}
+          onReviewModeChange={reviewSession.setReviewMode}
+          onSelectPath={handleTreeSelection}
+          reviewMode={reviewSession.state.reviewMode}
         />
+        <HandoffBar {...packetSource} />
+      </>
+    ),
+    headerActions: (
+      <>
         <button
           type="button"
-          aria-label={
-            reviewSession.state.reviewSurface === "accessible"
-              ? "Return to rich diff view"
-              : "Open accessible linear patch view"
-          }
-          aria-pressed={reviewSession.state.reviewSurface === "accessible"}
-          onClick={() =>
-            reviewSession.setReviewSurface(
-              reviewSession.state.reviewSurface === "accessible" ? "rich" : "accessible",
-            )
-          }
+          aria-label={accessible ? "Return to rich diff view" : "Open accessible linear patch view"}
+          aria-pressed={accessible}
+          onClick={() => reviewSession.setReviewSurface(accessible ? "rich" : "accessible")}
           title="Toggle accessible patch view (A)"
           className={cn(
-            "app-sidebar-tool-button inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-[background-color,color,scale] hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            reviewSession.state.reviewSurface === "accessible" && "bg-accent text-foreground",
+            "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,scale] hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            accessible && "bg-accent text-foreground",
           )}
         >
           <Accessibility aria-hidden="true" className="size-3.5" />
         </button>
-        <DiffControls {...controlsProps} />
-        <button
-          type="button"
-          title="Reset review state"
-          aria-label="Reset review state"
-          onClick={() => setResetConfirmationOpen(true)}
-          className="app-sidebar-tool-button inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground transition-[background-color,color,scale] hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <RotateCcw aria-hidden="true" className="size-3.5" />
-        </button>
-      </div>
-    </div>
-  );
+        <DiffControls {...controlsProps} onResetReview={() => setResetConfirmationOpen(true)} />
+      </>
+    ),
+    notesPanel: (
+      <ReviewNotesHub
+        comments={orderedCommentExports}
+        footer={<PacketPreview {...packetSource} onClearAll={handleClearAllComments} />}
+        header={
+          <ReReviewSummary
+            comments={orderedCommentExports}
+            onRemoveStatus={reviewSession.removeCommentsByStatus}
+          />
+        }
+        onDelete={handleHubCommentDelete}
+        onJump={handleJumpToComment}
+        onUpdate={handleHubCommentUpdate}
+      />
+    ),
+  } satisfies SidebarProps;
 
   return (
     <>
@@ -739,8 +732,7 @@ function DiffDeckSessionView({
       />
       <DiffDeckLayout
         isDesktopLayout={isDesktopLayout}
-        sidebarFooter={sidebarFooter}
-        sidebarProps={sidebarProps}
+        sidebarProps={sidebar}
         workspaceProps={workspaceProps}
       />
     </>
@@ -759,13 +751,11 @@ function getAutoCollapsedPaths(files: readonly SessionPayload["files"][number][]
 
 function DiffDeckLayout({
   isDesktopLayout,
-  sidebarFooter,
   sidebarProps,
   workspaceProps,
 }: {
   isDesktopLayout: boolean;
-  sidebarFooter: ReactNode;
-  sidebarProps: Omit<SidebarProps, "footer">;
+  sidebarProps: SidebarProps;
   workspaceProps: DiffWorkspaceProps;
 }) {
   const [desktopLayout, setDesktopLayout] = useLocalStorage<Record<string, number>>(
@@ -773,6 +763,25 @@ function DiffDeckLayout({
     { diff: 80, files: 20 },
   );
   const [narrowNavigationOpen, setNarrowNavigationOpen] = useState(false);
+  const [narrowSearchRequested, setNarrowSearchRequested] = useState(false);
+
+  // On narrow screens Files and Review are separate places: jumping to a note
+  // returns to the patch, and `/` opens Files with the search focused.
+  useEffect(() => {
+    if (isDesktopLayout) return;
+    const showReview = () => setNarrowNavigationOpen(false);
+    const showFileSearch = () => {
+      setNarrowSearchRequested(true);
+      setNarrowNavigationOpen(true);
+    };
+    window.addEventListener("diffdeck:focus-note", showReview);
+    window.addEventListener(FOCUS_FILE_SEARCH_EVENT, showFileSearch);
+    return () => {
+      window.removeEventListener("diffdeck:focus-note", showReview);
+      window.removeEventListener(FOCUS_FILE_SEARCH_EVENT, showFileSearch);
+    };
+  }, [isDesktopLayout]);
+
   const handleNarrowSelectPath = useCallback(
     (path: string) => {
       sidebarProps.onSelectPath(path);
@@ -794,7 +803,7 @@ function DiffDeckLayout({
           onLayoutChanged={setDesktopLayout}
         >
           <Panel id="files" minSize="12%" maxSize="45%" className="min-h-0">
-            <Sidebar {...sidebarProps} footer={sidebarFooter} />
+            <Sidebar {...sidebarProps} />
           </Panel>
           <PanelResizeHandle
             aria-label="Resize file tree and diff panels"
@@ -815,7 +824,10 @@ function DiffDeckLayout({
             <button
               type="button"
               aria-expanded={narrowNavigationOpen}
-              onClick={() => setNarrowNavigationOpen((current) => !current)}
+              onClick={() => {
+                setNarrowSearchRequested(false);
+                setNarrowNavigationOpen((current) => !current);
+              }}
               className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-2.5 text-xs font-medium text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {narrowNavigationOpen ? (
@@ -833,7 +845,7 @@ function DiffDeckLayout({
             {narrowNavigationOpen ? (
               <Sidebar
                 {...sidebarProps}
-                footer={sidebarFooter}
+                focusSearchOnMount={narrowSearchRequested}
                 onSelectPath={handleNarrowSelectPath}
               />
             ) : (

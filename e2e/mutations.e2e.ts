@@ -180,11 +180,13 @@ test("notes reconcile to stale and resolved states and the re-review summary cle
     writeRepoFile(fixture.repo, "resolved.txt", `${resolvedNext.join("\n")}\n`);
 
     await page.getByRole("button", { name: "Refresh diff" }).click();
+    // Stale notes flag the Notes tab so the reviewer knows to look there.
+    await expect(page.getByRole("img", { name: "1 stale" })).toBeVisible();
+    await page.getByRole("tab", { name: /^Notes/ }).click();
     const summary = page.getByRole("region", { name: "Re-review summary" });
     await expect(summary).toBeVisible();
     await expect(summary).toContainText("1 stale · 1 resolved");
 
-    await page.getByText("Review notes", { exact: true }).click();
     await page.getByRole("button", { name: "Reopen note in note.txt" }).click();
     await expect(summary).toContainText("0 stale · 1 resolved");
 
@@ -286,6 +288,9 @@ test("merge conflicts render the unresolved file and gate the accessible patch",
     await expect(patch.getByText(/conflict/i).first()).toBeVisible();
     await patch.getByRole("button", { name: "Return to rich diff" }).click();
     await expect(page.getByRole("main", { name: "Diff review workspace" })).toBeVisible();
+    // The rich card refetches the unresolved file on return; let it land so
+    // teardown navigation does not abort it mid-flight.
+    await expect(file.getByText(/<<<<<<</).first()).toBeVisible();
   } finally {
     await page.goto("about:blank");
     await server.stop();

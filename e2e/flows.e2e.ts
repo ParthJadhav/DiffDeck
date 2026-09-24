@@ -125,6 +125,7 @@ test("viewed lifecycle: mark, skip, persist, filter, and reset", async ({ diagno
   await expect(page.locator('[data-file-path="assets/blob.bin"]')).toHaveCount(0);
   await page.keyboard.press("Escape");
 
+  await page.getByRole("button", { name: "Diff settings" }).click();
   await page.getByRole("button", { name: "Reset review state" }).click();
   await page.getByRole("button", { name: "Reset review", exact: true }).click();
   await expect(page.getByLabel(/^0 of \d+ files viewed$/)).toBeVisible();
@@ -133,7 +134,7 @@ test("viewed lifecycle: mark, skip, persist, filter, and reset", async ({ diagno
 
 test("review filters narrow files truthfully and clear honestly", async ({ diagnostics, page }) => {
   void diagnostics;
-  await page.keyboard.press("/");
+  await page.getByRole("button", { name: /^Filter review, showing/ }).click();
   await expect(page.getByRole("dialog", { name: "Filter review" })).toBeVisible();
   const pathFilter = page.getByRole("textbox", { name: "Filter changed files by path" });
   await expect(pathFilter).toBeFocused();
@@ -211,7 +212,7 @@ test("comment lifecycle: edit, persist, delete, packet actions, clear all", asyn
     page.locator('[data-file-path="src/app.ts"]').getByText("Edited pass note", { exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Copy 1 comment with context" }).click();
+  await page.getByRole("button", { name: "Copy 1 note for agent" }).click();
   const clipboard = await page.evaluate(() => navigator.clipboard.readText());
   expect(clipboard).toContain("Edited pass note");
   expect(clipboard).toContain("src/app.ts");
@@ -244,9 +245,10 @@ test("comment lifecycle: edit, persist, delete, packet actions, clear all", asyn
     .getByRole("textbox", { name: "File-level note for src/app.ts" })
     .fill("Sweep the whole module");
   await page.getByRole("button", { name: "Add note" }).click();
-  await page.getByRole("button", { name: "Clear 1 comment" }).click();
-  await page.getByRole("button", { name: "Confirm clear 1 comment" }).click();
-  await expect(page.getByRole("button", { name: /^Copy \d+ comment/ })).toBeHidden();
+  await page.getByRole("tab", { name: /^Notes/ }).click();
+  await page.getByRole("button", { name: "Clear 1 note" }).click();
+  await page.getByRole("button", { name: "Confirm clear 1 note" }).click();
+  await expect(page.getByRole("button", { name: /^Copy \d+ note/ })).toBeHidden();
 });
 
 test("deep links with line and side land on the requested change", async ({

@@ -159,6 +159,7 @@ test("shortcuts stay quiet behind a modal dialog and inside popovers", async ({
   page,
 }) => {
   void diagnostics;
+  await page.getByRole("button", { name: "Diff settings" }).click();
   await page.getByRole("button", { name: "Reset review state" }).click();
   const confirmation = page.getByRole("dialog", { name: "Reset all review progress?" });
   await expect(confirmation).toBeVisible();
@@ -226,7 +227,7 @@ test("file-level and review-note editors honour the chord, Escape, and caret pla
   await expect(fileNote).toBeHidden();
   await expect(page.getByText("Added file-level note")).toBeVisible();
 
-  await page.getByText("Review notes", { exact: true }).click();
+  await page.getByRole("tab", { name: /^Notes/ }).click();
   await page.getByRole("button", { name: "Edit note in src/app.ts" }).click();
   const editor = page.getByRole("textbox", { name: "Edit note for src/app.ts" });
   await expect(editor).toBeFocused();

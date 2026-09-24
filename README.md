@@ -100,15 +100,20 @@ terminal that launched DiffDeck. Image changes support side-by-side, overlay, an
 Supported JavaScript manifests and lockfiles get a package-change summary with a source-diff
 fallback.
 
-Use the compact review navigator to move between visible files, unviewed files, and changed hunks,
-or switch to persisted focus mode when one file needs full attention. File navigation can be a
-directory tree or a virtualized flat list ordered by path, status, or change size. Diff settings can
+The sidebar is built around the review loop. Its header states which diff you are looking at and
+how far through it you are. The Files tab lists every change as a tree or a flat list with status,
+`+/−`, note counts, and a viewed ring you can tick without leaving your place; `/` searches it.
+The Notes tab holds every note grouped by file, and once notes exist the footer offers Copy for
+agent, JSON download, and Send to terminal. Use the compact review navigator to move between
+visible files, unviewed files, and changed hunks, or switch to persisted focus mode when one file
+needs full attention. Review order (path, status, or change size) lives with the filters. Diff
+settings can
 rebuild the Git patch while ignoring end-of-line spaces, spacing amount, all whitespace, or blank
 line changes.
 
 Each file header can create a file-level note, copy its repository-relative path or exact link, and
-open the configured editor at the selected line. The Review notes queue consolidates file and line
-notes for edit, delete, reopen, and source jumps. Before handoff, expand Preview exact packet to
+open the configured editor at the selected line. The Notes tab consolidates file and line notes
+for edit, delete, reopen, and source jumps. Before handoff, expand Preview exact packet to
 inspect the exact Markdown or versioned JSON that will be copied, downloaded, or sent to the launch
 terminal.
 
@@ -128,7 +133,7 @@ Review become two explicit places instead of squeezing the patch.
 | `v` | Toggle viewed for the selected file |
 | `c` | Start a comment at the first changed line |
 | `x` | Collapse or expand the selected file |
-| `/` | Focus path filters |
+| `/` | Search files in the sidebar |
 | `s` | Open diff settings |
 | `o` | Open the selected file in the configured editor |
 | `?` or `Cmd/Ctrl+K` | Open the command palette and shortcut reference |

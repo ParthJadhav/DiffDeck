@@ -15,6 +15,7 @@ import {
   Minus,
   Monitor,
   Moon,
+  RotateCcw,
   Rows3,
   ScrollText,
   Settings,
@@ -23,6 +24,7 @@ import {
   WrapText,
   X,
 } from "lucide-react";
+import { anchoredPanelPlacement, type PanelSide } from "../lib/anchoredPanel.js";
 import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
 import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
@@ -43,6 +45,8 @@ export interface DiffControlsProps {
   onDisableBackgroundChange: (value: boolean) => void;
   onExpandUnchangedChange: (value: boolean) => void;
   onOverflowChange: (value: OverflowMode) => void;
+  /** Opens the reset confirmation; the destructive step stays in its dialog. */
+  onResetReview?: () => void;
   onShowLineNumbersChange: (value: boolean) => void;
   onThemeTypeChange: (value: ThemeChoice) => void;
   onWhitespaceModeChange: (value: DiffWhitespaceMode) => void;
@@ -248,6 +252,7 @@ export function DiffControls(props: DiffControlsProps) {
     onDisableBackgroundChange,
     onExpandUnchangedChange,
     onOverflowChange,
+    onResetReview,
     onShowLineNumbersChange,
     onThemeTypeChange,
     onWhitespaceModeChange,
@@ -261,6 +266,7 @@ export function DiffControls(props: DiffControlsProps) {
   const [open, setOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties | null>(null);
+  const [panelSide, setPanelSide] = useState<PanelSide>("below");
   const panelId = useId();
   const titleId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -270,20 +276,9 @@ export function DiffControls(props: DiffControlsProps) {
   const updatePanelPosition = useCallback(() => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect == null) return;
-
-    const margin = 12;
-    const width = Math.min(280, window.innerWidth - margin * 2);
-    const left = Math.min(Math.max(margin, rect.left), window.innerWidth - width - margin);
-    const bottom = 12;
-    const maxHeight = Math.max(240, window.innerHeight - bottom - margin);
-
-    setPanelStyle({
-      bottom,
-      left,
-      maxHeight,
-      position: "fixed",
-      width,
-    });
+    const placement = anchoredPanelPlacement(rect, 280, 240);
+    setPanelSide(placement.side);
+    setPanelStyle(placement.style);
   }, []);
 
   useLayoutEffect(() => {
@@ -339,12 +334,13 @@ export function DiffControls(props: DiffControlsProps) {
   }, [open, panelMounted]);
 
   return (
-    <div ref={containerRef} className="flex shrink-0 flex-col gap-2">
+    <div ref={containerRef} className="flex shrink-0">
       {panelMounted ? (
         <Dialog
           open
           ref={panelRef}
           aria-labelledby={titleId}
+          data-side={panelSide}
           data-state={open ? "open" : "closed"}
           id={panelId}
           style={{ ...panelStyle, overscrollBehavior: "contain" }}
@@ -462,6 +458,30 @@ export function DiffControls(props: DiffControlsProps) {
                   </CheckLabel>
                 </div>
               </ControlSection>
+
+              {onResetReview != null ? (
+                <ControlSection label="Review" index={6}>
+                  <div className="text-[11.5px] font-medium">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      aria-label="Reset review state"
+                      onClick={() => {
+                        // The confirmation returns focus to whatever held it
+                        // when it opened; this popover is about to unmount.
+                        triggerRef.current?.focus();
+                        setOpen(false);
+                        onResetReview();
+                      }}
+                      className="w-full justify-start text-muted-foreground hover:bg-destructive/10 hover:text-destructive [&_svg]:size-3.5"
+                    >
+                      <RotateCcw aria-hidden="true" />
+                      Reset viewed files, notes, and filters…
+                    </Button>
+                  </div>
+                </ControlSection>
+              ) : null}
             </div>
           </DialogContent>
         </Dialog>
@@ -469,15 +489,16 @@ export function DiffControls(props: DiffControlsProps) {
 
       <Button
         ref={triggerRef}
-        variant="outline"
+        variant="ghost"
         size="icon"
         aria-label="Diff settings"
         aria-expanded={open}
         aria-controls={panelId}
         aria-haspopup="dialog"
+        title="Diff settings (S)"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "app-sidebar-tool-button size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
+          "size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground [&_svg]:size-3.5",
           open && "bg-accent text-foreground",
         )}
       >

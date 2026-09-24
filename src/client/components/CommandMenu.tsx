@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { readDiffLocation } from "../lib/deepLink.js";
 import { openInEditor } from "../lib/editor.js";
 import { shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
+import { FOCUS_FILE_SEARCH_EVENT } from "./Sidebar.js";
 import type { HunkNavigation, HunkTarget } from "../lib/hunkNavigation.js";
 import type { ReviewNavigation } from "../lib/reviewNavigation.js";
 import type { ReviewMode, ReviewSurface } from "../lib/reviewSession.js";
@@ -96,9 +97,7 @@ export function CommandMenu({
     if (event.repeat && !steps) return;
     if (event.key === "/") {
       event.preventDefault();
-      const filterInput = document.getElementById("diffdeck-review-filter");
-      if (filterInput != null) filterInput.focus();
-      else window.dispatchEvent(new Event("diffdeck:open-filters"));
+      window.dispatchEvent(new Event(FOCUS_FILE_SEARCH_EVENT));
     } else if (key === "j") {
       event.preventDefault();
       selectPath(event.shiftKey ? navigation.nextUnviewedPath : navigation.nextPath);

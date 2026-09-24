@@ -17,6 +17,24 @@ The interface has four action scopes:
 4. **Handoff scope** — exact Markdown/JSON preview, clipboard, download, and terminal delivery live
    in the packet surface.
 
+### Sidebar anatomy
+
+The sidebar is ordered by how often a reviewer needs each part, top to bottom:
+
+1. **Header** — repository name, the exact `git diff` command plus a plain-language scope for the
+   common cases (`unstaged`, `staged`, `all uncommitted`), `n of N files viewed` with a progress
+   bar that turns green at completion, and total `+/−`. Refresh, accessible view, and settings are
+   icon actions here; reset lives at the bottom of settings because it is rare and destructive.
+2. **Files | Notes tabs** — two places, not a stack. Files shows the visible count (`4/16` when
+   filtered); Notes shows the note count and a warning dot when any note went stale.
+3. **Files tab** — one search field (`/`) that only narrows the list (a finder), the tree/flat
+   switch, and the filter button whose popover also holds review order. Active filters are stated
+   under the toolbar with a one-click Clear, because they change the whole review.
+4. **Notes tab** — the notes queue grouped by file in review order, status filter, re-review
+   summary, exact packet preview, and Clear all.
+5. **Footer** — the review navigator and, once notes exist, the handoff bar: Copy for agent,
+   download JSON, send to terminal.
+
 One selected path owns the tree/list selection, URL, visible file card, focus mode, and accessible
 view. A filter may temporarily hide it; the app chooses the first remaining file and keeps the URL
 truthful. Jumping to a hidden note clears filters with an explanatory toast.
@@ -93,8 +111,12 @@ annotation composer (80), and modal confirmation (top layer).
   tooltip/title. Destructive buttons use the destructive role only at the final action.
 - **Inputs/selects/checkboxes/toggles:** persistent label, border and ring focus, native semantics,
   disabled cursor/state, and no placeholder-only labels.
-- **Tree/list:** tree mode serves hierarchy; virtualized flat list is the simpler alternative.
-  Selection, current file, viewed state, Git status, and result count are distinct.
+- **Tree/list:** one virtualized component for both modes; 28 px rows. Tree mode compresses
+  single-child folder chains and shows `viewed/total` per folder (a check when done); flat mode
+  shows the folder after the name. Each file row carries the Git status letter, name, note count,
+  `+/−`, and a viewed ring that toggles in place without changing selection. Viewed rows dim.
+  The list is one Tab stop (roving focus): arrows, Home/End, Left/Right to fold or reach the
+  parent. The current file is always revealed, including inside collapsed folders.
 - **Menus/popovers:** anchored, non-modal, Escape/outside-click dismissible, and focus restored to the
   trigger. Settings and filters describe scope in their title.
 - **Dialogs:** reserved for destructive confirmation or focused editing. Destructive dialogs name
