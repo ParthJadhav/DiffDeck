@@ -41,6 +41,10 @@ tick them off, collect notes, hand off to the agent.
   that types with no delay from the Notes tab.
 - The merge-conflict e2e spec waits for the rich card's unresolved-file refetch before teardown
   instead of aborting it mid-flight.
+- E2E specs no longer flake on slow CI runners: the gutter comment gesture retries through
+  Pierre's settle-time re-renders (`openLineComposer`), and the file-note spec no longer
+  force-clicks a header that is being swapped. `E2E_CPU_THROTTLE=6` reproduces a slow runner
+  locally in Chromium.
 
 ### Upgrade notes
 

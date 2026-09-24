@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createConflictRepo, createRepo, git, launchDiffdeck, writeRepoFile } from "./harness.js";
-import { expect, test } from "./test.js";
+import { expect, openLineComposer, test } from "./test.js";
 
 // Each test runs against its own server and disposable repository so that real
 // write, watch, and reconciliation flows never leak state into other tests.
@@ -158,12 +158,7 @@ test("notes reconcile to stale and resolved states and the re-review summary cle
       await page.goto(`${server.baseURL}/?file=${encodeURIComponent(path)}`);
       const file = page.locator(`[data-file-path="${path}"]`);
       await expect(file).toBeVisible();
-      await file
-        .locator('diffs-container [data-line-type="change-addition"][data-column-number]')
-        .first()
-        .hover();
-      await file.locator("diffs-container [data-utility-button]").click();
-      await file.getByRole("textbox", { name: /^Comment on additions line / }).fill(body);
+      await (await openLineComposer(file)).fill(body);
       await file.getByRole("button", { name: "Comment", exact: true }).click();
       await expect(file.getByText(body, { exact: true })).toBeVisible();
     };

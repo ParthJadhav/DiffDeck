@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { processPatch } from "@pierre/diffs";
-import { expect, test } from "./test.js";
+import { expect, openLineComposer, test } from "./test.js";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -270,17 +270,7 @@ test("rich diff gutter control opens the line comment composer", async ({ diagno
   const file = page.locator('[data-file-path="src/app.ts"]');
   await expect(file).toBeVisible();
 
-  const changedLineNumber = file
-    .locator('diffs-container [data-line-type="change-addition"][data-column-number]')
-    .first();
-  await changedLineNumber.hover();
-
-  const addComment = file.locator("diffs-container [data-utility-button]");
-  await expect(addComment).toBeVisible();
-  await addComment.click();
-
-  const composer = file.getByRole("textbox", { name: /^Comment on additions line / });
-  await expect(composer).toBeVisible();
+  const composer = await openLineComposer(file);
   await composer.fill("Keep this contract explicit.");
   await file.getByRole("button", { name: "Comment", exact: true }).click();
   await expect(file.getByText("Keep this contract explicit.", { exact: true })).toBeVisible();

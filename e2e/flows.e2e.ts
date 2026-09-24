@@ -1,5 +1,5 @@
 import { processPatch } from "@pierre/diffs";
-import { expect, test } from "./test.js";
+import { expect, openLineComposer, test } from "./test.js";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -189,12 +189,7 @@ test("comment lifecycle: edit, persist, delete, packet actions, clear all", asyn
   const file = page.locator('[data-file-path="src/app.ts"]');
   await expect(file).toBeVisible();
 
-  const changedLineNumber = file
-    .locator('diffs-container [data-line-type="change-addition"][data-column-number]')
-    .first();
-  await changedLineNumber.hover();
-  await file.locator("diffs-container [data-utility-button]").click();
-  const composer = file.getByRole("textbox", { name: /^Comment on additions line / });
+  const composer = await openLineComposer(file);
   await composer.fill("First pass note");
   await file.getByRole("button", { name: "Comment", exact: true }).click();
   await expect(file.getByText("First pass note", { exact: true })).toBeVisible();

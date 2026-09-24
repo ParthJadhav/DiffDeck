@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./test.js";
+import { expect, openLineComposer, test } from "./test.js";
 
 // Keyboard ownership: typing always wins over shortcuts, overlays own the
 // keyboard while open, and every composer has an explicit way to hand the
@@ -34,20 +34,7 @@ const deepActiveElement = (page: Page) =>
 const fileParam = (page: Page) => new URL(page.url()).searchParams.get("file");
 
 async function openGutterComposer(page: Page) {
-  const file = page.locator('[data-file-path="src/app.ts"]');
-  const lineNumber = file
-    .locator('diffs-container [data-line-type="change-addition"][data-column-number]')
-    .first();
-  // The diff renders asynchronously; boundingBox() does not wait, so settle
-  // visibility first (slower CI runners hit this).
-  await expect(lineNumber).toBeVisible();
-  await lineNumber.hover();
-  const utility = file.locator("diffs-container [data-utility-button]").first();
-  await expect(utility).toBeVisible();
-  const utilityBox = await utility.boundingBox();
-  if (utilityBox == null) throw new Error("gutter utility button did not appear");
-  await page.mouse.click(utilityBox.x + utilityBox.width / 2, utilityBox.y + utilityBox.height / 2);
-  return file.getByRole("textbox", { name: /^Comment on additions line / });
+  return openLineComposer(page.locator('[data-file-path="src/app.ts"]'));
 }
 
 test("typing right after the gutter click lands in the composer, not in shortcuts", async ({
@@ -215,9 +202,10 @@ test("file-level and review-note editors honour the chord, Escape, and caret pla
 }) => {
   void diagnostics;
   const file = page.locator('[data-file-path="src/app.ts"]');
-  await file
-    .getByRole("button", { name: "Add file-level note to src/app.ts" })
-    .click({ force: true });
+  // No force: the selected card shows its actions, and a normal click waits
+  // for the deep-link landing scroll to settle instead of firing at a moving
+  // target (the cause of intermittent CI misses).
+  await file.getByRole("button", { name: "Add file-level note to src/app.ts" }).click();
   const fileNote = page.getByRole("textbox", { name: "File-level note for src/app.ts" });
   await expect(fileNote).toBeFocused();
   await page.keyboard.type("file note jk", { delay: 10 });
