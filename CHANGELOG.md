@@ -2,6 +2,52 @@
 
 All notable changes to DiffDeck. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-09-24
+
+The sidebar is redesigned from the ground up around the daily review loop: orient, walk the files,
+tick them off, collect notes, hand off to the agent.
+
+### Changed
+
+- **Header states the diff and progress.** Repository name, the exact `git diff` command with a
+  plain-language scope (`unstaged changes`, `staged changes`, `all uncommitted changes`), `n of N
+  files viewed` with a progress bar that turns green when done, and total `+/−`. Progress now counts
+  every file in the diff, so `Hide viewed` no longer resets it to zero.
+- **One file list for tree and flat modes**, replacing the embedded `@pierre/trees` tree and the
+  separate flat list. Every row shows the Git status letter, `+/−`, note count, and a viewed ring
+  that marks the file viewed in place. Folders show `viewed/total` and a check when complete;
+  single-child folder chains are compressed. Viewed files dim. Both modes stay virtualized (23,000
+  files tested).
+- **One search field** in both modes, focused with `/` (previously `/` opened the filter popover).
+  Search narrows only the list; `Enter` opens the first match, `↓` moves into the list, `Esc`
+  clears. Filters are a single icon button, and review order moved into the filter popover.
+  Active filters are stated under the toolbar with a one-click Clear.
+- **Files and Notes are tabs.** The notes queue gets the full sidebar height, grouped by file, with
+  a status filter, the re-review summary, packet preview, and Clear all. The Notes tab flags stale
+  notes with a warning dot.
+- **The footer is the handoff.** Review navigator, then (once notes exist) Copy for agent, download
+  JSON, and send to terminal in one row. Reset review moved into Diff settings; refresh,
+  accessible view, and settings are header icons.
+- Keyboard: the file list is one Tab stop with arrow keys, Home/End, and Left/Right to fold
+  folders; tabs switch with Left/Right. The current file is revealed on load, on `j`/`k`, and while
+  scrolling the patch, including inside collapsed folders.
+- Settings and filter popovers open downward from top-anchored triggers.
+- Copy labels say "notes" throughout: `Copy N notes for agent`, `Clear N notes`.
+
+### Fixed
+
+- `/` moves focus into file search synchronously inside the keydown, so a key typed in the same
+  frame (or while the patch is busy re-rendering) is text, never a shortcut. Covered by an e2e spec
+  that types with no delay from the Notes tab.
+- The merge-conflict e2e spec waits for the rich card's unresolved-file refetch before teardown
+  instead of aborting it mid-flight.
+
+### Upgrade notes
+
+- `/` now focuses the file search. Open review filters with the filter button next to it (or the
+  command palette).
+- Reset review lives at the bottom of Diff settings (`s`).
+
 ## [0.7.0] — 2026-08-28
 
 Typing always wins over shortcuts. This release fixes the composer focus loss that turned review
@@ -186,6 +232,10 @@ The largest release of the line: DiffDeck becomes a full review workflow rather 
 
 See `docs/RELEASE_VERIFICATION_2026-07-16.md` and `docs/BUG_BASH_2026-07-16.md` for exact evidence.
 
+[0.8.0]: https://github.com/ParthJadhav/DiffDeck/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/ParthJadhav/DiffDeck/compare/v0.6.2...v0.7.0
+[0.6.2]: https://github.com/ParthJadhav/DiffDeck/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/ParthJadhav/DiffDeck/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/ParthJadhav/DiffDeck/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/ParthJadhav/DiffDeck/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/ParthJadhav/DiffDeck/compare/v0.5.0...v0.5.1

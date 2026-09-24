@@ -1,3 +1,40 @@
+# DiffDeck 0.8.0 — a sidebar built for the review loop
+
+The sidebar had every control a review needs, but not where a review needs it. The command you
+were diffing hid in a tooltip. The tree showed names and status letters, but no sizes, no note
+counts, and no way to tick a file off. The footer stacked eleven controls, and the handoff to
+your agent was buried among them.
+
+0.8.0 rebuilds it top to bottom in the order you use it:
+
+- **Header: what and how far.** The repository, the exact `git diff` command with a
+  plain-language scope (`unstaged`, `staged`, `all uncommitted changes`), `n of N files viewed`
+  with a progress bar, and total `+/−`. Progress counts every file, so `Hide viewed` no longer
+  resets it to zero.
+- **Files: tick them off where you see them.** One virtualized list for tree and flat view. Every
+  row shows the status letter, `+/−`, its note count, and a viewed ring you click in place.
+  Folders roll up `viewed/total`; viewed files dim. The current file stays revealed as you step
+  with `j`/`k` or scroll the patch.
+- **Search: press `/`.** One search in both views. `Enter` opens the first match, `↓` walks the
+  list, `Esc` clears. Search only narrows the list; filters still scope the whole review, and an
+  active filter is always stated with a one-click Clear.
+- **Notes: their own tab.** Every note grouped by file, full height, with the re-review summary
+  and exact packet preview beside it. Stale notes flag the tab.
+- **Handoff: one row.** Copy notes for your agent, download the JSON packet, or send it to the
+  terminal.
+
+### Upgrade notes
+
+- `/` now focuses the file search instead of opening review filters. The filter button sits next
+  to the search, and review order moved inside it.
+- Reset review moved into Diff settings (`s`).
+
+Verified in real Chrome, Firefox, and WebKit. New specs cover viewed toggles from the list,
+keyboard walking and folder folding, search, the Notes tab, filter notices, and a regression for
+`/` followed immediately by typing. See `CHANGELOG.md` for the full list.
+
+---
+
 # DiffDeck 0.7.0 — typing always wins
 
 The 0.6 line had one keyboard bug that undermined the whole review loop: start a comment from the
