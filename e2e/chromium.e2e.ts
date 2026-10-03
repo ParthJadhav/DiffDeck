@@ -28,7 +28,7 @@ test("dynamic desktop-to-phone resize keeps a usable patch and explicit file pic
 
   for (const width of [900, 768, 600, 375, 320]) {
     await page.setViewportSize({ height: width === 320 ? 568 : 812, width });
-    await expect(page.getByRole("button", { name: "Files" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Files", exact: true })).toBeVisible();
     await expect(page.getByRole("main")).toBeVisible();
     await expect(page.locator('[data-file-path][aria-current="location"]')).toBeVisible();
     const overflow = await page.evaluate(
@@ -37,7 +37,7 @@ test("dynamic desktop-to-phone resize keeps a usable patch and explicit file pic
     expect(overflow).toBeLessThanOrEqual(0);
   }
 
-  await page.getByRole("button", { name: "Files" }).click();
+  await page.getByRole("button", { name: "Files", exact: true }).click();
   await expect(
     page.getByRole("complementary", { name: "Changed files and review controls" }),
   ).toBeVisible();
@@ -45,7 +45,7 @@ test("dynamic desktop-to-phone resize keeps a usable patch and explicit file pic
   await page.getByRole("searchbox", { name: "Search files" }).fill("src/app.ts");
   await page.getByRole("button", { name: /^src\/app\.ts,/ }).click();
   await expect(page.getByRole("main")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Files" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Files", exact: true })).toBeVisible();
 
   await page.setViewportSize({ height: 800, width: 1280 });
   await expect(

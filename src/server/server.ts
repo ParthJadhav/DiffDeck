@@ -95,6 +95,11 @@ export async function startServer(
   const indexHtml = getIndexHtml(clientDir);
   const app = express();
   const sessionStore = createDiffSessionStore(sessionSource);
+  let refreshGeneration = 0;
+  const refreshSession = () => {
+    refreshGeneration += 1;
+    return sessionStore.refresh();
+  };
   const eventClients = new Set<express.Response>();
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: false, limit: "1mb" }));
@@ -113,7 +118,7 @@ export async function startServer(
   });
 
   app.get("/api/session", (request, response) => {
-    const session = request.query.refresh === "1" ? sessionStore.refresh() : sessionStore.current();
+    const session = request.query.refresh === "1" ? refreshSession() : sessionStore.current();
     response.json(serializeSession(sessionStore, session, options));
   });
 
@@ -123,6 +128,7 @@ export async function startServer(
       return;
     }
     try {
+      refreshGeneration += 1;
       const session = sessionStore.setWhitespaceMode(request.body.whitespaceMode);
       if (session == null) {
         response.status(501).json({ error: "This diff source cannot rebuild whitespace modes." });
@@ -335,6 +341,16 @@ export async function startServer(
         .json({ error: "The diff changed; refresh before applying this action." });
       return;
     }
+    // A non-watching session can still change on disk after the reviewer
+    // opened it. Rebuild immediately before writing so the displayed snapshot
+    // cannot authorize staging or discarding newer, unseen contents.
+    const freshSession = refreshSession();
+    if (snapshotId !== freshSession.snapshotId) {
+      response
+        .status(409)
+        .json({ error: "The diff changed; refresh before applying this action." });
+      return;
+    }
     if (
       typeof path !== "string" ||
       sessionStore.file(path) == null ||
@@ -343,12 +359,12 @@ export async function startServer(
       response.status(400).json({ error: "Invalid write action or path." });
       return;
     }
-    const result = applyWriteAction(session, action, path, hunkIndex);
+    const result = applyWriteAction(freshSession, action, path, hunkIndex);
     if (!result.ok) {
       response.status(422).json({ error: result.error });
       return;
     }
-    const refreshed = sessionStore.refresh();
+    const refreshed = refreshSession();
     notifyClients(eventClients, "snapshot", { snapshotId: refreshed.snapshotId, reason: "write" });
     response.json({ ok: true, snapshotId: refreshed.snapshotId });
   });
@@ -380,6 +396,7 @@ export async function startServer(
     const poll = async () => {
       if (polling) return;
       polling = true;
+      const generation = refreshGeneration;
       try {
         const next =
           typeof sessionSource === "object" &&
@@ -387,6 +404,9 @@ export async function startServer(
           sessionSource.poll != null
             ? await sessionSource.poll()
             : sessionStore.refresh();
+        // A pending async poll may have read the repository before a write,
+        // explicit refresh, or preference rebuild. Never publish it afterwards.
+        if (generation !== refreshGeneration) return;
         if (next != null && next.snapshotId !== sessionStore.current().snapshotId) {
           sessionStore.replace(next);
           notifyClients(eventClients, "snapshot", { snapshotId: next.snapshotId, reason: "watch" });
@@ -574,7 +594,7 @@ function applyWriteAction(
       : action === "unstage"
         ? ["restore", "--staged", "--", ...paths]
         : mode === "cached"
-          ? ["restore", "--source=HEAD", "--staged", "--worktree", "--", path]
+          ? ["restore", "--source=HEAD", "--staged", "--worktree", "--", ...paths]
           : ["restore", "--worktree", "--", path];
   const result = spawnSync("git", ["-C", session.repoRoot, ...args], {
     encoding: "utf8",

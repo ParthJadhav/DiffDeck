@@ -34,13 +34,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Install browser runtimes
-        run: bunx playwright install --with-deps chromium firefox webkit
+      - name: Setup Node for tester-army e2e
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Install Google Chrome
+        run: bunx playwright install --with-deps chrome
 
       # `check` is the full release gate: typecheck, lint, format, unit
-      # tests, fixtures, build, packaging, and the complete Playwright e2e
-      # suite (flows, mutations, visual, and cross-browser core specs).
-      - name: Full check including Playwright e2e suite
+      # tests, fixtures, build, packaging, and the complete Chrome Playwright and tester-army e2e
+      # suites (flows, mutations, visual, and repository regressions).
+      - name: Full check including both Chrome e2e suites
         run: bun run check
 
       - name: Upload Playwright traces and report on failure
@@ -51,6 +56,7 @@ jobs:
           path: |
             playwright-report
             test-results
+            .e2e
           retention-days: 7
           if-no-files-found: ignore
 

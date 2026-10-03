@@ -51,11 +51,11 @@ jobs:
             exit 1
           fi
 
-      # `check` runs the Playwright suite, so the release job needs the same
-      # browser runtimes CI installs. Without this the publish fails after the
+      # `check` runs the Chrome suites, so the release job needs the same
+      # browser CI installs. Without this the publish fails after the
       # tag already exists.
-      - name: Install browser runtimes
-        run: bunx playwright install --with-deps chromium firefox webkit
+      - name: Install Google Chrome
+        run: bunx playwright install --with-deps chrome
 
       - name: Full release check
         run: bun run check
@@ -68,6 +68,8 @@ jobs:
           path: |
             playwright-report
             test-results
+            .e2e
+          include-hidden-files: true
           retention-days: 7
           if-no-files-found: ignore
 

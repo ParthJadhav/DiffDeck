@@ -166,6 +166,10 @@ bun run dev
 bun run check
 ```
 
+The check gate runs the existing Playwright suite and the tester-army `e2e` suite in installed
+Google Chrome. See [E2E testing](docs/testing/e2e.md) for setup, isolated fixtures, commands, flow
+coverage, and verified regression results.
+
 ## Releases
 
 See [GitHub Releases](https://github.com/ParthJadhav/DiffDeck/releases) for the full version history. Highlights:

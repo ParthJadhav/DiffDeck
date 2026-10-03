@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CornerDownRight, Edit3, MessageSquarePlus, RotateCcw, Trash2 } from "lucide-react";
 import type { CommentExportRecord } from "../lib/commentExport.js";
 import { cn } from "../lib/cn.js";
@@ -39,6 +39,15 @@ export function ReviewNotesHub({
 }) {
   const [filter, setFilter] = useState<NoteFilter>("all");
   const [editing, setEditing] = useState<{ body: string; id: string } | null>(null);
+  const pendingFocus = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (editing != null || pendingFocus.current == null) return;
+    const id = pendingFocus.current;
+    pendingFocus.current = null;
+    document
+      .querySelector<HTMLElement>(`[data-note-id="${CSS.escape(id)}"]`)
+      ?.focus({ preventScroll: true });
+  }, [editing]);
   const counts = useMemo(() => {
     const result: Record<NoteFilter, number> = {
       all: comments.length,
@@ -63,20 +72,16 @@ export function ReviewNotesHub({
   // Leaving the editor returns focus to the note card, so the reviewer's place
   // in the queue survives and global shortcuts are live again.
   const focusNote = (id: string) => {
-    window.requestAnimationFrame(() => {
-      document
-        .querySelector<HTMLElement>(`[data-note-id="${CSS.escape(id)}"]`)
-        ?.focus({ preventScroll: true });
-    });
+    pendingFocus.current = id;
   };
   const saveEdit = (comment: CommentExportRecord, body: string) => {
     onUpdate({ ...comment, body: body.trim() });
-    setEditing(null);
     focusNote(comment.id);
+    setEditing(null);
   };
   const cancelEdit = (id: string) => {
-    setEditing(null);
     focusNote(id);
+    setEditing(null);
   };
 
   if (comments.length === 0) {

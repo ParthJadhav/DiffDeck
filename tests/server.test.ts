@@ -335,10 +335,58 @@ describe("server capabilities", () => {
       body: JSON.stringify({ action: "stage", path: "a.txt", snapshotId: initial.snapshotId }),
     });
     expect(success.status).toBe(200);
-    expect(buildCount).toBe(2);
+    expect(buildCount).toBe(3);
     expect((await fetch(`${writable.url}api/session`)).status).toBe(200);
-    expect(buildCount).toBe(2);
+    expect(buildCount).toBe(3);
     expect(runGit(repo, ["diff", "--cached", "--name-only"]).trim()).toBe("a.txt");
+  });
+
+  test("rejects unseen disk changes before stage or revert without watch mode", async () => {
+    for (const action of ["stage", "revert"]) {
+      const repo = createWritableRepo();
+      const build = () => buildDiffSession(repo, repo, []);
+      const initial = build();
+      const server = await startServer(
+        { initialSession: initial, refresh: build },
+        0,
+        "127.0.0.1",
+        { write: true },
+      );
+      servers.push(server);
+      writeFileSync(join(repo, "a.txt"), "unreviewed contents\n");
+      const response = await fetch(`${server.url}api/write`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, path: "a.txt", snapshotId: initial.snapshotId }),
+      });
+      expect(response.status).toBe(409);
+      expect(runGit(repo, ["diff", "--cached"])).toBe("");
+      expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("unreviewed contents\n");
+    }
+  });
+
+  test("reverts a cached rename across both index entries and worktree paths", async () => {
+    const repo = createWritableRepo();
+    runGit(repo, ["restore", "a.txt"]);
+    runGit(repo, ["mv", "a.txt", "renamed.txt"]);
+    const build = () => buildDiffSession(repo, repo, ["--cached"]);
+    const initial = build();
+    const server = await startServer({ initialSession: initial, refresh: build }, 0, "127.0.0.1", {
+      write: true,
+    });
+    servers.push(server);
+    const response = await fetch(`${server.url}api/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "revert",
+        path: "renamed.txt",
+        snapshotId: initial.snapshotId,
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(runGit(repo, ["status", "--porcelain"])).toBe("");
+    expect(readFileSync(join(repo, "a.txt"), "utf8")).toBe("old\n");
   });
 
   test("rejects unauthorized write shapes and stale hunk boundaries", async () => {
@@ -635,6 +683,65 @@ describe("server capabilities", () => {
       snapshotId: refreshed.snapshotId,
     });
   });
+
+  for (const operation of ["write", "refresh", "preferences"] as const) {
+    test(`discards a delayed watch result superseded by ${operation}`, async () => {
+      const repo = createWritableRepo();
+      const build = () => buildDiffSession(repo, repo, []);
+      const initial = build();
+      const started = Promise.withResolvers<void>();
+      const delayed = Promise.withResolvers<DiffSession | null>();
+      let firstPoll = true;
+      const server = await startServer(
+        {
+          initialSession: initial,
+          refresh: build,
+          setWhitespaceMode: build,
+          poll: async () => {
+            if (!firstPoll) return null;
+            firstPoll = false;
+            started.resolve();
+            return delayed.promise;
+          },
+        },
+        0,
+        "127.0.0.1",
+        { write: true, watch: true, watchInterval: 10 },
+      );
+      servers.push(server);
+      await started.promise;
+      let latest: { snapshotId: string; files?: unknown[] };
+      if (operation === "write") {
+        const response = await fetch(`${server.url}api/write`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "stage", path: "a.txt", snapshotId: initial.snapshotId }),
+        });
+        expect(response.status).toBe(200);
+        latest = await response.json();
+        expect(runGit(repo, ["diff", "--cached", "--", "a.txt"])).toContain("+new");
+      } else {
+        writeFileSync(join(repo, "a.txt"), "newer\n");
+        latest = await (
+          await fetch(
+            `${server.url}api/${operation === "refresh" ? "session?refresh=1" : "preferences"}`,
+            operation === "refresh"
+              ? {}
+              : {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ whitespaceMode: "normal" }),
+                },
+          )
+        ).json();
+      }
+      expect(latest.snapshotId).not.toBe(initial.snapshotId);
+      delayed.resolve(initial);
+      const displayed = await (await fetch(`${server.url}api/session`)).json();
+      expect(displayed.snapshotId).toBe(latest.snapshotId);
+      if (operation === "write") expect(displayed.files).toHaveLength(0);
+    });
+  }
 });
 
 function createWritableRepo(): string {

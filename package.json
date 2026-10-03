@@ -15,7 +15,7 @@
     "build": "bun run build:client && bun run build:server",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "check": "bun run typecheck && bun run lint && bun run format:check && bun run verify:fixtures && bun test --coverage tests && bun run build && bun run verify:built-fixtures && bun run pack:dry-run && bun run smoke:package && bun run test:e2e:built",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run verify:fixtures && bun test --coverage tests && bun run build && bun run verify:built-fixtures && bun run pack:dry-run && bun run smoke:package && bun run test:e2e:built && bun run test:army:built",
     "dev": "./scripts/dev.sh",
     "dev:setup": "./scripts/setup-fake-repo.sh",
     "dev:reset": "REBUILD_FAKE_REPO=1 ./scripts/dev.sh",
@@ -27,9 +27,11 @@
     "smoke:package": "node scripts/package-smoke.mjs",
     "test:e2e": "bun run build && playwright test",
     "test:e2e:built": "playwright test",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.e2e.json",
     "verify:built-fixtures": "node scripts/verify-built-fixtures.mjs",
-    "verify:fixtures": "node scripts/verify-fixtures.mjs"
+    "verify:fixtures": "node scripts/verify-fixtures.mjs",
+    "test:army": "bun run build && npx e2e run",
+    "test:army:built": "npx e2e run"
   },
   "keywords": [
     "diff",
@@ -73,14 +75,17 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@biomejs/biome": "^2.4.13",
-    "@playwright/test": "^1.61.1",
+    "@e2e-dev/web": "0.11.2",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.2.4",
     "@types/express": "^5.0.3",
     "@types/node": "^24.9.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.1.0",
+    "e2e": "0.16.0",
     "oxlint": "^1.62.0",
+    "playwright": "1.63.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"

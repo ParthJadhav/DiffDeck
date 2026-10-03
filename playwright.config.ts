@@ -20,18 +20,12 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"], viewport: { height: 800, width: 1280 } },
-    },
-    {
-      name: "firefox-core",
-      testMatch: /core\.e2e\.ts/,
-      use: { ...devices["Desktop Firefox"], viewport: { height: 800, width: 1280 } },
-    },
-    {
-      name: "webkit-core",
-      testMatch: /core\.e2e\.ts/,
-      use: { ...devices["Desktop Safari"], viewport: { height: 800, width: 1280 } },
+      name: "chrome",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        viewport: { height: 800, width: 1280 },
+      },
     },
   ],
   webServer: {

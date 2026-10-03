@@ -5,11 +5,14 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useReducer,
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
+import { focusTextEnd } from "../lib/keyboard.js";
 import {
   FileDiff,
   UnresolvedFile,
@@ -191,19 +194,21 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     if (fileDiff == null) return;
     const target = getHunkTargets(fileDiff)[0];
     if (target == null) return;
-    onAnnotationsChange(path, (current) => {
-      if (
-        current.some(
-          (annotation) =>
-            annotation.side === target.side &&
-            annotation.lineNumber === target.line &&
-            annotation.metadata.kind === "comment-form",
-        )
-      ) {
-        return current;
-      }
-      return [...current, createCommentAnnotation(target.side, target.line)];
-    });
+    flushSync(() =>
+      onAnnotationsChange(path, (current) => {
+        if (
+          current.some(
+            (annotation) =>
+              annotation.side === target.side &&
+              annotation.lineNumber === target.line &&
+              annotation.metadata.kind === "comment-form",
+          )
+        ) {
+          return current;
+        }
+        return [...current, createCommentAnnotation(target.side, target.line)];
+      }),
+    );
   });
 
   useEffect(() => {
@@ -411,6 +416,22 @@ const FileDiffSection = memo(function FileDiffSection(props: FileDiffSectionProp
 });
 
 function FileDiffSectionContent(props: FileDiffSectionProps) {
+  const previousForms = useRef(new Set<string>());
+  useLayoutEffect(() => {
+    const forms = props.commentAnnotations
+      .filter((annotation) => annotation.metadata.kind === "comment-form")
+      .map((annotation) => annotation.metadata.id);
+    const opened = forms.find((id) => !previousForms.current.has(id));
+    previousForms.current = new Set(forms);
+    if (opened == null) return;
+    // Pierre attaches shadow-DOM slots in its own layout effect, after the
+    // annotation child's effect. Focus from this parent once that slot exists.
+    focusTextEnd(
+      document.querySelector<HTMLTextAreaElement>(
+        `[data-comment-id="${CSS.escape(opened)}"] textarea`,
+      ),
+    );
+  }, [props.commentAnnotations]);
   return <FileDiffSectionView {...useFileDiffSectionModel(props)} />;
 }
 

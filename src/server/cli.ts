@@ -61,11 +61,14 @@ async function main(): Promise<void> {
   const buildSession = () => buildSessionForMode(whitespaceMode);
   const session = buildSession();
   let watchFingerprint = createHash("sha256").update(session.rawDiff).digest("hex");
+  let watchGeneration = 0;
   const poll = async () => {
+    const generation = watchGeneration;
     const rawDiff = await getRawDiffAsync(
       repoRoot,
       withWhitespaceMode(options.diffArgs, whitespaceMode),
     );
+    if (generation !== watchGeneration) return null;
     const nextFingerprint = createHash("sha256").update(rawDiff).digest("hex");
     if (nextFingerprint === watchFingerprint) return null;
     const nextSession = buildDiffSessionFromRawDiff(
@@ -85,6 +88,7 @@ async function main(): Promise<void> {
       initialSession: session,
       getWhitespaceMode: () => whitespaceMode,
       onRefresh: (nextSession) => {
+        watchGeneration += 1;
         watchFingerprint = createHash("sha256").update(nextSession.rawDiff).digest("hex");
       },
       poll,

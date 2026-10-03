@@ -54,7 +54,7 @@ export const CommentAnnotationView = memo(function CommentAnnotationView({
     const previousKind = previousKindRef.current;
     previousKindRef.current = kind;
     if (kind === "comment-form") {
-      focusTextEnd(textareaRef.current);
+      if (document.activeElement !== textareaRef.current) focusTextEnd(textareaRef.current);
       return;
     }
     // Saving or cancelling an edit hands the keyboard back to the shortcut
