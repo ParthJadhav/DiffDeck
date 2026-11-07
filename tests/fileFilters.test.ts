@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { filterDiffFiles, isDependencyPath } from "../src/client/lib/fileFilters.js";
-import { emptyReviewFilters } from "../src/client/lib/reviewSession.js";
+import {
+  emptyReviewFilters,
+  filterDiffFiles,
+  isDependencyPath,
+} from "../src/client/lib/fileFilters.js";
+
 import type { DiffFileSummary } from "../src/server/protocol.js";
 
 const files: DiffFileSummary[] = [

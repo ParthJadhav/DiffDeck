@@ -16,12 +16,12 @@ import {
   type ReviewAnnotation,
   type FileOrder,
   type FileViewMode,
-  type ReviewFilters,
   type ReviewMode,
   type ReviewSurface,
   type ReviewSessionSnapshot,
   type ReviewSessionState,
 } from "../lib/reviewSession.js";
+import type { ReviewFilters } from "../lib/fileFilters.js";
 
 export interface UseReviewSessionResult {
   state: ReviewSessionState;

@@ -1,6 +1,8 @@
 import type { AnnotationSide } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { CommentExportRecord } from "./commentExport.js";
+import { emptyReviewFilters, sanitizeReviewFilters, type ReviewFilters } from "./fileFilters.js";
+import { sanitizeStringArray, sortedStrings } from "./strings.js";
 
 export const REVIEW_SESSION_VERSION = 5;
 
@@ -22,20 +24,6 @@ export interface ReviewAnnotation {
   side: AnnotationSide;
   lineNumber: number;
   metadata: ReviewAnnotationMetadata;
-}
-
-export interface ReviewFilters {
-  binary: boolean;
-  conflicts: boolean;
-  dependency: boolean;
-  extensions: string[];
-  changeSizes: string[];
-  hideDeleted: boolean;
-  hideGenerated: boolean;
-  hideLock: boolean;
-  hideViewed: boolean;
-  path: string;
-  statuses: string[];
 }
 
 export interface ReviewSessionFile {
@@ -68,20 +56,6 @@ export interface ReviewSessionState {
   version: typeof REVIEW_SESSION_VERSION;
   viewedPaths: string[];
 }
-
-export const emptyReviewFilters: ReviewFilters = {
-  binary: false,
-  conflicts: false,
-  dependency: false,
-  extensions: [],
-  changeSizes: [],
-  hideDeleted: false,
-  hideGenerated: false,
-  hideLock: false,
-  hideViewed: false,
-  path: "",
-  statuses: [],
-};
 
 export function createReviewSessionIdentity(snapshot: ReviewSessionSnapshot): string {
   const source = JSON.stringify([snapshot.repoRoot, snapshot.diffArgs]);
@@ -149,7 +123,7 @@ export function parseReviewSession(
           ? candidate.fileOrder
           : "path",
       fileViewMode: candidate.fileViewMode === "list" ? "list" : "tree",
-      filters: sanitizeFilters(candidate.filters),
+      filters: sanitizeReviewFilters(candidate.filters),
       identity: candidate.identity,
       reviewMode: candidate.reviewMode === "focus" ? "focus" : "all",
       reviewSurface: candidate.reviewSurface === "accessible" ? "accessible" : "rich",
@@ -468,20 +442,6 @@ function uniqueExistingPaths(
   return sortedStrings(new Set(values.filter((path) => paths.has(path))));
 }
 
-function sanitizeStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? sortedStrings(new Set(value.filter((item): item is string => typeof item === "string")))
-    : [];
-}
-
-function sortedStrings(values: Iterable<string>): string[] {
-  const result = Array.from(values);
-  // Oxlint recommends toSorted(), but the project's current TypeScript lib
-  // target does not include ES2023 array methods. This mutates only our copy.
-  // oxlint-disable-next-line unicorn/no-array-sort
-  return result.sort((left, right) => left.localeCompare(right));
-}
-
 function sanitizeStringRecord(value: unknown): Record<string, string> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
@@ -530,22 +490,4 @@ function sanitizeCommentExports(value: unknown): CommentExportRecord[] {
       Array.isArray(candidate.contextLines)
     );
   });
-}
-
-function sanitizeFilters(value: unknown): ReviewFilters {
-  if (value == null || typeof value !== "object") return { ...emptyReviewFilters };
-  const candidate = value as Partial<ReviewFilters>;
-  return {
-    binary: candidate.binary === true,
-    conflicts: candidate.conflicts === true,
-    dependency: candidate.dependency === true,
-    extensions: sanitizeStringArray(candidate.extensions),
-    changeSizes: sanitizeStringArray(candidate.changeSizes),
-    hideDeleted: candidate.hideDeleted === true,
-    hideGenerated: candidate.hideGenerated === true,
-    hideLock: candidate.hideLock === true,
-    hideViewed: candidate.hideViewed === true,
-    path: typeof candidate.path === "string" ? candidate.path : "",
-    statuses: sanitizeStringArray(candidate.statuses),
-  };
 }

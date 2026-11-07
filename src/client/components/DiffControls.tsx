@@ -27,6 +27,7 @@ import {
 import { anchoredPanelPlacement, type PanelSide } from "../lib/anchoredPanel.js";
 import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
+import { onAppEvent } from "../lib/appEvents.js";
 import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffWhitespaceMode } from "../../server/protocol.js";
 import { Button } from "./ui/button.js";
@@ -304,11 +305,7 @@ export function DiffControls(props: DiffControlsProps) {
     return () => window.clearTimeout(timer);
   }, [open, panelMounted]);
 
-  useEffect(() => {
-    const openSettings = () => setOpen(true);
-    window.addEventListener("diffdeck:open-settings", openSettings);
-    return () => window.removeEventListener("diffdeck:open-settings", openSettings);
-  }, []);
+  useEffect(() => onAppEvent("open-settings", () => setOpen(true)), []);
 
   useEffect(() => {
     if (!open || !panelMounted) return;

@@ -25,9 +25,10 @@ import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js
 import { api } from "../lib/api.js";
 import {
   focusRenderedReviewNote,
+  retryUntilRendered,
   scrollToRenderedDiffLine,
-  type NavigateLineDetail,
 } from "../lib/diffDom.js";
+import { emitAppEvent, onAppEvent, type LineLocation } from "../lib/appEvents.js";
 import { readDiffLocation } from "../lib/deepLink.js";
 import { getHunkTargets } from "../lib/hunkNavigation.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
@@ -58,8 +59,6 @@ const AccessiblePatchView = lazy(async () => {
 });
 
 const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
-const LINE_NAVIGATION_RETRY_ATTEMPTS = 160;
-const LINE_NAVIGATION_RETRY_MS = 50;
 
 export interface DiffWorkspaceProps {
   annotationsByFile: Readonly<Record<string, CommentAnnotation[]>>;
@@ -138,58 +137,30 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
   } = props;
 
   useEffect(() => {
-    let navigationGeneration = 0;
-    let timer = 0;
-    const navigate = (event: Event) => {
-      const detail = (event as CustomEvent<NavigateLineDetail>).detail;
-      const generation = ++navigationGeneration;
-      let attempts = 0;
-      const tryScroll = () => {
-        if (generation !== navigationGeneration) return;
-        if (scrollToRenderedDiffLine(detail)) return;
-        attempts += 1;
-        if (attempts < LINE_NAVIGATION_RETRY_ATTEMPTS) {
-          timer = window.setTimeout(tryScroll, LINE_NAVIGATION_RETRY_MS);
-        }
-      };
-      window.requestAnimationFrame(tryScroll);
-    };
-    window.addEventListener("diffdeck:navigate-line", navigate);
+    let cancelPending = () => {};
+    const unsubscribe = onAppEvent("navigate-line", (location) => {
+      cancelPending();
+      cancelPending = retryUntilRendered(() => scrollToRenderedDiffLine(location));
+    });
     return () => {
-      navigationGeneration += 1;
-      window.clearTimeout(timer);
-      window.removeEventListener("diffdeck:navigate-line", navigate);
+      cancelPending();
+      unsubscribe();
     };
   }, []);
 
   useEffect(() => {
-    let generation = 0;
-    let timer = 0;
-    const focusNote = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string; path: string; scope: "file" | "line" }>)
-        .detail;
-      const requestGeneration = ++generation;
-      let attempts = 0;
-      const tryFocus = () => {
-        if (requestGeneration !== generation) return;
-        if (focusRenderedReviewNote(detail)) return;
-        attempts += 1;
-        if (attempts < LINE_NAVIGATION_RETRY_ATTEMPTS) {
-          timer = window.setTimeout(tryFocus, LINE_NAVIGATION_RETRY_MS);
-        }
-      };
-      window.requestAnimationFrame(tryFocus);
-    };
-    window.addEventListener("diffdeck:focus-note", focusNote);
+    let cancelPending = () => {};
+    const unsubscribe = onAppEvent("focus-note", (note) => {
+      cancelPending();
+      cancelPending = retryUntilRendered(() => focusRenderedReviewNote(note));
+    });
     return () => {
-      generation += 1;
-      window.clearTimeout(timer);
-      window.removeEventListener("diffdeck:focus-note", focusNote);
+      cancelPending();
+      unsubscribe();
     };
   }, []);
 
-  const handleShortcutComment = useEffectEvent((event: Event) => {
-    const path = (event as CustomEvent<string>).detail;
+  const handleShortcutComment = useEffectEvent((path: string) => {
     const fileDiff = fileDiffs[path];
     if (fileDiff == null) return;
     const target = getHunkTargets(fileDiff)[0];
@@ -211,10 +182,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     );
   });
 
-  useEffect(() => {
-    window.addEventListener("diffdeck:add-comment", handleShortcutComment);
-    return () => window.removeEventListener("diffdeck:add-comment", handleShortcutComment);
-  }, []);
+  useEffect(() => onAppEvent("add-comment", handleShortcutComment), []);
 
   const diffOptions = useMemo(
     () => ({
@@ -614,7 +582,7 @@ function useFileDiffSectionModel({
         line: location.line,
         path: filePath,
         side: location.side,
-      } satisfies NavigateLineDetail;
+      } satisfies LineLocation;
       window.requestAnimationFrame(() => {
         scrollToRenderedDiffLine(detail, { source: "render" });
       });
@@ -656,11 +624,11 @@ function useFileDiffSectionModel({
       const side: AnnotationSide =
         (range.endSide ?? range.side) === "deletions" ? "deletions" : "additions";
       addCommentAtLine(side, Math.max(range.start, range.end));
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:line-selected", {
-          detail: { line: Math.max(range.start, range.end), path: filePath, side },
-        }),
-      );
+      emitAppEvent("line-selected", {
+        line: Math.max(range.start, range.end),
+        path: filePath,
+        side,
+      });
     },
     [addCommentAtLine, diffOptions, filePath, onSelectedLinesChange],
   );

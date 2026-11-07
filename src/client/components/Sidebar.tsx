@@ -9,16 +9,15 @@ import { flushSync } from "react-dom";
 import { FolderTree, List, RefreshCw } from "lucide-react";
 import { buildHeader, describeDiffScope } from "../lib/diff.js";
 import { cn } from "../lib/cn.js";
-import type { FileOrder, FileViewMode, ReviewFilters } from "../lib/reviewSession.js";
-import { emptyReviewFilters } from "../lib/reviewSession.js";
+import type { FileOrder, FileViewMode } from "../lib/reviewSession.js";
+import { countActiveFilters, emptyReviewFilters, type ReviewFilters } from "../lib/fileFilters.js";
 import type { DiffFileSummary } from "../../server/protocol.js";
 import { FILE_SEARCH_INPUT_ID, FileList } from "./FileList.js";
-import { countActiveFilters, ReviewFiltersBar } from "./ReviewFiltersBar.js";
+import { ReviewFiltersBar } from "./ReviewFiltersBar.js";
 import { Button } from "./ui/button.js";
+import { onAppEvent } from "../lib/appEvents.js";
 
 type SidebarTab = "files" | "notes";
-
-export const FOCUS_FILE_SEARCH_EVENT = "diffdeck:focus-file-search";
 
 export interface SidebarProps {
   diffArgs: string[];
@@ -102,8 +101,7 @@ export function Sidebar({
     };
     // On mount the Files tab is already showing; no state flush needed.
     if (focusSearchOnMount) document.getElementById(FILE_SEARCH_INPUT_ID)?.focus();
-    window.addEventListener(FOCUS_FILE_SEARCH_EVENT, focusSearch);
-    return () => window.removeEventListener(FOCUS_FILE_SEARCH_EVENT, focusSearch);
+    return onAppEvent("focus-file-search", focusSearch);
   }, [focusSearchOnMount]);
 
   const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {

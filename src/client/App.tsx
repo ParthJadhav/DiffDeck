@@ -3,7 +3,7 @@ import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import { Toaster, toast } from "sonner";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { Accessibility, ArrowLeft, Files } from "lucide-react";
-import { FOCUS_FILE_SEARCH_EVENT, Sidebar, type SidebarProps } from "./components/Sidebar.js";
+import { Sidebar, type SidebarProps } from "./components/Sidebar.js";
 import { DiffWorkspace, type DiffWorkspaceProps } from "./components/DiffWorkspace.js";
 import { DiffControls, type DiffControlsProps } from "./components/DiffControls.js";
 import { CommandMenu } from "./components/CommandMenu.js";
@@ -21,14 +21,15 @@ import { useWatchEvents } from "./hooks/useWatchEvents.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useMediaQuery } from "./hooks/useMediaQuery.js";
 import { highlighterLangs, themeOptions } from "./lib/constants.js";
-import { filterDiffFiles } from "./lib/fileFilters.js";
+import { emptyReviewFilters, filterDiffFiles } from "./lib/fileFilters.js";
 import { buildDiffDeepLink, buildSelectedFileUrl, readDiffLocation } from "./lib/deepLink.js";
 import { getHunkNavigation, type HunkTarget } from "./lib/hunkNavigation.js";
+import { emitAppEvent, onAppEvent } from "./lib/appEvents.js";
 import { getReviewNavigation } from "./lib/reviewNavigation.js";
 import { orderDiffFiles } from "./lib/fileOrder.js";
 import { cn } from "./lib/cn.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
-import { emptyReviewFilters, type ReviewSessionSnapshot } from "./lib/reviewSession.js";
+import type { ReviewSessionSnapshot } from "./lib/reviewSession.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "./lib/uiTypes.js";
 import type { DiffWhitespaceMode, SessionPayload } from "../server/protocol.js";
 import { workerFactory } from "./workerFactory.js";
@@ -293,22 +294,19 @@ function useDiffDeckSessionModel({
     window.history.replaceState(null, "", nextHref);
   }, [selectedPath]);
 
-  useEffect(() => {
-    const updateLine = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ line: number; path: string; side: HunkTarget["side"] }>
-      ).detail;
-      if (detail.path !== selectedPath) return;
-      setSelectedLocation({ line: detail.line, path: detail.path, side: detail.side });
-      window.history.replaceState(
-        null,
-        "",
-        buildDiffDeepLink(window.location.href, detail.path, detail),
-      );
-    };
-    window.addEventListener("diffdeck:line-selected", updateLine);
-    return () => window.removeEventListener("diffdeck:line-selected", updateLine);
-  }, [selectedPath]);
+  useEffect(
+    () =>
+      onAppEvent("line-selected", (location) => {
+        if (location.path !== selectedPath) return;
+        setSelectedLocation(location);
+        window.history.replaceState(
+          null,
+          "",
+          buildDiffDeepLink(window.location.href, location.path, location),
+        );
+      }),
+    [selectedPath],
+  );
 
   const handleTreeSelection = useCallback(
     (path: string | null) => {
@@ -343,21 +341,13 @@ function useDiffDeckSessionModel({
           "",
           buildDiffDeepLink(window.location.href, comment.filePath, target),
         );
-        window.dispatchEvent(
-          new CustomEvent("diffdeck:navigate-line", {
-            detail: { ...target, path: comment.filePath },
-          }),
-        );
+        emitAppEvent("navigate-line", target);
       }
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:focus-note", {
-          detail: {
-            id: comment.id,
-            path: comment.filePath,
-            scope: scope === "line" && status === "open" ? "line" : "file",
-          },
-        }),
-      );
+      emitAppEvent("focus-note", {
+        id: comment.id,
+        path: comment.filePath,
+        scope: scope === "line" && status === "open" ? "line" : "file",
+      });
     },
     [handleTreeSelection, reviewSession, visibleFiles],
   );
@@ -404,11 +394,7 @@ function useDiffDeckSessionModel({
         "",
         buildDiffDeepLink(window.location.href, selectedPath, target),
       );
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:navigate-line", {
-          detail: { line: target.line, path: selectedPath, side: target.side },
-        }),
-      );
+      emitAppEvent("navigate-line", { line: target.line, path: selectedPath, side: target.side });
     },
     [collapsedFilePaths, handleCollapsedFileChange, selectedPath],
   );
@@ -732,11 +718,11 @@ function DiffDeckLayout({
       setNarrowSearchRequested(true);
       setNarrowNavigationOpen(true);
     };
-    window.addEventListener("diffdeck:focus-note", showReview);
-    window.addEventListener(FOCUS_FILE_SEARCH_EVENT, showFileSearch);
+    const unsubscribeNote = onAppEvent("focus-note", showReview);
+    const unsubscribeSearch = onAppEvent("focus-file-search", showFileSearch);
     return () => {
-      window.removeEventListener("diffdeck:focus-note", showReview);
-      window.removeEventListener(FOCUS_FILE_SEARCH_EVENT, showFileSearch);
+      unsubscribeNote();
+      unsubscribeSearch();
     };
   }, [isDesktopLayout]);
 
