@@ -62,6 +62,10 @@ export function getCliInformationalOutput(argv: readonly string[]): string | nul
   return null;
 }
 
+export function isDebugEnvironment(): boolean {
+  return process.env.DIFFDECK_DEBUG === "1" || process.env.DIFFDECK_DEBUG === "true";
+}
+
 export function parseCliArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
     repo: process.cwd(),
@@ -69,7 +73,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
     portExplicit: false,
     host: "127.0.0.1",
     openBrowser: true,
-    debug: process.env.DIFFDECK_DEBUG === "1" || process.env.DIFFDECK_DEBUG === "true",
+    debug: isDebugEnvironment(),
     diffArgs: [],
     structural: false,
     watch: false,

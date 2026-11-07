@@ -3,13 +3,10 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import {
-  createDiffSessionStore,
-  normalizeEditorLine,
-  startServer,
-  type RunningServer,
-} from "../src/server/server.js";
+import { normalizeEditorLine, startServer, type RunningServer } from "../src/server/server.js";
 import { buildDiffSession } from "../src/server/git.js";
+import { createGitDiffSource, type DiffSource } from "../src/server/diffSource.js";
+import type { DiffWhitespaceMode } from "../src/server/protocol.js";
 import type { DiffSession } from "../src/server/types.js";
 
 function createSession(name: string): DiffSession {
@@ -34,31 +31,25 @@ function createSession(name: string): DiffSession {
   };
 }
 
-describe("createDiffSessionStore", () => {
-  test("reuses the provided initial session until refresh is requested", () => {
-    const initialSession = createSession("initial");
-    const refreshedSession = createSession("refreshed");
-    let refreshCount = 0;
+/** A source that serves fixed sessions; individual operations can be overridden. */
+function fakeSource(initial: DiffSession, overrides: Partial<DiffSource> = {}): DiffSource {
+  let mode: DiffWhitespaceMode = "normal";
+  return {
+    current: () => initial,
+    whitespaceMode: () => mode,
+    refresh: () => initial,
+    setWhitespaceMode: (next) => {
+      mode = next;
+      return initial;
+    },
+    poll: async () => null,
+    ...overrides,
+  };
+}
 
-    const store = createDiffSessionStore({
-      initialSession,
-      refresh: () => {
-        refreshCount += 1;
-        return refreshedSession;
-      },
-    });
-
-    expect(store.current()).toBe(initialSession);
-    expect(refreshCount).toBe(0);
-    expect(store.current()).toBe(initialSession);
-    expect(refreshCount).toBe(0);
-
-    expect(store.refresh()).toBe(refreshedSession);
-    expect(refreshCount).toBe(1);
-    expect(store.current()).toBe(refreshedSession);
-    expect(refreshCount).toBe(1);
-  });
-});
+function gitSource(repo: string, diffArgs: string[] = []): DiffSource {
+  return createGitDiffSource({ repoRoot: repo, currentDirectory: repo, diffArgs, debug: false });
+}
 
 const servers: RunningServer[] = [];
 const repos: string[] = [];
@@ -69,17 +60,18 @@ afterEach(async () => {
 
 describe("server capabilities", () => {
   test("validates and applies server-owned whitespace preferences", async () => {
-    let mode = "normal" as const | "ignore-all";
+    let mode: DiffWhitespaceMode = "normal";
+    let session = createSession(mode);
     const server = await startServer(
-      {
-        initialSession: createSession("normal"),
-        getWhitespaceMode: () => mode,
-        refresh: () => createSession(mode),
+      fakeSource(session, {
+        current: () => session,
+        whitespaceMode: () => mode,
         setWhitespaceMode: (nextMode) => {
-          mode = nextMode === "ignore-all" ? nextMode : "normal";
-          return createSession(mode);
+          mode = nextMode;
+          session = createSession(mode);
+          return session;
         },
-      },
+      }),
       0,
       "127.0.0.1",
     );
@@ -107,22 +99,8 @@ describe("server capabilities", () => {
     });
   });
 
-  test("reports when a static diff source cannot change whitespace modes", async () => {
-    const server = await startServer(createSession("static"), 0, "127.0.0.1");
-    servers.push(server);
-    const response = await fetch(`${server.url}api/preferences`, {
-      body: JSON.stringify({ whitespaceMode: "ignore-all" }),
-      headers: { "content-type": "application/json" },
-      method: "POST",
-    });
-    expect(response.status).toBe(501);
-    expect(await response.json()).toEqual({
-      error: "This diff source cannot rebuild whitespace modes.",
-    });
-  });
-
   test("requires the configured token for JSON and terminal routes", async () => {
-    const server = await startServer(createSession("secure"), 0, "127.0.0.1", {
+    const server = await startServer(fakeSource(createSession("secure")), 0, "127.0.0.1", {
       capabilityToken: "secret",
     });
     servers.push(server);
@@ -160,8 +138,7 @@ describe("server capabilities", () => {
 
   test("validates every read and packet route without exposing unauthorized data", async () => {
     const repo = createWritableRepo();
-    const session = buildDiffSession(repo, repo, []);
-    const server = await startServer(session, 0, "127.0.0.1");
+    const server = await startServer(gitSource(repo), 0, "127.0.0.1");
     servers.push(server);
 
     expect((await fetch(`${server.url}api/file-diff`)).status).toBe(400);
@@ -210,13 +187,11 @@ describe("server capabilities", () => {
 
   test("bounds request bodies and reports preference rebuild failures", async () => {
     const server = await startServer(
-      {
-        initialSession: createSession("preference-error"),
-        refresh: () => createSession("preference-error"),
+      fakeSource(createSession("preference-error"), {
         setWhitespaceMode: () => {
           throw "rebuild failed";
         },
-      },
+      }),
       0,
       "127.0.0.1",
     );
@@ -261,7 +236,7 @@ describe("server capabilities", () => {
       gitStatus: "modified",
       path: "../secret.txt",
     });
-    const server = await startServer(session, 0, "127.0.0.1", { editor: "true" });
+    const server = await startServer(fakeSource(session), 0, "127.0.0.1", { editor: "true" });
     servers.push(server);
     for (const path of ["escape.txt", "../secret.txt"]) {
       const response = await fetch(`${server.url}api/editor`, {
@@ -281,7 +256,9 @@ describe("server capabilities", () => {
       ).status,
     ).toBe(404);
 
-    const invalidServer = await startServer(session, 0, "127.0.0.1", { editor: "   " });
+    const invalidServer = await startServer(fakeSource(session), 0, "127.0.0.1", {
+      editor: "   ",
+    });
     servers.push(invalidServer);
     expect(
       (
@@ -296,13 +273,17 @@ describe("server capabilities", () => {
 
   test("keeps writes absent by default and rejects stale snapshots in write mode", async () => {
     const repo = createWritableRepo();
-    let buildCount = 0;
-    const build = () => {
-      buildCount += 1;
-      return buildDiffSession(repo, repo, []);
+    const git = gitSource(repo);
+    let refreshCount = 0;
+    const source: DiffSource = {
+      ...git,
+      refresh: () => {
+        refreshCount += 1;
+        return git.refresh();
+      },
     };
-    const initial = build();
-    const readOnly = await startServer(initial, 0, "127.0.0.1");
+    const initial = source.current();
+    const readOnly = await startServer(source, 0, "127.0.0.1");
     servers.push(readOnly);
     expect(
       (
@@ -313,12 +294,7 @@ describe("server capabilities", () => {
         })
       ).status,
     ).toBe(403);
-    const writable = await startServer(
-      { initialSession: initial, refresh: build },
-      0,
-      "127.0.0.1",
-      { write: true },
-    );
+    const writable = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(writable);
     expect(
       (
@@ -335,23 +311,18 @@ describe("server capabilities", () => {
       body: JSON.stringify({ action: "stage", path: "a.txt", snapshotId: initial.snapshotId }),
     });
     expect(success.status).toBe(200);
-    expect(buildCount).toBe(3);
+    expect(refreshCount).toBe(2);
     expect((await fetch(`${writable.url}api/session`)).status).toBe(200);
-    expect(buildCount).toBe(3);
+    expect(refreshCount).toBe(2);
     expect(runGit(repo, ["diff", "--cached", "--name-only"]).trim()).toBe("a.txt");
   });
 
   test("rejects unseen disk changes before stage or revert without watch mode", async () => {
     for (const action of ["stage", "revert"]) {
       const repo = createWritableRepo();
-      const build = () => buildDiffSession(repo, repo, []);
-      const initial = build();
-      const server = await startServer(
-        { initialSession: initial, refresh: build },
-        0,
-        "127.0.0.1",
-        { write: true },
-      );
+      const source = gitSource(repo, []);
+      const initial = source.current();
+      const server = await startServer(source, 0, "127.0.0.1", { write: true });
       servers.push(server);
       writeFileSync(join(repo, "a.txt"), "unreviewed contents\n");
       const response = await fetch(`${server.url}api/write`, {
@@ -369,11 +340,9 @@ describe("server capabilities", () => {
     const repo = createWritableRepo();
     runGit(repo, ["restore", "a.txt"]);
     runGit(repo, ["mv", "a.txt", "renamed.txt"]);
-    const build = () => buildDiffSession(repo, repo, ["--cached"]);
-    const initial = build();
-    const server = await startServer({ initialSession: initial, refresh: build }, 0, "127.0.0.1", {
-      write: true,
-    });
+    const source = gitSource(repo, ["--cached"]);
+    const initial = source.current();
+    const server = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(server);
     const response = await fetch(`${server.url}api/write`, {
       method: "POST",
@@ -391,14 +360,9 @@ describe("server capabilities", () => {
 
   test("rejects unauthorized write shapes and stale hunk boundaries", async () => {
     const repo = createWritableRepo();
-    const build = () => buildDiffSession(repo, repo, []);
-    const initial = build();
-    const writable = await startServer(
-      { initialSession: initial, refresh: build },
-      0,
-      "127.0.0.1",
-      { write: true },
-    );
+    const source = gitSource(repo, []);
+    const initial = source.current();
+    const writable = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(writable);
     for (const payload of [
       { action: "delete", path: "a.txt", snapshotId: initial.snapshotId },
@@ -441,14 +405,9 @@ describe("server capabilities", () => {
 
   test("stages exactly one selected hunk", async () => {
     const repo = createMultiHunkRepo();
-    const build = () => buildDiffSession(repo, repo, []);
-    const initial = build();
-    const writable = await startServer(
-      { initialSession: initial, refresh: build },
-      0,
-      "127.0.0.1",
-      { write: true },
-    );
+    const source = gitSource(repo, []);
+    const initial = source.current();
+    const writable = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(writable);
     const response = await fetch(`${writable.url}api/write`, {
       method: "POST",
@@ -468,14 +427,9 @@ describe("server capabilities", () => {
   test("reverts cached whole-file changes from both the index and worktree", async () => {
     const repo = createWritableRepo();
     runGit(repo, ["add", "a.txt"]);
-    const build = () => buildDiffSession(repo, repo, ["--cached"]);
-    const initial = build();
-    const writable = await startServer(
-      { initialSession: initial, refresh: build },
-      0,
-      "127.0.0.1",
-      { write: true },
-    );
+    const source = gitSource(repo, ["--cached"]);
+    const initial = source.current();
+    const writable = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(writable);
 
     const sessionResponse = await fetch(`${writable.url}api/session`);
@@ -500,14 +454,9 @@ describe("server capabilities", () => {
   test("reverts exactly one displayed cached hunk from the index and worktree", async () => {
     const repo = createMultiHunkRepo();
     runGit(repo, ["add", "many.txt"]);
-    const build = () => buildDiffSession(repo, repo, ["--cached"]);
-    const initial = build();
-    const writable = await startServer(
-      { initialSession: initial, refresh: build },
-      0,
-      "127.0.0.1",
-      { write: true },
-    );
+    const source = gitSource(repo, ["--cached"]);
+    const initial = source.current();
+    const writable = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(writable);
 
     const response = await fetch(`${writable.url}api/write`, {
@@ -532,8 +481,9 @@ describe("server capabilities", () => {
     const repo = createWritableRepo();
     runGit(repo, ["add", "a.txt"]);
     runGit(repo, ["commit", "-qm", "second"]);
-    const initial = buildDiffSession(repo, repo, ["HEAD~1", "HEAD"]);
-    const writable = await startServer(initial, 0, "127.0.0.1", { write: true });
+    const source = gitSource(repo, ["HEAD~1", "HEAD"]);
+    const initial = source.current();
+    const writable = await startServer(source, 0, "127.0.0.1", { write: true });
     servers.push(writable);
 
     const sessionResponse = await fetch(`${writable.url}api/session`);
@@ -557,8 +507,7 @@ describe("server capabilities", () => {
 
   test("serves only authorized image sides with MIME metadata", async () => {
     const repo = createImageRepo();
-    const session = buildDiffSession(repo, repo, []);
-    const server = await startServer(session, 0, "127.0.0.1");
+    const server = await startServer(gitSource(repo), 0, "127.0.0.1");
     servers.push(server);
     const response = await fetch(`${server.url}api/image?path=logo.png&side=new`);
     expect(response.status).toBe(200);
@@ -573,8 +522,7 @@ describe("server capabilities", () => {
 
   test("resolves image blobs from a symmetric revision range", async () => {
     const { repo, before, after } = createImageRangeRepo();
-    const session = buildDiffSession(repo, repo, ["HEAD~1...HEAD"]);
-    const server = await startServer(session, 0, "127.0.0.1");
+    const server = await startServer(gitSource(repo, ["HEAD~1...HEAD"]), 0, "127.0.0.1");
     servers.push(server);
 
     const oldResponse = await fetch(`${server.url}api/image?path=logo.png&side=old`);
@@ -589,8 +537,7 @@ describe("server capabilities", () => {
 
   test("reports unavailable structural and editor executables", async () => {
     const repo = createWritableRepo();
-    const session = buildDiffSession(repo, repo, []);
-    const server = await startServer(session, 0, "127.0.0.1", {
+    const server = await startServer(gitSource(repo), 0, "127.0.0.1", {
       editor: "definitely-missing-diffdeck-editor",
       structural: true,
       structuralCommand: "definitely-missing-difft",
@@ -621,8 +568,8 @@ describe("server capabilities", () => {
     const command = join(repo, "fake-difft");
     writeFileSync(command, "#!/bin/sh\necho structural-success\n");
     chmodSync(command, 0o755);
-    const session = buildDiffSession(repo, repo, []);
-    const successServer = await startServer(session, 0, "127.0.0.1", {
+    const source = gitSource(repo);
+    const successServer = await startServer(source, 0, "127.0.0.1", {
       structural: true,
       structuralCommand: command,
     });
@@ -632,7 +579,7 @@ describe("server capabilities", () => {
     expect(await success.json()).toMatchObject({ output: "structural-success\n" });
 
     writeFileSync(command, "#!/bin/sh\nsleep 1\n");
-    const timeoutServer = await startServer(session, 0, "127.0.0.1", {
+    const timeoutServer = await startServer(source, 0, "127.0.0.1", {
       structural: true,
       structuralCommand: command,
       structuralTimeoutMs: 20,
@@ -644,14 +591,15 @@ describe("server capabilities", () => {
   test("watch polling installs an asynchronously prepared session without rebuilding it", async () => {
     const initial = createSession("watch-initial");
     const refreshed = createSession("watch-refreshed");
+    let current = initial;
     let pendingSession: DiffSession | null = null;
     let activePolls = 0;
     let maxActivePolls = 0;
     let pollCount = 0;
     let refreshCount = 0;
     const server = await startServer(
-      {
-        initialSession: initial,
+      fakeSource(initial, {
+        current: () => current,
         poll: async () => {
           pollCount += 1;
           activePolls += 1;
@@ -659,6 +607,7 @@ describe("server capabilities", () => {
           await Bun.sleep(30);
           const next = pendingSession;
           pendingSession = null;
+          if (next != null) current = next;
           activePolls -= 1;
           return next;
         },
@@ -666,7 +615,7 @@ describe("server capabilities", () => {
           refreshCount += 1;
           return refreshed;
         },
-      },
+      }),
       0,
       "127.0.0.1",
       { watch: true, watchInterval: 20 },
@@ -683,65 +632,61 @@ describe("server capabilities", () => {
       snapshotId: refreshed.snapshotId,
     });
   });
+});
 
-  for (const operation of ["write", "refresh", "preferences"] as const) {
-    test(`discards a delayed watch result superseded by ${operation}`, async () => {
+describe("git diff source", () => {
+  for (const operation of ["refresh", "preferences"] as const) {
+    test(`discards a watch poll superseded by ${operation}`, async () => {
       const repo = createWritableRepo();
-      const build = () => buildDiffSession(repo, repo, []);
-      const initial = build();
-      const started = Promise.withResolvers<void>();
-      const delayed = Promise.withResolvers<DiffSession | null>();
-      let firstPoll = true;
-      const server = await startServer(
-        {
-          initialSession: initial,
-          refresh: build,
-          setWhitespaceMode: build,
-          poll: async () => {
-            if (!firstPoll) return null;
-            firstPoll = false;
-            started.resolve();
-            return delayed.promise;
-          },
-        },
-        0,
-        "127.0.0.1",
-        { write: true, watch: true, watchInterval: 10 },
-      );
-      servers.push(server);
-      await started.promise;
-      let latest: { snapshotId: string; files?: unknown[] };
-      if (operation === "write") {
-        const response = await fetch(`${server.url}api/write`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "stage", path: "a.txt", snapshotId: initial.snapshotId }),
-        });
-        expect(response.status).toBe(200);
-        latest = await response.json();
-        expect(runGit(repo, ["diff", "--cached", "--", "a.txt"])).toContain("+new");
-      } else {
-        writeFileSync(join(repo, "a.txt"), "newer\n");
-        latest = await (
-          await fetch(
-            `${server.url}api/${operation === "refresh" ? "session?refresh=1" : "preferences"}`,
-            operation === "refresh"
-              ? {}
-              : {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ whitespaceMode: "normal" }),
-                },
-          )
-        ).json();
-      }
+      const source = gitSource(repo);
+      const initial = source.current();
+      writeFileSync(join(repo, "a.txt"), "polled\n");
+      const poll = source.poll();
+      writeFileSync(join(repo, "a.txt"), "newer\n");
+      const latest =
+        operation === "refresh" ? source.refresh() : source.setWhitespaceMode("ignore-eol");
       expect(latest.snapshotId).not.toBe(initial.snapshotId);
-      delayed.resolve(initial);
-      const displayed = await (await fetch(`${server.url}api/session`)).json();
-      expect(displayed.snapshotId).toBe(latest.snapshotId);
-      if (operation === "write") expect(displayed.files).toHaveLength(0);
+      expect(await poll).toBeNull();
+      expect(source.current()).toBe(latest);
     });
   }
+
+  test("a poll publishes a changed diff once and ignores an unchanged one", async () => {
+    const repo = createWritableRepo();
+    const source = gitSource(repo);
+    expect(await source.poll()).toBeNull();
+    writeFileSync(join(repo, "a.txt"), "changed again\n");
+    const next = await source.poll();
+    expect(next?.snapshotId).not.toBeUndefined();
+    expect(source.current()).toBe(next!);
+    expect(await source.poll()).toBeNull();
+  });
+
+  test("hunk writes count hunks on the diff shown in the active whitespace mode", async () => {
+    const repo = createMultiHunkRepo();
+    const lines = readFileSync(join(repo, "many.txt"), "utf8").split("\n");
+    lines[14] = "line 15   ";
+    writeFileSync(join(repo, "many.txt"), lines.join("\n"));
+    const source = gitSource(repo);
+    source.setWhitespaceMode("ignore-eol");
+    const server = await startServer(source, 0, "127.0.0.1", { write: true });
+    servers.push(server);
+    const response = await fetch(`${server.url}api/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "stage",
+        hunkIndex: 1,
+        path: "many.txt",
+        snapshotId: source.current().snapshotId,
+      }),
+    });
+    expect(response.status).toBe(200);
+    const staged = runGit(repo, ["diff", "--cached"]);
+    expect(staged).toContain("+changed near end");
+    expect(staged).not.toContain("line 15");
+    expect(staged).not.toContain("changed near start");
+  });
 });
 
 function createWritableRepo(): string {

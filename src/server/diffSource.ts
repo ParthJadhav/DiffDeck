@@ -1,71 +1,61 @@
-import type { FileDiffMetadata } from "@pierre/diffs";
-import type { DiffFileSummary, DiffSession } from "./types.js";
-import type { DiffWhitespaceMode } from "./whitespace.js";
+import { buildDiffSessionFromRawDiff, getRawDiff, getRawDiffAsync } from "./git.js";
+import type { DiffWhitespaceMode } from "./protocol.js";
+import type { DiffSession } from "./types.js";
 
-export type DiffSessionSource =
-  | DiffSession
-  | (() => DiffSession)
-  | {
-      initialSession: DiffSession;
-      getWhitespaceMode?: () => DiffWhitespaceMode;
-      onRefresh?: (session: DiffSession) => void;
-      poll?: () => Promise<DiffSession | null>;
-      refresh: () => DiffSession;
-      setWhitespaceMode?: (mode: DiffWhitespaceMode) => DiffSession;
-    };
-
+/**
+ * The diff under review and how to rebuild it. Every rebuild that becomes
+ * current supersedes any poll that started before it, so a slow background
+ * read can never replace a newer write, refresh, or whitespace change.
+ */
 export interface DiffSource {
   current(): DiffSession;
-  file(path: string): DiffFileSummary | null;
-  fileDiff(path: string): FileDiffMetadata | null;
-  getWhitespaceMode(): DiffWhitespaceMode;
-  replace(next: DiffSession): DiffSession;
+  whitespaceMode(): DiffWhitespaceMode;
   refresh(): DiffSession;
-  setWhitespaceMode(mode: DiffWhitespaceMode): DiffSession | null;
-  unresolvedFile(path: string): string | null;
+  setWhitespaceMode(mode: DiffWhitespaceMode): DiffSession;
+  /** Resolves to the new current session when the repository's diff changed, else null. */
+  poll(): Promise<DiffSession | null>;
 }
 
-export function createDiffSource(sessionSource: DiffSessionSource): DiffSource {
-  let session: DiffSession;
-  let refreshSession: () => DiffSession;
-  let getWhitespaceMode: () => DiffWhitespaceMode = () => "normal";
-  let setWhitespaceMode: ((mode: DiffWhitespaceMode) => DiffSession) | undefined;
-  let onRefresh: (session: DiffSession) => void = () => undefined;
+export interface GitDiffSourceOptions {
+  repoRoot: string;
+  currentDirectory: string;
+  diffArgs: string[];
+  debug: boolean;
+}
 
-  if (typeof sessionSource === "function") {
-    session = sessionSource();
-    refreshSession = sessionSource;
-  } else if ("initialSession" in sessionSource) {
-    session = sessionSource.initialSession;
-    refreshSession = sessionSource.refresh;
-    getWhitespaceMode = sessionSource.getWhitespaceMode ?? getWhitespaceMode;
-    setWhitespaceMode = sessionSource.setWhitespaceMode;
-    onRefresh = sessionSource.onRefresh ?? onRefresh;
-  } else {
-    session = sessionSource;
-    refreshSession = () => session;
-  }
+export function createGitDiffSource({
+  repoRoot,
+  currentDirectory,
+  diffArgs,
+  debug,
+}: GitDiffSourceOptions): DiffSource {
+  let whitespaceMode: DiffWhitespaceMode = "normal";
+  let generation = 0;
+  const build = (rawDiff: string) =>
+    buildDiffSessionFromRawDiff(repoRoot, currentDirectory, diffArgs, rawDiff, { debug });
+  let session = build(getRawDiff(repoRoot, diffArgs, whitespaceMode));
+  const install = (next: DiffSession) => {
+    generation += 1;
+    session = next;
+    return next;
+  };
 
   return {
     current: () => session,
-    file: (path) => session.files.find((file) => file.path === path) ?? null,
-    fileDiff: (path) => session.fileDiffs.get(path) ?? null,
-    getWhitespaceMode,
-    replace: (next) => {
-      session = next;
-      return session;
-    },
-    refresh: () => {
-      session = refreshSession();
-      onRefresh(session);
-      return session;
-    },
+    whitespaceMode: () => whitespaceMode,
+    refresh: () => install(build(getRawDiff(repoRoot, diffArgs, whitespaceMode))),
     setWhitespaceMode: (mode) => {
-      if (setWhitespaceMode == null) return null;
-      session = setWhitespaceMode(mode);
-      onRefresh(session);
-      return session;
+      const next = build(getRawDiff(repoRoot, diffArgs, mode));
+      whitespaceMode = mode;
+      return install(next);
     },
-    unresolvedFile: (path) => session.unresolvedFiles.get(path) ?? null,
+    poll: async () => {
+      const started = generation;
+      const rawDiff = await getRawDiffAsync(repoRoot, diffArgs, whitespaceMode);
+      if (generation !== started || rawDiff === session.rawDiff) return null;
+      const previousSnapshotId = session.snapshotId;
+      const next = install(build(rawDiff));
+      return next.snapshotId === previousSnapshotId ? null : next;
+    },
   };
 }

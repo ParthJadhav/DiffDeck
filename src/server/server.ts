@@ -1,24 +1,31 @@
 import express from "express";
 import { createServer as createHttpServer } from "node:http";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { extname, isAbsolute, join, relative, resolve as resolvePath } from "node:path";
+import { extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AddressInfo } from "node:net";
-import type { DiffSession } from "./types.js";
 import { buildCacheKey } from "./cacheKey.js";
-import { createDiffSource, type DiffSessionSource, type DiffSource } from "./diffSource.js";
-import { isDiffWhitespaceMode } from "./whitespace.js";
-
-export type { DiffSessionSource } from "./diffSource.js";
+import type { DiffSource } from "./diffSource.js";
+import {
+  isDiffWhitespaceMode,
+  type ImageSidePayload,
+  type SessionPayload,
+  type SnapshotEvent,
+  type StructuralPayload,
+  type UnresolvedFilePayload,
+  type WriteAction,
+  type WriteResult,
+} from "./protocol.js";
+import {
+  applyWriteAction,
+  getAvailableWriteActions,
+  getImageMime,
+  readImageSide,
+  resolveAuthorizedPath,
+} from "./repositoryActions.js";
+import type { DiffSession } from "./types.js";
 
 export interface RunningServer {
   url: string;
@@ -41,10 +48,11 @@ export interface ServerOptions {
   write?: boolean;
 }
 
-type WriteAction = "stage" | "unstage" | "revert";
-type WriteDiffMode = "worktree" | "cached" | "readonly";
-
-function serializeSession(sessionStore: DiffSource, session: DiffSession, options: ServerOptions) {
+function serializeSession(
+  source: DiffSource,
+  session: DiffSession,
+  options: ServerOptions,
+): SessionPayload {
   const writeActions =
     options.write === true ? getAvailableWriteActions(session.diffArgs) : ([] as WriteAction[]);
   return {
@@ -54,7 +62,7 @@ function serializeSession(sessionStore: DiffSource, session: DiffSession, option
     diffArgs: session.diffArgs,
     files: session.files,
     preferences: {
-      whitespaceMode: sessionStore.getWhitespaceMode(),
+      whitespaceMode: source.whitespaceMode(),
     },
     capabilities: {
       editor: options.editor != null,
@@ -70,8 +78,8 @@ function formatServerError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function createDiffSessionStore(sessionSource: DiffSessionSource): DiffSource {
-  return createDiffSource(sessionSource);
+function findFile(session: DiffSession, path: unknown) {
+  return typeof path === "string" ? session.files.find((file) => file.path === path) : undefined;
 }
 
 function getClientDir(): string {
@@ -86,7 +94,7 @@ function getIndexHtml(clientDir: string): string {
 }
 
 export async function startServer(
-  sessionSource: DiffSessionSource,
+  source: DiffSource,
   port: number,
   host: string,
   options: ServerOptions = {},
@@ -94,12 +102,6 @@ export async function startServer(
   const clientDir = getClientDir();
   const indexHtml = getIndexHtml(clientDir);
   const app = express();
-  const sessionStore = createDiffSessionStore(sessionSource);
-  let refreshGeneration = 0;
-  const refreshSession = () => {
-    refreshGeneration += 1;
-    return sessionStore.refresh();
-  };
   const eventClients = new Set<express.Response>();
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: false, limit: "1mb" }));
@@ -118,8 +120,8 @@ export async function startServer(
   });
 
   app.get("/api/session", (request, response) => {
-    const session = request.query.refresh === "1" ? refreshSession() : sessionStore.current();
-    response.json(serializeSession(sessionStore, session, options));
+    const session = request.query.refresh === "1" ? source.refresh() : source.current();
+    response.json(serializeSession(source, session, options));
   });
 
   app.post("/api/preferences", (request, response) => {
@@ -128,13 +130,8 @@ export async function startServer(
       return;
     }
     try {
-      refreshGeneration += 1;
-      const session = sessionStore.setWhitespaceMode(request.body.whitespaceMode);
-      if (session == null) {
-        response.status(501).json({ error: "This diff source cannot rebuild whitespace modes." });
-        return;
-      }
-      response.json(serializeSession(sessionStore, session, options));
+      const session = source.setWhitespaceMode(request.body.whitespaceMode);
+      response.json(serializeSession(source, session, options));
     } catch (error) {
       response.status(500).json({ error: formatServerError(error) });
     }
@@ -146,7 +143,7 @@ export async function startServer(
     response.setHeader("connection", "keep-alive");
     response.flushHeaders();
     response.write(
-      `event: ready\ndata: ${JSON.stringify({ snapshotId: sessionStore.current().snapshotId })}\n\n`,
+      `event: ready\ndata: ${JSON.stringify({ snapshotId: source.current().snapshotId })}\n\n`,
     );
     eventClients.add(response);
     request.on("close", () => eventClients.delete(response));
@@ -187,7 +184,7 @@ export async function startServer(
       return;
     }
 
-    const fileDiff = sessionStore.fileDiff(path);
+    const fileDiff = source.current().fileDiffs.get(path);
     if (fileDiff == null) {
       response.status(404).json({ error: `No diff found for ${path}.` });
       return;
@@ -203,7 +200,7 @@ export async function startServer(
       return;
     }
 
-    const contents = sessionStore.unresolvedFile(path);
+    const contents = source.current().unresolvedFiles.get(path);
     if (contents == null) {
       response.status(404).json({ error: `No unresolved file found for ${path}.` });
       return;
@@ -213,7 +210,7 @@ export async function startServer(
       name: path,
       contents,
       cacheKey: buildCacheKey("unresolved", path, contents),
-    });
+    } satisfies UnresolvedFilePayload);
   });
 
   app.get("/api/image", (request, response) => {
@@ -223,14 +220,14 @@ export async function startServer(
       response.status(400).json({ error: "A valid path and side are required." });
       return;
     }
-    const session = sessionStore.current();
-    const file = sessionStore.file(path);
+    const session = source.current();
+    const file = findFile(session, path);
     if (file == null || file.isBinary !== true) {
       response.status(404).json({ error: "No authorized binary diff was found for that path." });
       return;
     }
     const blobPath = side === "old" ? (file.prevPath ?? file.path) : file.path;
-    const contents = readImageSide(session, blobPath, side);
+    const contents = readImageSide(session, source.whitespaceMode(), blobPath, side);
     if (contents == null) {
       response.status(404).json({ error: `${side} image side is unavailable.` });
       return;
@@ -241,7 +238,7 @@ export async function startServer(
       mimeType: getImageMime(path),
       path,
       side,
-    });
+    } satisfies ImageSidePayload);
   });
 
   app.post("/api/editor", (request, response) => {
@@ -251,8 +248,8 @@ export async function startServer(
     }
     const path = typeof request.body?.path === "string" ? request.body.path : "";
     const line = normalizeEditorLine(request.body?.line);
-    const session = sessionStore.current();
-    if (sessionStore.file(path) == null) {
+    const session = source.current();
+    if (findFile(session, path) == null) {
       response.status(404).json({ error: "The requested diff path is not authorized." });
       return;
     }
@@ -288,8 +285,8 @@ export async function startServer(
       return;
     }
     const path = request.query.path;
-    const session = sessionStore.current();
-    if (typeof path !== "string" || sessionStore.file(path) == null) {
+    const session = source.current();
+    if (typeof path !== "string" || findFile(session, path) == null) {
       response.status(404).json({ error: "The requested diff path is not authorized." });
       return;
     }
@@ -322,7 +319,7 @@ export async function startServer(
       response.status(504).json({ error: "Structural diff timed out or failed." });
       return;
     }
-    response.json({ output: result.stdout.slice(0, 512 * 1024) });
+    response.json({ output: result.stdout.slice(0, 512 * 1024) } satisfies StructuralPayload);
   });
 
   app.post("/api/write", (request, response) => {
@@ -330,7 +327,7 @@ export async function startServer(
       response.status(403).json({ error: "Write mode is disabled. Restart with --write." });
       return;
     }
-    const session = sessionStore.current();
+    const session = source.current();
     const action = request.body?.action;
     const path = request.body?.path;
     const snapshotId = request.body?.snapshotId;
@@ -344,7 +341,7 @@ export async function startServer(
     // A non-watching session can still change on disk after the reviewer
     // opened it. Rebuild immediately before writing so the displayed snapshot
     // cannot authorize staging or discarding newer, unseen contents.
-    const freshSession = refreshSession();
+    const freshSession = source.refresh();
     if (snapshotId !== freshSession.snapshotId) {
       response
         .status(409)
@@ -353,20 +350,20 @@ export async function startServer(
     }
     if (
       typeof path !== "string" ||
-      sessionStore.file(path) == null ||
+      findFile(freshSession, path) == null ||
       (action !== "stage" && action !== "unstage" && action !== "revert")
     ) {
       response.status(400).json({ error: "Invalid write action or path." });
       return;
     }
-    const result = applyWriteAction(freshSession, action, path, hunkIndex);
+    const result = applyWriteAction(freshSession, source.whitespaceMode(), action, path, hunkIndex);
     if (!result.ok) {
       response.status(422).json({ error: result.error });
       return;
     }
-    const refreshed = refreshSession();
-    notifyClients(eventClients, "snapshot", { snapshotId: refreshed.snapshotId, reason: "write" });
-    response.json({ ok: true, snapshotId: refreshed.snapshotId });
+    const refreshed = source.refresh();
+    notifySnapshot(eventClients, { snapshotId: refreshed.snapshotId, reason: "write" });
+    response.json({ ok: true, snapshotId: refreshed.snapshotId } satisfies WriteResult);
   });
 
   app.use(express.static(clientDir));
@@ -396,25 +393,12 @@ export async function startServer(
     const poll = async () => {
       if (polling) return;
       polling = true;
-      const generation = refreshGeneration;
       try {
-        const next =
-          typeof sessionSource === "object" &&
-          "initialSession" in sessionSource &&
-          sessionSource.poll != null
-            ? await sessionSource.poll()
-            : sessionStore.refresh();
-        // A pending async poll may have read the repository before a write,
-        // explicit refresh, or preference rebuild. Never publish it afterwards.
-        if (generation !== refreshGeneration) return;
-        if (next != null && next.snapshotId !== sessionStore.current().snapshotId) {
-          sessionStore.replace(next);
-          notifyClients(eventClients, "snapshot", { snapshotId: next.snapshotId, reason: "watch" });
-        }
+        const next = await source.poll();
+        if (next != null)
+          notifySnapshot(eventClients, { snapshotId: next.snapshotId, reason: "watch" });
       } catch (error) {
-        notifyClients(eventClients, "error", {
-          message: error instanceof Error ? error.message : String(error),
-        });
+        notifyClients(eventClients, "error", { message: formatServerError(error) });
       } finally {
         polling = false;
       }
@@ -451,196 +435,6 @@ function notifyClients(
   }
 }
 
-function resolveAuthorizedPath(repoRoot: string, path: string): string | null {
-  const root = resolvePath(repoRoot);
-  const target = resolvePath(root, path);
-  if (!isWithinRoot(root, target)) return null;
-  if (!existsSync(target)) return target;
-
-  try {
-    return isWithinRoot(realpathSync(root), realpathSync(target)) ? target : null;
-  } catch {
-    return null;
-  }
-}
-
-function isWithinRoot(root: string, target: string): boolean {
-  const pathFromRoot = relative(root, target);
-  return pathFromRoot === "" || (!pathFromRoot.startsWith("..") && !isAbsolute(pathFromRoot));
-}
-
-function readImageSide(session: DiffSession, path: string, side: "old" | "new"): Buffer | null {
-  const diff = buildDisplayedFileDiff(session, path);
-  if (!diff.ok) return null;
-
-  const indexLine = diff.stdout.match(/^index\s+([0-9a-f]+)\.\.([0-9a-f]+)(?:\s|$)/im);
-  const objectId = side === "old" ? indexLine?.[1] : indexLine?.[2];
-  if (objectId == null) return null;
-
-  if (/^0+$/.test(objectId)) {
-    if (side === "old") return null;
-    const target = resolveAuthorizedPath(session.repoRoot, path);
-    return target != null && existsSync(target) ? readFileSync(target) : null;
-  }
-
-  const result = spawnSync("git", ["-C", session.repoRoot, "cat-file", "blob", objectId], {
-    encoding: "buffer",
-    maxBuffer: 20 * 1024 * 1024,
-  });
-  if (result.status === 0 && Buffer.isBuffer(result.stdout)) return result.stdout;
-  if (side === "old") return null;
-
-  // Binary patches include a computed object ID for worktree content even
-  // though that blob is not necessarily present in the object database.
-  const target = resolveAuthorizedPath(session.repoRoot, path);
-  return target != null && existsSync(target) ? readFileSync(target) : null;
-}
-
-function getDisplayedDiffArguments(diffArgs: readonly string[], path: string): string[] {
-  const separator = diffArgs.indexOf("--");
-  const diffOptions = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
-  return [...diffOptions, "--", path];
-}
-
-function buildDisplayedFileDiff(
-  session: DiffSession,
-  path: string,
-): { ok: true; stdout: string } | { ok: false; error: string } {
-  const result = spawnSync(
-    "git",
-    [
-      "-C",
-      session.repoRoot,
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "--find-renames",
-      "--submodule=diff",
-      "--binary",
-      "--no-color",
-      "--no-ext-diff",
-      ...getDisplayedDiffArguments(session.diffArgs, path),
-    ],
-    { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
-  );
-  return result.status === 0
-    ? { ok: true, stdout: typeof result.stdout === "string" ? result.stdout : "" }
-    : { ok: false, error: result.stderr || "Unable to build the displayed file diff." };
-}
-
-function getImageMime(path: string): string {
-  const mimeByExtension: Record<string, string> = {
-    ".avif": "image/avif",
-    ".bmp": "image/bmp",
-    ".gif": "image/gif",
-    ".ico": "image/x-icon",
-    ".jpeg": "image/jpeg",
-    ".jpg": "image/jpeg",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".webp": "image/webp",
-  };
-  return mimeByExtension[extname(path).toLowerCase()] ?? "application/octet-stream";
-}
-
-function applyWriteAction(
-  session: DiffSession,
-  action: WriteAction,
-  path: string,
-  hunkIndex: unknown,
-): { ok: true } | { ok: false; error: string } {
-  const mode = getWriteDiffMode(session.diffArgs);
-  if (!getAvailableWriteActions(session.diffArgs).includes(action)) {
-    return {
-      ok: false,
-      error:
-        mode === "readonly"
-          ? "Write actions are unavailable for commit and range diffs."
-          : `${capitalize(action)} is unavailable in ${mode === "cached" ? "a cached" : "a working-tree"} review.`,
-    };
-  }
-
-  const hasHunkIndex = hunkIndex !== undefined;
-  if (
-    hasHunkIndex &&
-    (typeof hunkIndex !== "number" || !Number.isInteger(hunkIndex) || hunkIndex < 0)
-  ) {
-    return { ok: false, error: "The requested hunk index is invalid." };
-  }
-
-  if (typeof hunkIndex === "number") {
-    const diff = buildDisplayedFileDiff(session, path);
-    if (!diff.ok) return { ok: false, error: diff.error };
-    const patch = selectHunkPatch(diff.stdout, hunkIndex);
-    if (patch == null) return { ok: false, error: "The requested hunk no longer exists." };
-    const applyArgs = ["-C", session.repoRoot, "apply"];
-    if (mode === "worktree" && action === "stage") applyArgs.push("--cached");
-    if (mode === "cached" && action === "unstage") applyArgs.push("--cached", "--reverse");
-    if (mode === "cached" && action === "revert") applyArgs.push("--index", "--reverse");
-    if (mode === "worktree" && action === "revert") applyArgs.push("--reverse");
-    const applied = spawnSync("git", applyArgs, { input: patch, encoding: "utf8" });
-    return applied.status === 0
-      ? { ok: true }
-      : { ok: false, error: applied.stderr || "Git rejected the selected hunk." };
-  }
-  // Renamed files occupy two index entries; acting on only the new path
-  // would leave the old path's staged deletion dangling.
-  const summary = session.files.find((file) => file.path === path);
-  const paths =
-    summary?.prevPath != null && summary.prevPath !== path ? [path, summary.prevPath] : [path];
-  const args =
-    action === "stage"
-      ? ["add", "--", ...paths]
-      : action === "unstage"
-        ? ["restore", "--staged", "--", ...paths]
-        : mode === "cached"
-          ? ["restore", "--source=HEAD", "--staged", "--worktree", "--", ...paths]
-          : ["restore", "--worktree", "--", path];
-  const result = spawnSync("git", ["-C", session.repoRoot, ...args], {
-    encoding: "utf8",
-  });
-  return result.status === 0
-    ? { ok: true }
-    : { ok: false, error: result.stderr || `Unable to ${action} ${path}.` };
-}
-
-function getAvailableWriteActions(diffArgs: readonly string[]): WriteAction[] {
-  const mode = getWriteDiffMode(diffArgs);
-  if (mode === "worktree") return ["stage", "revert"];
-  if (mode === "cached") return ["unstage", "revert"];
-  return [];
-}
-
-function getWriteDiffMode(diffArgs: readonly string[]): WriteDiffMode {
-  const separator = diffArgs.indexOf("--");
-  const diffOptions = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
-  const positional = diffOptions.filter((argument) => !argument.startsWith("-"));
-  const incompatible = diffOptions.some(
-    (argument) =>
-      argument === "-R" ||
-      argument === "--reverse" ||
-      argument === "--no-index" ||
-      argument === "--merge-base" ||
-      argument === "--output" ||
-      argument.startsWith("--output="),
-  );
-  if (positional.length > 0 || incompatible) return "readonly";
-  return diffOptions.includes("--cached") || diffOptions.includes("--staged")
-    ? "cached"
-    : "worktree";
-}
-
-function capitalize(value: string): string {
-  return value.length === 0 ? value : `${value[0]!.toUpperCase()}${value.slice(1)}`;
-}
-
-function selectHunkPatch(diff: string, hunkIndex: number): string | null {
-  const lines = diff.replace(/\r\n/g, "\n").split("\n");
-  const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
-  if (firstHunk === -1) return null;
-  const starts = lines.flatMap((line, index) => (line.startsWith("@@") ? [index] : []));
-  const start = starts[hunkIndex];
-  if (start == null) return null;
-  const end = starts[hunkIndex + 1] ?? lines.length;
-  return `${[...lines.slice(0, firstHunk), ...lines.slice(start, end)].join("\n")}\n`;
+function notifySnapshot(clients: ReadonlySet<express.Response>, event: SnapshotEvent): void {
+  notifyClients(clients, "snapshot", event);
 }
