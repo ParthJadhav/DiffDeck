@@ -713,6 +713,31 @@ describe("git diff source", () => {
     expect(staged).not.toContain("line 15");
     expect(staged).not.toContain("changed near start");
   });
+
+  test("stages a hunk whose context hides a whitespace change in the active mode", async () => {
+    const repo = createMultiHunkRepo();
+    const lines = readFileSync(join(repo, "many.txt"), "utf8").split("\n");
+    lines[26] = "line 27   ";
+    writeFileSync(join(repo, "many.txt"), lines.join("\n"));
+    const source = gitSource(repo);
+    source.setWhitespaceMode("ignore-eol");
+    const server = await startServer(source, 0, "127.0.0.1", { write: true });
+    servers.push(server);
+    const response = await fetch(`${server.url}api/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "stage",
+        hunkIndex: 1,
+        path: "many.txt",
+        snapshotId: source.current().snapshotId,
+      }),
+    });
+    expect(response.status).toBe(200);
+    const staged = runGit(repo, ["diff", "--cached"]);
+    expect(staged).toContain("+changed near end");
+    expect(staged).not.toContain("changed near start");
+  });
 });
 
 function createWritableRepo(): string {

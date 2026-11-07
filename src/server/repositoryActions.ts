@@ -83,15 +83,12 @@ export function applyWriteAction(
   }
 
   if (typeof hunkIndex === "number") {
-    // The client counts hunks on the diff it displays, so select from the
-    // same diff, including its whitespace mode.
-    let diff: string;
+    let patch: string | null;
     try {
-      diff = getFileDiff(session.repoRoot, session.diffArgs, path, whitespaceMode);
+      patch = selectHunkPatch(session, path, whitespaceMode, hunkIndex);
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
-    const patch = selectHunkPatch(diff, hunkIndex);
     if (patch == null) return { ok: false, error: "The requested hunk no longer exists." };
     const applyArgs = ["-C", session.repoRoot, "apply"];
     if (mode === "worktree" && action === "stage") applyArgs.push("--cached");
@@ -126,15 +123,57 @@ function capitalize(value: string): string {
   return value.length === 0 ? value : `${value[0]!.toUpperCase()}${value.slice(1)}`;
 }
 
-function selectHunkPatch(diff: string, hunkIndex: number): string | null {
+type ParsedPatch = {
+  header: string[];
+  hunks: Array<{ lines: string[]; oldStart: number; oldEnd: number }>;
+};
+
+function parsePatch(diff: string): ParsedPatch {
   const lines = diff.replace(/\r\n/g, "\n").split("\n");
+  if (lines.at(-1) === "") lines.pop();
   const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
-  if (firstHunk === -1) return null;
-  const starts = lines.flatMap((line, index) => (line.startsWith("@@") ? [index] : []));
-  const start = starts[hunkIndex];
-  if (start == null) return null;
-  const end = starts[hunkIndex + 1] ?? lines.length;
-  return `${[...lines.slice(0, firstHunk), ...lines.slice(start, end)].join("\n")}\n`;
+  if (firstHunk === -1) return { header: lines, hunks: [] };
+  const hunks: ParsedPatch["hunks"] = [];
+  for (let index = firstHunk; index < lines.length; index += 1) {
+    const match = lines[index]!.match(/^@@ -(\d+)(?:,(\d+))? /);
+    if (match != null) {
+      const oldStart = Number(match[1]);
+      const oldCount = match[2] == null ? 1 : Number(match[2]);
+      hunks.push({ lines: [], oldStart, oldEnd: oldStart + Math.max(oldCount, 1) });
+    }
+    hunks.at(-1)!.lines.push(lines[index]!);
+  }
+  return { header: lines.slice(0, firstHunk), hunks };
+}
+
+/**
+ * The patch for the hunk the reviewer clicked. The client counts hunks on the
+ * diff it displays, which may ignore whitespace; that filtered diff cannot be
+ * applied when its context hides a whitespace change. So the hunk is located
+ * on the displayed diff and the patch is taken from the exact diff's hunks
+ * covering the same original lines.
+ */
+function selectHunkPatch(
+  session: DiffSession,
+  path: string,
+  whitespaceMode: DiffWhitespaceMode,
+  hunkIndex: number,
+): string | null {
+  const exact = parsePatch(getFileDiff(session.repoRoot, session.diffArgs, path, "normal"));
+  const displayed =
+    whitespaceMode === "normal"
+      ? exact
+      : parsePatch(getFileDiff(session.repoRoot, session.diffArgs, path, whitespaceMode));
+  const target = displayed.hunks[hunkIndex];
+  if (target == null) return null;
+  const hunks =
+    displayed === exact
+      ? [target]
+      : exact.hunks.filter(
+          (hunk) => hunk.oldStart < target.oldEnd && target.oldStart < hunk.oldEnd,
+        );
+  if (hunks.length === 0) return null;
+  return `${[...exact.header, ...hunks.flatMap((hunk) => hunk.lines)].join("\n")}\n`;
 }
 
 export function readImageSide(
