@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { normalizeEditorLine, startServer, type RunningServer } from "../src/server/server.js";
+import { startServer, type RunningServer } from "../src/server/server.js";
 import { buildDiffSession } from "../src/server/git.js";
 import { createGitDiffSource, type DiffSource } from "../src/server/diffSource.js";
 import type { DiffWhitespaceMode } from "../src/server/protocol.js";
@@ -555,12 +563,30 @@ describe("server capabilities", () => {
     ).toBe(501);
   });
 
-  test("normalizes editor line targets before launch", () => {
-    expect(normalizeEditorLine(7.9)).toBe(7);
-    expect(normalizeEditorLine(0)).toBe(1);
-    expect(normalizeEditorLine(-4)).toBe(1);
-    expect(normalizeEditorLine("invalid")).toBe(1);
-    expect(normalizeEditorLine(undefined)).toBe(1);
+  test("launches the editor at the requested file and a normalized line", async () => {
+    const repo = createWritableRepo();
+    const record = join(repo, "editor-args.txt");
+    const editor = join(repo, "fake-editor");
+    writeFileSync(editor, `#!/bin/sh\necho "$@" >> "${record}"\n`);
+    chmodSync(editor, 0o755);
+    const server = await startServer(gitSource(repo), 0, "127.0.0.1", { editor });
+    servers.push(server);
+    const launched: string[] = [];
+    for (const line of [7.9, 0, "invalid"]) {
+      const response = await fetch(`${server.url}api/editor`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path: "a.txt", line }),
+      });
+      expect(response.status).toBe(202);
+      for (let attempt = 0; attempt < 100 && launched.length === 0; attempt += 1) {
+        await Bun.sleep(20);
+        const output = existsSync(record) ? readFileSync(record, "utf8").trim() : "";
+        if (output.length > 0) launched.push(...output.split("\n"));
+      }
+      rmSync(record, { force: true });
+      expect(launched.pop()).toBe(`${join(repo, "a.txt")}:${line === 7.9 ? 7 : 1}`);
+    }
   });
 
   test("bounds structural adapter execution and returns successful output", async () => {

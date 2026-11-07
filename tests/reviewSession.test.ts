@@ -3,13 +3,14 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import {
   createReviewSession,
   createReviewSessionIdentity,
+  deleteReviewComment,
   parseReviewSession,
   reconcileAnnotationsToComments,
   reconcileCommentAnchors,
   reconcileReviewSession,
+  saveReviewComment,
   serializeReviewSession,
-  updateReviewAnnotations,
-  updateReviewPathSet,
+  updateReviewComment,
   type ReviewSessionSnapshot,
 } from "../src/client/lib/reviewSession.js";
 
@@ -162,22 +163,43 @@ describe("ReviewSession", () => {
     });
   });
 
-  test("updates path sets and annotation maps without needless object churn", () => {
-    expect(updateReviewPathSet(["z.ts"], "a.ts", true)).toEqual(["a.ts", "z.ts"]);
-    expect(updateReviewPathSet(["a.ts", "z.ts"], "a.ts", false)).toEqual(["z.ts"]);
+  test("saving, editing and deleting a note keeps the diff annotation and packet record in step", () => {
+    const state = createReviewSession(first);
+    state.annotationsByFile["src/a.ts"] = [
+      {
+        side: "additions",
+        lineNumber: 1,
+        metadata: { id: "src/a.ts", body: "draft", kind: "comment-form" },
+      },
+    ];
+    const saved = saveReviewComment(state, { ...comment("src/a.ts"), scope: "line" });
+    expect(saved.commentExports).toHaveLength(1);
+    expect(saved.annotationsByFile["src/a.ts"]).toEqual([
+      expect.objectContaining({
+        lineNumber: 1,
+        metadata: expect.objectContaining({ body: "Review this", kind: "comment" }),
+      }),
+    ]);
 
-    const annotation = {
-      side: "additions" as const,
-      lineNumber: 1,
-      metadata: { id: "note", body: "Body", kind: "comment" as const },
-    };
-    const original = { "src/a.ts": [annotation] };
-    expect(updateReviewAnnotations(original, "src/a.ts", (current) => current)).toBe(original);
-    expect(updateReviewAnnotations({}, "missing.ts", () => [])).toEqual({});
-    expect(updateReviewAnnotations(original, "src/a.ts", () => [])).toEqual({});
-    expect(updateReviewAnnotations({}, "src/a.ts", () => [annotation])).toEqual({
-      "src/a.ts": [annotation],
+    const fromAccessibleView = saveReviewComment(saved, {
+      ...comment("src/b.ts"),
+      scope: "line",
     });
+    expect(fromAccessibleView.annotationsByFile["src/b.ts"]?.[0]?.metadata.body).toBe(
+      "Review this",
+    );
+
+    const fileNote = saveReviewComment(saved, { ...comment("src/b.ts"), scope: "file" });
+    expect(fileNote.annotationsByFile["src/b.ts"]).toBeUndefined();
+    expect(fileNote.commentExports).toHaveLength(2);
+
+    const edited = updateReviewComment(saved, { ...saved.commentExports[0]!, body: "Edited" });
+    expect(edited.commentExports[0]?.body).toBe("Edited");
+    expect(edited.annotationsByFile["src/a.ts"]?.[0]?.metadata.body).toBe("Edited");
+
+    const deleted = deleteReviewComment(edited, "src/a.ts");
+    expect(deleted.commentExports).toEqual([]);
+    expect(deleted.annotationsByFile).toEqual({});
   });
 
   test("retains unchanged progress and invalidates only changed files", () => {

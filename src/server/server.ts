@@ -32,7 +32,7 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-export function normalizeEditorLine(value: unknown): number {
+function normalizeEditorLine(value: unknown): number {
   const line = Number(value ?? 1);
   return Number.isFinite(line) ? Math.max(1, Math.floor(line)) : 1;
 }
