@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Columns2, Layers3, PanelLeftClose } from "lucide-react";
-import { fetchJson } from "../../lib/api.js";
+import type { ImageSideName, ImageSidePayload } from "../../../server/protocol.js";
+import { api, ApiError } from "../../lib/api.js";
 import { cn } from "../../lib/cn.js";
 import { Button } from "../ui/button.js";
 
 type Mode = "side-by-side" | "overlay" | "swipe";
-interface ImageSide {
-  bytes: number;
-  data: string;
-  mimeType: string;
-  side: "old" | "new";
-}
+type ImageSide = ImageSidePayload;
 
 export function ImageDiff({ path }: { path: string }) {
   const [mode, setMode] = useState<Mode>("side-by-side");
@@ -217,11 +213,11 @@ function ImagePanel({
   );
 }
 
-async function loadSide(path: string, side: "old" | "new"): Promise<ImageSide | null> {
+async function loadSide(path: string, side: ImageSideName): Promise<ImageSide | null> {
   try {
-    return await fetchJson<ImageSide>(`/api/image?${new URLSearchParams({ path, side })}`);
+    return await api.imageSide(path, side);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("404")) return null;
+    if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
 }

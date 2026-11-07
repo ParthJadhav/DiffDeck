@@ -22,7 +22,7 @@ import {
 import { orderDiffFiles } from "../lib/fileOrder.js";
 import { shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
 import type { FileOrder, FileViewMode } from "../lib/reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 export const FILE_SEARCH_INPUT_ID = "diffdeck-file-search";
 const ROW_HEIGHT = 28;

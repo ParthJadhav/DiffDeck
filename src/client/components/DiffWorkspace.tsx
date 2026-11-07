@@ -22,7 +22,7 @@ import {
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
 import { AlertCircle, FileWarning, ImageOff, LoaderCircle } from "lucide-react";
 import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
-import { fetchJson } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import {
   focusRenderedReviewNote,
   scrollToRenderedDiffLine,
@@ -32,7 +32,7 @@ import { readDiffLocation } from "../lib/deepLink.js";
 import { getHunkTargets } from "../lib/hunkNavigation.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
-import type { DiffFileSummary, SessionPayload } from "../types.js";
+import type { DiffFileSummary, SessionPayload } from "../../server/protocol.js";
 import { isDependencyPath } from "../lib/fileFilters.js";
 import { Card, CardContent, CardDescription, CardHeader } from "./ui/card.js";
 import { Button } from "./ui/button.js";
@@ -581,10 +581,10 @@ function useFileDiffSectionModel({
       dispatchUnresolvedState(idleUnresolvedFileState);
       return;
     }
-    const params = new URLSearchParams({ path: file.path });
     let cancelled = false;
     dispatchUnresolvedState({ error: null, file: null, loading: true });
-    void fetchJson<FileContents>(`/api/unresolved-file?${params.toString()}`)
+    void api
+      .unresolvedFile(file.path)
       .then((contents) => {
         if (!cancelled) dispatchUnresolvedState({ error: null, file: contents, loading: false });
       })

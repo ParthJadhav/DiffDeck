@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { filterDiffFiles, isDependencyPath } from "../src/client/lib/fileFilters.js";
 import { emptyReviewFilters } from "../src/client/lib/reviewSession.js";
-import type { DiffFileSummary } from "../src/client/types.js";
+import type { DiffFileSummary } from "../src/server/protocol.js";
 
 const files: DiffFileSummary[] = [
   file("src/app.ts", "modified", 10),

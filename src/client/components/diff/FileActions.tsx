@@ -10,11 +10,10 @@ import {
   Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchWithCapability } from "../../lib/api.js";
+import { api } from "../../lib/api.js";
 import { copyTextToClipboard } from "../../lib/clipboard.js";
 import { buildDiffDeepLink, hasCapabilityToken, readDiffLocation } from "../../lib/deepLink.js";
-import { openInEditor } from "../../lib/editor.js";
-import type { SessionPayload } from "../../types.js";
+import type { SessionPayload, WriteAction } from "../../../server/protocol.js";
 import { ConfirmationDialog } from "../ui/confirmation-dialog.js";
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from "../ui/menu.js";
 import { FileCommentButton } from "./FileCommentButton.js";
@@ -90,7 +89,7 @@ export function FileActions({
     const location = readDiffLocation(window.location.href);
     const line = location.file === path ? (location.line ?? 1) : 1;
     try {
-      await openInEditor(path, line);
+      await api.openInEditor(path, line);
       toast.success(line > 1 ? `Opened ${path}:${line}` : `Opened ${path}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -104,12 +103,7 @@ export function FileActions({
     }
     setBusy(true);
     try {
-      const response = await fetchWithCapability(
-        `/api/structural?${new URLSearchParams({ path })}`,
-      );
-      const payload = (await response.json()) as { error?: string; output?: string };
-      if (!response.ok || payload.output == null)
-        throw new Error(payload.error ?? "Structural diff failed.");
+      const payload = await api.structural(path);
       onStructuralChange(payload.output);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -120,22 +114,14 @@ export function FileActions({
     }
   };
 
-  const mutate = async (action: "stage" | "unstage" | "revert") => {
+  const mutate = async (action: WriteAction) => {
     const target = hunk === "file" ? "file" : `hunk ${Number(hunk) + 1}`;
     setBusy(true);
     try {
-      const response = await fetchWithCapability("/api/write", {
-        body: JSON.stringify({
-          action,
-          hunkIndex: hunk === "file" ? undefined : Number(hunk),
-          path,
-          snapshotId,
-        }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? `Unable to ${action} ${target}.`);
+      await api.write(
+        { action, hunkIndex: hunk === "file" ? undefined : Number(hunk), path, snapshotId },
+        `Unable to ${action} ${target}.`,
+      );
       toast.success(`${pastTense(action)} ${target}.`);
       setRevertConfirmationOpen(false);
       onReload();

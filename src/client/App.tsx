@@ -30,7 +30,7 @@ import { cn } from "./lib/cn.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
 import { emptyReviewFilters, type ReviewSessionSnapshot } from "./lib/reviewSession.js";
 import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "./lib/uiTypes.js";
-import type { DiffWhitespaceMode, SessionPayload } from "./types.js";
+import type { DiffWhitespaceMode, SessionPayload } from "../server/protocol.js";
 import { workerFactory } from "./workerFactory.js";
 
 const lineDiffType = "word-alt" as const;

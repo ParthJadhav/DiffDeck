@@ -2,13 +2,13 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { Command } from "cmdk";
 import { toast } from "sonner";
 import { readDiffLocation } from "../lib/deepLink.js";
-import { openInEditor } from "../lib/editor.js";
+import { api } from "../lib/api.js";
 import { shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
 import { FOCUS_FILE_SEARCH_EVENT } from "./Sidebar.js";
 import type { HunkNavigation, HunkTarget } from "../lib/hunkNavigation.js";
 import type { ReviewNavigation } from "../lib/reviewNavigation.js";
 import type { ReviewMode, ReviewSurface } from "../lib/reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 export function CommandMenu({
   collapsedPaths,
@@ -74,7 +74,7 @@ export function CommandMenu({
     }
     const location = readDiffLocation(window.location.href);
     const line = location.file === selectedPath ? (location.line ?? 1) : 1;
-    await openInEditor(selectedPath, line);
+    await api.openInEditor(selectedPath, line);
     toast.success("Opened selected file in editor.");
   }, [editorEnabled, selectedPath]);
 

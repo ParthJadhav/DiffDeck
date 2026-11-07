@@ -1,4 +1,4 @@
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 export interface DirectoryRow {
   kind: "directory";

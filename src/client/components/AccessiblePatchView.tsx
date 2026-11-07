@@ -15,7 +15,7 @@ import { copyTextToClipboard } from "../lib/clipboard.js";
 import { buildDiffDeepLink, hasCapabilityToken, readDiffLocation } from "../lib/deepLink.js";
 import { cn } from "../lib/cn.js";
 import type { ReviewAnnotation } from "../lib/reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 import { isSubmitShortcut, shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
 import { createCommentAnnotation } from "./diff/commentAnnotationModel.js";
 import { ComposerHint } from "./diff/ComposerHint.js";

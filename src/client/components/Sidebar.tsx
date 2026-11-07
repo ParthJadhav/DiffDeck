@@ -11,7 +11,7 @@ import { buildHeader, describeDiffScope } from "../lib/diff.js";
 import { cn } from "../lib/cn.js";
 import type { FileOrder, FileViewMode, ReviewFilters } from "../lib/reviewSession.js";
 import { emptyReviewFilters } from "../lib/reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 import { FILE_SEARCH_INPUT_ID, FileList } from "./FileList.js";
 import { countActiveFilters, ReviewFiltersBar } from "./ReviewFiltersBar.js";
 import { Button } from "./ui/button.js";

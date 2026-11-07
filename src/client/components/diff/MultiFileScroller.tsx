@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SelectedLineRange } from "@pierre/diffs";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
-import type { DiffFileSummary } from "../../types.js";
+import type { DiffFileSummary } from "../../../server/protocol.js";
 import { isTextEntryEvent } from "../../lib/keyboard.js";
 import { chooseVisiblePath } from "../../lib/visiblePath.js";
 import { Card } from "../ui/card.js";

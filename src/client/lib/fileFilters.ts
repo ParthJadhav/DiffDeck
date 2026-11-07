@@ -1,4 +1,4 @@
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 import type { ReviewFilters } from "./reviewSession.js";
 
 const DEPENDENCY_NAMES = new Set([

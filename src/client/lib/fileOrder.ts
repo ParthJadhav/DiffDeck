@@ -1,7 +1,7 @@
 import { prepareFileTreeInput } from "@pierre/trees";
 import { fileTreeShapeOptions } from "./constants.js";
 import type { FileOrder } from "./reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 const statusPriority: Record<string, number> = {
   modified: 1,

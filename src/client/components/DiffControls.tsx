@@ -28,7 +28,7 @@ import { anchoredPanelPlacement, type PanelSide } from "../lib/anchoredPanel.js"
 import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
 import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
-import type { DiffWhitespaceMode } from "../types.js";
+import type { DiffWhitespaceMode } from "../../server/protocol.js";
 import { Button } from "./ui/button.js";
 import { Checkbox } from "./ui/checkbox.js";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog.js";

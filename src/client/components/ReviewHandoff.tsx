@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Braces, Check, Copy, Download, Eye, FileText, Send, Trash2, X } from "lucide-react";
 import type { CommentExportRecord } from "../lib/commentExport.js";
-import { fetchWithCapability, withCapabilityToken } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import {
   createReviewPacket,
   formatReviewPacketJson,
@@ -88,15 +88,7 @@ export function HandoffBar(props: ReviewPacketSource) {
 
   const handleSend = async () => {
     try {
-      const response = await fetchWithCapability("/api/review-packet", {
-        body: json,
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("Terminal submission failed");
-      // Consume the body so the browser does not report the completed request
-      // as aborted when the page later navigates away.
-      await response.text();
+      await api.sendReviewPacket(json);
       report("copied", "Sent review packet to the terminal");
     } catch {
       report("failed", "Unable to send the review packet to the terminal");
@@ -145,7 +137,7 @@ export function HandoffBar(props: ReviewPacketSource) {
           for agent
         </span>
       </Button>
-      <form action={withCapabilityToken("/api/review-packet/download")} method="post">
+      <form action={api.reviewPacketDownloadUrl()} method="post">
         <input type="hidden" name="packet" value={json} />
         <Button
           aria-label="Download review packet as JSON"
