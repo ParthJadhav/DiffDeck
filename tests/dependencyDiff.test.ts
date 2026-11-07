@@ -19,6 +19,20 @@ describe("dependency summaries", () => {
     ]);
   });
 
+  test("reads yarn.lock entries and leaves unparseable versions unclassified", () => {
+    const result = summarizeDependencyDiff(
+      diff(
+        "yarn.lock",
+        ['"left-pad@^1.0.0":', '  version "1.0.0"', "beta@^1.0.0:", '  version "1.0.0-beta"'],
+        ['"left-pad@^1.0.0":', '  version "1.3.0"', "beta@^1.0.0:", '  version "1.0.0-rc"'],
+      ),
+    );
+    expect(result).toEqual([
+      { name: "beta", oldVersion: "1.0.0-beta", newVersion: "1.0.0-rc", type: "changed" },
+      { name: "left-pad", oldVersion: "1.0.0", newVersion: "1.3.0", type: "upgraded" },
+    ]);
+  });
+
   test("falls back without throwing for malformed files", () => {
     expect(summarizeDependencyDiff(diff("package.json", ["{"], ["not json"]))).toEqual([]);
   });
