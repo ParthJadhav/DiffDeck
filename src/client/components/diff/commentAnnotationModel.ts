@@ -17,6 +17,10 @@ export function patchAnnotationMeta(
   );
 }
 
+export function newLineCommentId(side: AnnotationSide, lineNumber: number): string {
+  return `${side}-${lineNumber}-${Date.now()}`;
+}
+
 export function createCommentAnnotation(
   side: AnnotationSide,
   lineNumber: number,
@@ -24,10 +28,6 @@ export function createCommentAnnotation(
   return {
     side,
     lineNumber,
-    metadata: {
-      body: "",
-      id: `${side}-${lineNumber}-${Date.now()}`,
-      kind: "comment-form",
-    },
+    metadata: { body: "", id: newLineCommentId(side, lineNumber), kind: "comment-form" },
   };
 }

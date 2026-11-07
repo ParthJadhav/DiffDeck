@@ -14,10 +14,9 @@ import { buildCommentContext, type CommentExportRecord } from "../lib/commentExp
 import { copyTextToClipboard } from "../lib/clipboard.js";
 import { buildDiffDeepLink, hasCapabilityToken, readDiffLocation } from "../lib/deepLink.js";
 import { cn } from "../lib/cn.js";
-import type { ReviewAnnotation } from "../lib/reviewSession.js";
 import type { DiffFileSummary } from "../../server/protocol.js";
 import { isSubmitShortcut, shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
-import { createCommentAnnotation } from "./diff/commentAnnotationModel.js";
+import { newLineCommentId } from "./diff/commentAnnotationModel.js";
 import { ComposerHint } from "./diff/ComposerHint.js";
 import { Button } from "./ui/button.js";
 import { Textarea } from "./ui/textarea.js";
@@ -29,10 +28,6 @@ type AccessiblePatchViewProps = {
   error?: string;
   file: DiffFileSummary;
   fileDiff?: FileDiffMetadata;
-  onAnnotationsChange: (
-    path: string,
-    updater: (current: ReviewAnnotation[]) => ReviewAnnotation[],
-  ) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRetry: (path: string) => void;
   onReturnToRich: () => void;
@@ -53,7 +48,6 @@ function AccessiblePatchViewContent({
   error,
   file,
   fileDiff,
-  onAnnotationsChange,
   onCommentSaved,
   onRetry,
   onReturnToRich,
@@ -168,12 +162,6 @@ function AccessiblePatchViewContent({
     const body = composer.body.trim();
     if (body.length === 0) return;
     const lineNumber = lineForChangedRow(row);
-    const draft = createCommentAnnotation(row.side, lineNumber);
-    const saved: ReviewAnnotation = {
-      ...draft,
-      metadata: { ...draft.metadata, body, kind: "comment" },
-    };
-    onAnnotationsChange(file.path, (current) => [...current, saved]);
     onCommentSaved({
       body,
       contextLines: buildCommentContext({
@@ -183,7 +171,7 @@ function AccessiblePatchViewContent({
         unresolvedFile: null,
       }),
       filePath: file.path,
-      id: saved.metadata.id,
+      id: newLineCommentId(row.side, lineNumber),
       lineNumber,
       scope: "line",
       side: row.side,

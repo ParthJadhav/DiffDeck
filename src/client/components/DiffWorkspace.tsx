@@ -292,7 +292,6 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
           error={fileDiffErrors[selectedFile.path]}
           file={selectedFile}
           fileDiff={fileDiffs[selectedFile.path]}
-          onAnnotationsChange={onAnnotationsChange}
           onCommentSaved={onCommentSaved}
           onRetry={onRetryFileDiff}
           onReturnToRich={() => onReviewSurfaceChange("rich")}
@@ -707,16 +706,6 @@ function useFileDiffSectionModel({
     [filePath, onAnnotationsChange],
   );
 
-  const handleCommentDelete = useCallback(
-    (id: string) => {
-      onAnnotationsChange(filePath, (current) =>
-        current.filter((annotation) => annotation.metadata.id !== id),
-      );
-      onCommentDeleted(id);
-    },
-    [filePath, onAnnotationsChange, onCommentDeleted],
-  );
-
   const handleCommentBodyChange = useCallback(
     (id: string, body: string) => {
       onAnnotationsChange(filePath, (current) => {
@@ -740,13 +729,6 @@ function useFileDiffSectionModel({
       if (submittedAnnotation == null) return;
 
       const normalizedBody = body.trim().length > 0 ? body.trim() : "Needs review before merging.";
-      onAnnotationsChange(filePath, (current) =>
-        patchAnnotationMeta(current, id, {
-          body: normalizedBody,
-          kind: "comment",
-          previousBody: undefined,
-        }),
-      );
       onCommentSaved({
         body: normalizedBody,
         contextLines: buildCommentContext({
@@ -769,7 +751,6 @@ function useFileDiffSectionModel({
       file.hasMergeConflicts,
       filePath,
       fileDiff,
-      onAnnotationsChange,
       onCommentSaved,
       onSelectedLinesChange,
       unresolvedState.file,
@@ -803,7 +784,7 @@ function useFileDiffSectionModel({
         annotation={annotation as CommentAnnotation}
         onBodyChange={handleCommentBodyChange}
         onCancel={handleCommentCancel}
-        onDelete={handleCommentDelete}
+        onDelete={onCommentDeleted}
         onEdit={handleCommentEdit}
         onSubmit={handleCommentSubmit}
       />
@@ -811,9 +792,9 @@ function useFileDiffSectionModel({
     [
       handleCommentBodyChange,
       handleCommentCancel,
-      handleCommentDelete,
       handleCommentEdit,
       handleCommentSubmit,
+      onCommentDeleted,
     ],
   );
 

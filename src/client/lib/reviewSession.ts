@@ -277,6 +277,85 @@ export function updateReviewAnnotations(
   return { ...annotationsByFile, [path]: next };
 }
 
+/**
+ * Notes live in two shapes: the exported records (what the packet carries)
+ * and the per-file annotations the diff renders. These three operations are
+ * the only way to change a saved note, so both shapes always agree.
+ */
+export function saveReviewComment(
+  state: ReviewSessionState,
+  comment: CommentExportRecord,
+): ReviewSessionState {
+  const annotationsByFile =
+    comment.scope === "line"
+      ? updateReviewAnnotations(state.annotationsByFile, comment.filePath, (current) => {
+          const metadata = { body: comment.body, id: comment.id, kind: "comment" as const };
+          return current.some((annotation) => annotation.metadata.id === comment.id)
+            ? current.map((annotation) =>
+                annotation.metadata.id === comment.id
+                  ? {
+                      ...annotation,
+                      metadata: { ...annotation.metadata, ...metadata, previousBody: undefined },
+                    }
+                  : annotation,
+              )
+            : [...current, { side: comment.side, lineNumber: comment.lineNumber, metadata }];
+        })
+      : state.annotationsByFile;
+  return {
+    ...state,
+    annotationsByFile,
+    commentExports: upsertComment(state.commentExports, comment),
+  };
+}
+
+/** Edits a saved note's body or status without touching an open composer. */
+export function updateReviewComment(
+  state: ReviewSessionState,
+  comment: CommentExportRecord,
+): ReviewSessionState {
+  return {
+    ...state,
+    annotationsByFile: updateReviewAnnotations(
+      state.annotationsByFile,
+      comment.filePath,
+      (current) =>
+        current.map((annotation) =>
+          annotation.metadata.id === comment.id
+            ? { ...annotation, metadata: { ...annotation.metadata, body: comment.body } }
+            : annotation,
+        ),
+    ),
+    commentExports: upsertComment(state.commentExports, comment),
+  };
+}
+
+export function deleteReviewComment(state: ReviewSessionState, id: string): ReviewSessionState {
+  let annotationsByFile = state.annotationsByFile;
+  for (const [path, annotations] of Object.entries(state.annotationsByFile)) {
+    if (!annotations.some((annotation) => annotation.metadata.id === id)) continue;
+    annotationsByFile = updateReviewAnnotations(annotationsByFile, path, (current) =>
+      current.filter((annotation) => annotation.metadata.id !== id),
+    );
+  }
+  return {
+    ...state,
+    annotationsByFile,
+    commentExports: state.commentExports.filter((comment) => comment.id !== id),
+  };
+}
+
+function upsertComment(
+  comments: readonly CommentExportRecord[],
+  comment: CommentExportRecord,
+): CommentExportRecord[] {
+  const index = comments.findIndex((item) => item.id === comment.id);
+  if (index === -1) return [...comments, comment];
+  const next = [...comments];
+  next[index] = comment;
+  return next;
+}
+
 export function reconcileCommentAnchors(
   comments: readonly CommentExportRecord[],
   fileDiffs: Readonly<Record<string, FileDiffMetadata>>,

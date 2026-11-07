@@ -326,33 +326,6 @@ function useDiffDeckSessionModel({
     [requestPath, reviewSession, selectedPath, sessionFilesByPath],
   );
 
-  const handleHubCommentUpdate = useCallback(
-    (comment: CommentExportRecord) => {
-      reviewSession.updateAnnotations(comment.filePath, (current) =>
-        current.map((annotation) =>
-          annotation.metadata.id === comment.id
-            ? {
-                ...annotation,
-                metadata: { ...annotation.metadata, body: comment.body },
-              }
-            : annotation,
-        ),
-      );
-      reviewSession.upsertComment(comment);
-    },
-    [reviewSession],
-  );
-
-  const handleHubCommentDelete = useCallback(
-    (comment: CommentExportRecord) => {
-      reviewSession.updateAnnotations(comment.filePath, (current) =>
-        current.filter((annotation) => annotation.metadata.id !== comment.id),
-      );
-      reviewSession.deleteComment(comment.id);
-    },
-    [reviewSession],
-  );
-
   const handleJumpToComment = useCallback(
     (comment: CommentExportRecord) => {
       if (!visibleFiles.some((file) => file.path === comment.filePath)) {
@@ -406,17 +379,6 @@ function useDiffDeckSessionModel({
 
   const handleViewedFileChange = useCallback(
     (path: string, value: boolean) => reviewSession.setViewed(path, value),
-    [reviewSession],
-  );
-
-  const handleCommentSaved = useCallback(
-    (comment: CommentExportRecord) =>
-      reviewSession.upsertComment({ ...comment, snapshotId: session.snapshotId, status: "open" }),
-    [reviewSession, session.snapshotId],
-  );
-
-  const handleCommentDeleted = useCallback(
-    (id: string) => reviewSession.deleteComment(id),
     [reviewSession],
   );
 
@@ -563,8 +525,8 @@ function useDiffDeckSessionModel({
     hunkSeparators,
     onAnnotationsChange: reviewSession.updateAnnotations,
     onCollapsedFileChange: handleCollapsedFileChange,
-    onCommentDeleted: handleCommentDeleted,
-    onCommentSaved: handleCommentSaved,
+    onCommentDeleted: reviewSession.deleteComment,
+    onCommentSaved: reviewSession.saveComment,
     onFileCommentDraftChange: reviewSession.setFileCommentDraft,
     onRequestFileDiff: requestSessionFileDiff,
     onRetryFileDiff: retryPath,
@@ -589,8 +551,6 @@ function useDiffDeckSessionModel({
     controlsProps,
     handleClearAllComments,
     handleCollapsedFileChange,
-    handleHubCommentDelete,
-    handleHubCommentUpdate,
     handleJumpToComment,
     handleNavigateHunk,
     handleTreeSelection,
@@ -618,8 +578,6 @@ function DiffDeckSessionView({
   controlsProps,
   handleClearAllComments,
   handleCollapsedFileChange,
-  handleHubCommentDelete,
-  handleHubCommentUpdate,
   handleJumpToComment,
   handleNavigateHunk,
   handleTreeSelection,
@@ -692,9 +650,9 @@ function DiffDeckSessionView({
             onRemoveStatus={reviewSession.removeCommentsByStatus}
           />
         }
-        onDelete={handleHubCommentDelete}
+        onDelete={(comment) => reviewSession.deleteComment(comment.id)}
         onJump={handleJumpToComment}
-        onUpdate={handleHubCommentUpdate}
+        onUpdate={reviewSession.updateComment}
       />
     ),
   } satisfies SidebarProps;
