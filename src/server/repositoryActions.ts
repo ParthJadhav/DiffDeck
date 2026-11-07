@@ -128,9 +128,14 @@ type ParsedPatch = {
   hunks: Array<{ lines: string[]; oldStart: number; oldEnd: number }>;
 };
 
+// Lines keep their "\r": a CRLF file's patch must carry it for `git apply`
+// to match context and to write the added lines byte for byte.
 function parsePatch(diff: string): ParsedPatch {
-  const lines = diff.replace(/\r\n/g, "\n").split("\n");
+  const lines = diff.split("\n");
   if (lines.at(-1) === "") lines.pop();
+  if (lines.filter((line) => line.startsWith("diff --git ")).length > 1) {
+    throw new Error("The selected hunk could not be isolated to a single file.");
+  }
   const firstHunk = lines.findIndex((line) => line.startsWith("@@"));
   if (firstHunk === -1) return { header: lines, hunks: [] };
   const hunks: ParsedPatch["hunks"] = [];
@@ -159,20 +164,30 @@ function selectHunkPatch(
   whitespaceMode: DiffWhitespaceMode,
   hunkIndex: number,
 ): string | null {
-  const exact = parsePatch(getFileDiff(session.repoRoot, session.diffArgs, path, "normal"));
+  // A renamed file's hunks only exist when both sides are in the pathspec;
+  // with the new path alone git reports a whole-file addition.
+  const prevPath = session.files.find((file) => file.path === path)?.prevPath;
+  const paths = prevPath != null && prevPath !== path ? [prevPath, path] : [path];
+  const exact = parsePatch(getFileDiff(session.repoRoot, session.diffArgs, paths, "normal"));
   const displayed =
     whitespaceMode === "normal"
       ? exact
-      : parsePatch(getFileDiff(session.repoRoot, session.diffArgs, path, whitespaceMode));
+      : parsePatch(getFileDiff(session.repoRoot, session.diffArgs, paths, whitespaceMode));
   const target = displayed.hunks[hunkIndex];
   if (target == null) return null;
-  const hunks =
-    displayed === exact
-      ? [target]
-      : exact.hunks.filter(
-          (hunk) => hunk.oldStart < target.oldEnd && target.oldStart < hunk.oldEnd,
-        );
+  if (displayed === exact) return `${[...exact.header, ...target.lines].join("\n")}\n`;
+  const overlaps = (a: ParsedPatch["hunks"][number], b: ParsedPatch["hunks"][number]) =>
+    a.oldStart < b.oldEnd && b.oldStart < a.oldEnd;
+  const hunks = exact.hunks.filter((hunk) => overlaps(hunk, target));
   if (hunks.length === 0) return null;
+  // Whitespace-only changes can merge two displayed hunks into one exact hunk;
+  // applying it would also write the hunk the reviewer did not click.
+  const others = displayed.hunks.filter((hunk) => hunk !== target);
+  if (hunks.some((hunk) => others.some((other) => overlaps(hunk, other)))) {
+    throw new Error(
+      "This hunk shares lines with another hunk once whitespace changes are included. Show all whitespace changes to act on it.",
+    );
+  }
   return `${[...exact.header, ...hunks.flatMap((hunk) => hunk.lines)].join("\n")}\n`;
 }
 

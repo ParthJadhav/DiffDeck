@@ -738,7 +738,82 @@ describe("git diff source", () => {
     expect(staged).toContain("+changed near end");
     expect(staged).not.toContain("changed near start");
   });
+
+  test("refuses a hunk write that whitespace changes would merge with another hunk", async () => {
+    const repo = createMultiHunkRepo();
+    const lines = readFileSync(join(repo, "many.txt"), "utf8").split("\n");
+    lines[9] = "changed A";
+    lines[14] = "line  15";
+    lines[19] = "changed B";
+    writeFileSync(join(repo, "many.txt"), lines.join("\n"));
+    const before = readFileSync(join(repo, "many.txt"), "utf8");
+    const source = gitSource(repo);
+    source.setWhitespaceMode("ignore-space-change");
+    const server = await startServer(source, 0, "127.0.0.1", { write: true });
+    servers.push(server);
+    for (const action of ["stage", "revert"]) {
+      const response = await postWrite(server, source, { action, hunkIndex: 1, path: "many.txt" });
+      expect(response.status).toBe(422);
+    }
+    expect(runGit(repo, ["diff", "--cached"])).toBe("");
+    expect(readFileSync(join(repo, "many.txt"), "utf8")).toBe(before);
+  });
+
+  test("unstages one hunk of a staged rename without dropping the other", async () => {
+    const repo = createMultiHunkRepo();
+    runGit(repo, ["add", "many.txt"]);
+    runGit(repo, ["mv", "many.txt", "moved.txt"]);
+    const source = gitSource(repo, ["--cached"]);
+    const server = await startServer(source, 0, "127.0.0.1", { write: true });
+    servers.push(server);
+    const response = await postWrite(server, source, {
+      action: "unstage",
+      hunkIndex: 0,
+      path: "moved.txt",
+    });
+    expect(response.status).toBe(200);
+    const staged = runGit(repo, ["diff", "--cached"]);
+    expect(staged).toContain("+changed near end");
+    expect(staged).not.toContain("changed near start");
+    expect(readFileSync(join(repo, "moved.txt"), "utf8")).toContain("changed near start");
+  });
+
+  test("stages one hunk of a CRLF file byte for byte", async () => {
+    const repo = createMultiHunkRepo();
+    const crlf = (text: string) => text.replace(/\n/g, "\r\n");
+    const original = runGit(repo, ["show", "HEAD:many.txt"]);
+    writeFileSync(join(repo, "many.txt"), crlf(original));
+    runGit(repo, ["commit", "-qam", "crlf"]);
+    const lines = original.split("\n");
+    lines[1] = "changed near start";
+    lines[27] = "changed near end";
+    writeFileSync(join(repo, "many.txt"), crlf(lines.join("\n")));
+    const source = gitSource(repo);
+    const server = await startServer(source, 0, "127.0.0.1", { write: true });
+    servers.push(server);
+    const response = await postWrite(server, source, {
+      action: "stage",
+      hunkIndex: 1,
+      path: "many.txt",
+    });
+    expect(response.status).toBe(200);
+    const indexed = runGit(repo, ["show", ":many.txt"]);
+    expect(indexed).toContain("changed near end\r\n");
+    expect(indexed).not.toContain("changed near start");
+  });
 });
+
+function postWrite(
+  server: RunningServer,
+  source: DiffSource,
+  body: { action: string; hunkIndex?: number; path: string },
+): Promise<Response> {
+  return fetch(`${server.url}api/write`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...body, snapshotId: source.current().snapshotId }),
+  });
+}
 
 function createWritableRepo(): string {
   const repo = mkdtempSync(join(tmpdir(), "diffdeck-server-"));

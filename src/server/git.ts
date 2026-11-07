@@ -167,12 +167,13 @@ export function getRawDiffAsync(
 export function getFileDiff(
   repoRoot: string,
   diffArgs: readonly string[],
-  path: string,
+  paths: string | readonly string[],
   whitespaceMode: DiffWhitespaceMode,
 ): string {
   const separator = diffArgs.indexOf("--");
   const diffOptions = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
-  return runGit(repoRoot, gitDiffArgs([...diffOptions, "--", path], whitespaceMode));
+  const pathspec = typeof paths === "string" ? [paths] : paths;
+  return runGit(repoRoot, gitDiffArgs([...diffOptions, "--", ...pathspec], whitespaceMode));
 }
 
 function decodeGitQuotedPathToken(input: string, startIndex: number): GitPathToken | null {
