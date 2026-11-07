@@ -1,8 +1,13 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { extname, isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { getFileDiff } from "./git.js";
-import type { DiffWhitespaceMode, ImageSideName, WriteAction } from "./protocol.js";
+import {
+  imageMimeType,
+  type DiffWhitespaceMode,
+  type ImageSideName,
+  type WriteAction,
+} from "./protocol.js";
 import type { DiffSession } from "./types.js";
 
 type WriteDiffMode = "worktree" | "cached" | "readonly";
@@ -164,18 +169,6 @@ export function readImageSide(
   return target != null && existsSync(target) ? readFileSync(target) : null;
 }
 
-const imageMimeByExtension: Record<string, string> = {
-  ".avif": "image/avif",
-  ".bmp": "image/bmp",
-  ".gif": "image/gif",
-  ".ico": "image/x-icon",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp",
-};
-
 export function getImageMime(path: string): string {
-  return imageMimeByExtension[extname(path).toLowerCase()] ?? "application/octet-stream";
+  return imageMimeType(path) ?? "application/octet-stream";
 }

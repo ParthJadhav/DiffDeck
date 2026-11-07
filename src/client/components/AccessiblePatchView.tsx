@@ -83,11 +83,6 @@ function AccessiblePatchViewContent({
       if (row == null) return;
       setCurrentChange(index);
       const line = lineForChangedRow(row);
-      window.history.replaceState(
-        null,
-        "",
-        buildDiffDeepLink(window.location.href, file.path, { line, side: row.side }),
-      );
       emitAppEvent("line-selected", { line, path: file.path, side: row.side });
       window.requestAnimationFrame(() => {
         const element = rowRefs.current.get(row.key);

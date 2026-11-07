@@ -77,6 +77,18 @@ function fileName(path: string): string {
   return lowerPath.slice(lowerPath.lastIndexOf("/") + 1);
 }
 
+/** Files at or above this many changed lines count as large and start collapsed. */
+const LARGE_CHANGE_LINES = 800;
+
+export function isLargeChange(file: DiffFileSummary): boolean {
+  return file.additions + file.deletions >= LARGE_CHANGE_LINES;
+}
+
+/** Binary and conflicted files have no text diff to fetch. */
+export function hasTextDiff(file: DiffFileSummary): boolean {
+  return file.hasMergeConflicts !== true && file.isBinary !== true;
+}
+
 export function isDependencyPath(path: string): boolean {
   return DEPENDENCY_NAMES.has(fileName(path));
 }
@@ -101,7 +113,7 @@ function matchesDiffFilters(
   const generated =
     /(^|\/)(dist|build|coverage|vendor)\//.test(lowerPath) ||
     /(?:\.min\.(?:js|css)|\.generated\.|\.snap$)/.test(lowerPath);
-  const size = classifyChangeSize(file.additions + file.deletions);
+  const size = classifyChangeSize(file);
 
   if (filters.path.length > 0 && !lowerPath.includes(filters.path.toLowerCase())) return false;
   if (filters.extensions.length > 0 && !filters.extensions.includes(extension)) return false;
@@ -117,8 +129,7 @@ function matchesDiffFilters(
   return true;
 }
 
-function classifyChangeSize(lines: number): "small" | "medium" | "large" {
-  if (lines < 80) return "small";
-  if (lines < 800) return "medium";
-  return "large";
+function classifyChangeSize(file: DiffFileSummary): "small" | "medium" | "large" {
+  if (isLargeChange(file)) return "large";
+  return file.additions + file.deletions < 80 ? "small" : "medium";
 }

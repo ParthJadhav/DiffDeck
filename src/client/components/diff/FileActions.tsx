@@ -53,9 +53,7 @@ export function FileActions({
 
   const editorEnabled = capabilities?.editor === true;
   const structuralEnabled = capabilities?.structural === true;
-  const writeActions =
-    capabilities?.writeActions ??
-    (capabilities?.write === true ? (["stage", "unstage", "revert"] as const) : []);
+  const writeActions = capabilities?.writeActions ?? [];
 
   const copyPath = async () => {
     try {

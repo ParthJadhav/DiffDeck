@@ -1,7 +1,6 @@
 /**
  * The HTTP contract between the DiffDeck server and its browser client.
- * The client imports these as types only, so this module must stay free of
- * Node APIs.
+ * The client bundles this module, so it must stay free of Node APIs.
  */
 import type { FileContents, FileDiffMetadata } from "@pierre/diffs";
 import type { GitStatus } from "@pierre/trees";
@@ -49,7 +48,7 @@ export interface SessionPayload {
     structural: boolean;
     watch: boolean;
     write: boolean;
-    writeActions?: WriteAction[];
+    writeActions: WriteAction[];
   };
 }
 
@@ -57,6 +56,25 @@ export interface SessionPayload {
 export type UnresolvedFilePayload = FileContents;
 
 export type ImageSideName = "old" | "new";
+
+const imageMimeTypes: Record<string, string> = {
+  avif: "image/avif",
+  bmp: "image/bmp",
+  gif: "image/gif",
+  ico: "image/x-icon",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+};
+
+/** The MIME type of a path the image preview supports, or null. */
+export function imageMimeType(path: string): string | null {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot <= 0 ? null : (imageMimeTypes[name.slice(dot + 1).toLowerCase()] ?? null);
+}
 
 /** GET /api/image */
 export interface ImageSidePayload {

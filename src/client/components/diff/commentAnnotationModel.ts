@@ -21,10 +21,22 @@ export function newLineCommentId(side: AnnotationSide, lineNumber: number): stri
   return `${side}-${lineNumber}-${Date.now()}`;
 }
 
-export function createCommentAnnotation(
+/** Opens a composer at a line unless one is already open there. */
+export function addCommentForm(
+  annotations: CommentAnnotation[],
   side: AnnotationSide,
   lineNumber: number,
-): CommentAnnotation {
+): CommentAnnotation[] {
+  const alreadyOpen = annotations.some(
+    (annotation) =>
+      annotation.side === side &&
+      annotation.lineNumber === lineNumber &&
+      annotation.metadata.kind === "comment-form",
+  );
+  return alreadyOpen ? annotations : [...annotations, createCommentAnnotation(side, lineNumber)];
+}
+
+function createCommentAnnotation(side: AnnotationSide, lineNumber: number): CommentAnnotation {
   return {
     side,
     lineNumber,

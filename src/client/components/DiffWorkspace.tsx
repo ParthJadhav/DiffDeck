@@ -38,14 +38,14 @@ import { emitAppEvent, onAppEvent, type LineLocation } from "../lib/appEvents.js
 import { readDiffLocation } from "../lib/deepLink.js";
 import { getHunkTargets } from "../lib/hunkNavigation.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
-import type { DiffFileSummary, SessionPayload } from "../../server/protocol.js";
+import { imageMimeType, type DiffFileSummary, type SessionPayload } from "../../server/protocol.js";
 import { isDependencyPath } from "../lib/fileFilters.js";
 import { Card, CardContent, CardDescription, CardHeader } from "./ui/card.js";
 import { Button } from "./ui/button.js";
 import { Skeleton } from "./ui/skeleton.js";
 import { CommentAnnotationView } from "./diff/CommentAnnotation.js";
 import {
-  createCommentAnnotation,
+  addCommentForm,
   patchAnnotationMeta,
   type CommentAnnotation,
 } from "./diff/commentAnnotationModel.js";
@@ -169,19 +169,7 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     const target = getHunkTargets(fileDiff)[0];
     if (target == null) return;
     flushSync(() =>
-      onAnnotationsChange(path, (current) => {
-        if (
-          current.some(
-            (annotation) =>
-              annotation.side === target.side &&
-              annotation.lineNumber === target.line &&
-              annotation.metadata.kind === "comment-form",
-          )
-        ) {
-          return current;
-        }
-        return [...current, createCommentAnnotation(target.side, target.line)];
-      }),
+      onAnnotationsChange(path, (current) => addCommentForm(current, target.side, target.line)),
     );
   });
 
@@ -201,7 +189,6 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       expansionLineCount: 5,
       lineHoverHighlight: "both" as const,
       overflow,
-      onPostRender: patchRenderedDiffAccessibility,
       themeType,
     }),
     [diffStyle, disableBackground, expandUnchanged, overflow, showLineNumbers, themeType],
@@ -308,11 +295,22 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
   );
 }
 
+const accessibleCodeRoots = new WeakSet<ShadowRoot>();
+
+/**
+ * Pierre renders its horizontally scrollable code columns without a name or
+ * tab stop. Label them after every render, including Pierre's own re-renders
+ * of the same shadow root.
+ */
 function patchRenderedDiffAccessibility(node: HTMLElement) {
-  queueMicrotask(() => {
-    const tree = node.getRootNode();
-    const scope = tree instanceof ShadowRoot ? tree : (node.shadowRoot ?? node);
-    patchScrollableCodeAccessibility(scope);
+  const root = node.shadowRoot;
+  if (root == null) return;
+  patchScrollableCodeAccessibility(root);
+  if (accessibleCodeRoots.has(root)) return;
+  accessibleCodeRoots.add(root);
+  new MutationObserver(() => patchScrollableCodeAccessibility(root)).observe(root, {
+    childList: true,
+    subtree: true,
   });
 }
 
@@ -442,35 +440,6 @@ function useFileDiffSectionModel({
 
   const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
 
-  useEffect(() => {
-    if (collapsed || fileDiff == null || isHeavyFile) return;
-    let attempts = 0;
-    let timer = 0;
-    let cancelled = false;
-    let observer: MutationObserver | null = null;
-    const patch = () => {
-      if (cancelled) return;
-      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-file-path]")).find(
-        (candidate) => candidate.dataset.filePath === file.path,
-      );
-      const shadowRoot = card?.querySelector("diffs-container")?.shadowRoot;
-      if (shadowRoot != null) {
-        patchScrollableCodeAccessibility(shadowRoot);
-        observer = new MutationObserver(() => patchScrollableCodeAccessibility(shadowRoot));
-        observer.observe(shadowRoot, { childList: true, subtree: true });
-        return;
-      }
-      attempts += 1;
-      if (attempts < 20) timer = window.setTimeout(patch, 25);
-    };
-    window.requestAnimationFrame(patch);
-    return () => {
-      cancelled = true;
-      observer?.disconnect();
-      window.clearTimeout(timer);
-    };
-  }, [collapsed, file.path, fileDiff, isHeavyFile]);
-
   const headerActions = useMemo(
     () => (
       <FileActions
@@ -567,6 +536,7 @@ function useFileDiffSectionModel({
   const handlePostRender = useCallback(
     (...args: Parameters<typeof installHunkExpansionFallback>) => {
       installHunkExpansionFallback(...args);
+      patchRenderedDiffAccessibility(args[0]);
       const location = readDiffLocation(window.location.href);
       if (location.file !== filePath || location.line == null || location.side == null) {
         return;
@@ -591,19 +561,7 @@ function useFileDiffSectionModel({
 
   const addCommentAtLine = useCallback(
     (side: AnnotationSide, lineNumber: number) => {
-      onAnnotationsChange(filePath, (current) => {
-        if (
-          current.some(
-            (annotation) =>
-              annotation.side === side &&
-              annotation.lineNumber === lineNumber &&
-              annotation.metadata.kind === "comment-form",
-          )
-        ) {
-          return current;
-        }
-        return [...current, createCommentAnnotation(side, lineNumber)];
-      });
+      onAnnotationsChange(filePath, (current) => addCommentForm(current, side, lineNumber));
     },
     [filePath, onAnnotationsChange],
   );
@@ -611,8 +569,6 @@ function useFileDiffSectionModel({
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
       onSelectedLinesChange(filePath, range);
-      diffOptions?.onLineSelectionEnd?.(range);
-      diffOptions?.onLineSelected?.(range);
       if (range == null) return;
       const side: AnnotationSide =
         (range.endSide ?? range.side) === "deletions" ? "deletions" : "additions";
@@ -623,7 +579,7 @@ function useFileDiffSectionModel({
         side,
       });
     },
-    [addCommentAtLine, diffOptions, filePath, onSelectedLinesChange],
+    [addCommentAtLine, filePath, onSelectedLinesChange],
   );
 
   const handleCommentCancel = useCallback(
@@ -641,7 +597,6 @@ function useFileDiffSectionModel({
         return current.filter((annotation) => annotation.metadata.id !== id);
       });
       onSelectedLinesChange(filePath, null);
-      diffOptions?.onLineSelected?.(null);
       // Discarding a new composer unmounts the focused textarea; keep focus in
       // the workspace instead of dropping it on <body>.
       window.requestAnimationFrame(() => {
@@ -650,7 +605,7 @@ function useFileDiffSectionModel({
         }
       });
     },
-    [diffOptions, filePath, onAnnotationsChange, onSelectedLinesChange],
+    [filePath, onAnnotationsChange, onSelectedLinesChange],
   );
 
   const handleCommentEdit = useCallback(
@@ -705,10 +660,8 @@ function useFileDiffSectionModel({
         side: submittedAnnotation.side,
       });
       onSelectedLinesChange(filePath, null);
-      diffOptions?.onLineSelected?.(null);
     },
     [
-      diffOptions,
       file.hasMergeConflicts,
       filePath,
       fileDiff,
@@ -866,7 +819,7 @@ function FileDiffSectionView({
           onViewedChange={handleHeaderViewedChange}
           viewed={viewed}
         />
-        {collapsed ? null : IMAGE_EXTENSIONS.has(getFileExtension(file.path)) ? (
+        {collapsed ? null : imageMimeType(file.path) != null ? (
           <ImageDiff path={file.path} />
         ) : (
           <UnsupportedFileBody />
@@ -984,27 +937,6 @@ function FileDiffSectionView({
   ) : (
     sourceDiff
   );
-}
-
-const IMAGE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "bmp",
-  "ico",
-  "tif",
-  "tiff",
-  "avif",
-  "heic",
-  "heif",
-]);
-
-function getFileExtension(path: string): string {
-  const base = path.slice(path.lastIndexOf("/") + 1);
-  const dot = base.lastIndexOf(".");
-  return dot <= 0 ? "" : base.slice(dot + 1).toLowerCase();
 }
 
 function UnsupportedFileBody() {

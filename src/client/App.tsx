@@ -27,7 +27,12 @@ import {
   type OverflowMode,
   type ThemeChoice,
 } from "./lib/constants.js";
-import { emptyReviewFilters, filterDiffFiles } from "./lib/fileFilters.js";
+import {
+  emptyReviewFilters,
+  filterDiffFiles,
+  hasTextDiff,
+  isLargeChange,
+} from "./lib/fileFilters.js";
 import { buildDiffDeepLink, buildSelectedFileUrl, readDiffLocation } from "./lib/deepLink.js";
 import { getHunkNavigation, type HunkTarget } from "./lib/hunkNavigation.js";
 import { emitAppEvent, onAppEvent } from "./lib/appEvents.js";
@@ -41,7 +46,6 @@ import type { DiffWhitespaceMode, SessionPayload } from "../server/protocol.js";
 import { workerFactory } from "./workerFactory.js";
 
 const lineDiffType = "word-alt" as const;
-const LARGE_DIFF_LINE_THRESHOLD = 800;
 
 export function App() {
   const { session, loading, refreshing, error, revision, refresh, reload, setWhitespaceMode } =
@@ -249,7 +253,7 @@ function useDiffDeckSessionModel({
     // A write action can remove the selected file from the session before the
     // selection is renormalized; requesting its diff would 404.
     if (selectedFile == null) return;
-    if (selectedFile.hasMergeConflicts === true || selectedFile.isBinary === true) return;
+    if (!hasTextDiff(selectedFile)) return;
     requestPath(selectedPath);
   }, [requestPath, selectedPath, sessionFilesByPath]);
 
@@ -322,9 +326,7 @@ function useDiffDeckSessionModel({
       reviewSession.setSelectedPath(path);
       if (path != null) setScrollSignal((current) => current + 1);
       const selectedFile = path == null ? null : sessionFilesByPath.get(path);
-      if (selectedFile?.hasMergeConflicts !== true && selectedFile?.isBinary !== true) {
-        if (path != null) requestPath(path);
-      }
+      if (path != null && (selectedFile == null || hasTextDiff(selectedFile))) requestPath(path);
     },
     [requestPath, reviewSession, selectedPath, sessionFilesByPath],
   );
@@ -688,13 +690,7 @@ function DiffDeckSessionView({
 }
 
 function getAutoCollapsedPaths(files: readonly SessionPayload["files"][number][]): string[] {
-  const paths: string[] = [];
-  for (const file of files) {
-    if (file.additions + file.deletions >= LARGE_DIFF_LINE_THRESHOLD) {
-      paths.push(file.path);
-    }
-  }
-  return paths;
+  return files.filter(isLargeChange).map((file) => file.path);
 }
 
 function DiffDeckLayout({
