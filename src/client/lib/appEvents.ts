@@ -33,7 +33,6 @@ export function emitAppEvent<K extends AppEventName>(name: K, ...detail: DetailA
   window.dispatchEvent(new CustomEvent(`diffdeck:${name}`, { detail: detail[0] }));
 }
 
-/** Subscribes to an app event; returns the unsubscribe function. */
 export function onAppEvent<K extends AppEventName>(
   name: K,
   handler: (detail: AppEvents[K]) => void,

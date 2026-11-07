@@ -29,7 +29,6 @@ export const emptyReviewFilters: ReviewFilters = {
   statuses: [],
 };
 
-/** Restores filters from untrusted storage, dropping anything malformed. */
 export function sanitizeReviewFilters(value: unknown): ReviewFilters {
   if (value == null || typeof value !== "object") return { ...emptyReviewFilters };
   const candidate = value as Partial<ReviewFilters>;

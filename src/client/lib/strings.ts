@@ -6,7 +6,6 @@ export function sortedStrings(values: Iterable<string>): string[] {
   return result.sort((left, right) => left.localeCompare(right));
 }
 
-/** The unique strings of an untrusted stored array, sorted; anything else becomes []. */
 export function sanitizeStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? sortedStrings(new Set(value.filter((item): item is string => typeof item === "string")))

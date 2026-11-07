@@ -8,10 +8,6 @@ import type { DiffSession } from "./types.js";
 type WriteDiffMode = "worktree" | "cached" | "readonly";
 type ActionResult = { ok: true } | { ok: false; error: string };
 
-/**
- * Resolves a repository-relative path, refusing anything that escapes the
- * repository directly or through a symlink.
- */
 export function resolveAuthorizedPath(repoRoot: string, path: string): string | null {
   const root = resolve(repoRoot);
   const target = resolve(root, path);
@@ -56,10 +52,6 @@ function getWriteDiffMode(diffArgs: readonly string[]): WriteDiffMode {
     : "worktree";
 }
 
-/**
- * Stages, unstages, or reverts a whole file or one displayed hunk. Hunks are
- * counted on the same diff the reviewer sees, including its whitespace mode.
- */
 export function applyWriteAction(
   session: DiffSession,
   whitespaceMode: DiffWhitespaceMode,
@@ -86,6 +78,8 @@ export function applyWriteAction(
   }
 
   if (typeof hunkIndex === "number") {
+    // The client counts hunks on the diff it displays, so select from the
+    // same diff, including its whitespace mode.
     let diff: string;
     try {
       diff = getFileDiff(session.repoRoot, session.diffArgs, path, whitespaceMode);
@@ -138,7 +132,6 @@ function selectHunkPatch(diff: string, hunkIndex: number): string | null {
   return `${[...lines.slice(0, firstHunk), ...lines.slice(start, end)].join("\n")}\n`;
 }
 
-/** Reads one side of a binary file from the object ids in its displayed diff. */
 export function readImageSide(
   session: DiffSession,
   whitespaceMode: DiffWhitespaceMode,

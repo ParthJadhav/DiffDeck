@@ -98,7 +98,6 @@ function runGitAsync(repo: string, args: readonly string[]): Promise<string> {
   });
 }
 
-/** Runs git and returns its stdout, or null when git exits unsuccessfully. */
 function tryGit(repo: string, args: readonly string[]): string | null {
   const result = spawnSync("git", ["-C", repo, ...args], {
     encoding: "utf8",
@@ -165,7 +164,6 @@ export function getRawDiffAsync(
   return runGitAsync(repoRoot, gitDiffArgs(diffArgs, whitespaceMode));
 }
 
-/** The displayed diff restricted to one path, keeping the review's own options. */
 export function getFileDiff(
   repoRoot: string,
   diffArgs: readonly string[],

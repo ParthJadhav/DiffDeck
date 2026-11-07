@@ -37,7 +37,6 @@ export function isTextEntryElement(target: EventTarget | null): boolean {
   return role === "textbox" || role === "combobox" || role === "searchbox";
 }
 
-/** The focused element, following open shadow roots down to the real leaf. */
 export function getDeepActiveElement(): Element | null {
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement != null) active = active.shadowRoot.activeElement;
@@ -48,7 +47,6 @@ export function isTextEntryActive(): boolean {
   return isTextEntryElement(getDeepActiveElement());
 }
 
-/** True when the event originated from typing in a text field (through shadow DOM). */
 export function isTextEntryEvent(event: Event): boolean {
   return event.composedPath().some(isTextEntryElement);
 }
@@ -68,9 +66,6 @@ function isCompositionEvent(event: KeyboardEvent): boolean {
   return event.isComposing || event.keyCode === 229;
 }
 
-/**
- * Whether the global shortcut layer must stay out of the way for this key.
- */
 export function shouldIgnoreShortcutEvent(event: KeyboardEvent): boolean {
   if (isCompositionEvent(event)) return true;
   if (isModalDialogOpen()) return true;
@@ -99,7 +94,6 @@ export function isApplePlatform(): boolean {
   return /mac|iphone|ipad|ipod/i.test(platform);
 }
 
-/** Platform-aware label for the submit chord shown next to composers. */
 export function submitShortcutLabel(): string {
   return isApplePlatform() ? "⌘↩" : "Ctrl+↩";
 }
