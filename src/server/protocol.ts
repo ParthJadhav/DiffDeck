@@ -108,8 +108,3 @@ export interface SnapshotEvent {
   snapshotId: string;
   reason: "watch" | "write";
 }
-
-/** Body of every non-2xx JSON response. */
-export interface ErrorPayload {
-  error: string;
-}

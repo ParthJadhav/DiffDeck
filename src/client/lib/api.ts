@@ -22,7 +22,7 @@ export class ApiError extends Error {
 }
 
 /** Remote mode puts a capability token in the page URL; every API call carries it. */
-export function withCapabilityToken(url: string): string {
+function withCapabilityToken(url: string): string {
   if (typeof window === "undefined") return url;
   const token = new URLSearchParams(window.location.search).get("token");
   if (token == null || token.length === 0) return url;

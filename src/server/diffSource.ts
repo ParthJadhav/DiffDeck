@@ -16,7 +16,7 @@ export interface DiffSource {
   poll(): Promise<DiffSession | null>;
 }
 
-export interface GitDiffSourceOptions {
+interface GitDiffSourceOptions {
   repoRoot: string;
   currentDirectory: string;
   diffArgs: string[];

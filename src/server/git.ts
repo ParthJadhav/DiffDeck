@@ -128,7 +128,7 @@ const whitespaceFlags: Record<DiffWhitespaceMode, string[]> = {
  * diff.noprefix settings from changing the header format that the normalizer
  * and `git apply` consume.
  */
-export function gitDiffArgs(
+function gitDiffArgs(
   diffArgs: readonly string[],
   whitespaceMode: DiffWhitespaceMode = "normal",
 ): string[] {
