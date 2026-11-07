@@ -25,10 +25,16 @@ import {
   X,
 } from "lucide-react";
 import { anchoredPanelPlacement, type PanelSide } from "../lib/anchoredPanel.js";
-import { diffLayouts, overflowModes, themeChoices } from "../lib/constants.js";
+import {
+  diffLayouts,
+  overflowModes,
+  themeChoices,
+  type DiffLayout,
+  type OverflowMode,
+  type ThemeChoice,
+} from "../lib/constants.js";
 import { cn } from "../lib/cn.js";
 import { onAppEvent } from "../lib/appEvents.js";
-import type { DiffLayout, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffWhitespaceMode } from "../../server/protocol.js";
 import { Button } from "./ui/button.js";
 import { Checkbox } from "./ui/checkbox.js";

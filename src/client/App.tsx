@@ -20,7 +20,13 @@ import { useReviewSession } from "./hooks/useReviewSession.js";
 import { useWatchEvents } from "./hooks/useWatchEvents.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useMediaQuery } from "./hooks/useMediaQuery.js";
-import { highlighterLangs, themeOptions } from "./lib/constants.js";
+import {
+  highlighterLangs,
+  themeOptions,
+  type DiffLayout,
+  type OverflowMode,
+  type ThemeChoice,
+} from "./lib/constants.js";
 import { emptyReviewFilters, filterDiffFiles } from "./lib/fileFilters.js";
 import { buildDiffDeepLink, buildSelectedFileUrl, readDiffLocation } from "./lib/deepLink.js";
 import { getHunkNavigation, type HunkTarget } from "./lib/hunkNavigation.js";
@@ -30,12 +36,11 @@ import { orderDiffFiles } from "./lib/fileOrder.js";
 import { cn } from "./lib/cn.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
 import type { ReviewSessionSnapshot } from "./lib/reviewSession.js";
-import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "./lib/uiTypes.js";
+
 import type { DiffWhitespaceMode, SessionPayload } from "../server/protocol.js";
 import { workerFactory } from "./workerFactory.js";
 
 const lineDiffType = "word-alt" as const;
-const hunkSeparators: HunkSeparatorMode = "custom";
 const LARGE_DIFF_LINE_THRESHOLD = 800;
 
 export function App() {
@@ -508,7 +513,6 @@ function useDiffDeckSessionModel({
     fileDiffs,
     fileDiffErrors,
     files: workspaceFiles,
-    hunkSeparators,
     onAnnotationsChange: reviewSession.updateAnnotations,
     onCollapsedFileChange: handleCollapsedFileChange,
     onCommentDeleted: reviewSession.deleteComment,

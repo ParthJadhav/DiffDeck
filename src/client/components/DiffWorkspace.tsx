@@ -20,8 +20,14 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
-import { AlertCircle, FileWarning, ImageOff, LoaderCircle } from "lucide-react";
-import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
+import { AlertCircle, FileWarning, LoaderCircle } from "lucide-react";
+import {
+  customHunkSeparatorCSS,
+  stickyFileHeaderCSS,
+  type DiffLayout,
+  type OverflowMode,
+  type ThemeChoice,
+} from "../lib/constants.js";
 import { api } from "../lib/api.js";
 import {
   focusRenderedReviewNote,
@@ -32,7 +38,6 @@ import { emitAppEvent, onAppEvent, type LineLocation } from "../lib/appEvents.js
 import { readDiffLocation } from "../lib/deepLink.js";
 import { getHunkTargets } from "../lib/hunkNavigation.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
-import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
 import type { DiffFileSummary, SessionPayload } from "../../server/protocol.js";
 import { isDependencyPath } from "../lib/fileFilters.js";
 import { Card, CardContent, CardDescription, CardHeader } from "./ui/card.js";
@@ -72,7 +77,6 @@ export interface DiffWorkspaceProps {
   files: DiffFileSummary[];
   fileDiffs: Record<string, FileDiffMetadata>;
   fileDiffErrors: Record<string, string>;
-  hunkSeparators: HunkSeparatorMode;
   onAnnotationsChange: (
     path: string,
     updater: (current: CommentAnnotation[]) => CommentAnnotation[],
@@ -112,7 +116,6 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     files,
     fileDiffs,
     fileDiffErrors,
-    hunkSeparators,
     onAnnotationsChange,
     onCollapsedFileChange,
     onCommentDeleted,
@@ -193,25 +196,15 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       enableGutterUtility: true,
       enableLineSelection: true,
       expandUnchanged,
-      hunkSeparators: hunkSeparators === "custom" ? "line-info-basic" : hunkSeparators,
-      unsafeCSS: [stickyFileHeaderCSS, hunkSeparators === "custom" && customHunkSeparatorCSS]
-        .filter(Boolean)
-        .join("\n"),
-      expansionLineCount: hunkSeparators === "custom" ? 5 : 100,
+      hunkSeparators: "line-info-basic" as const,
+      unsafeCSS: `${stickyFileHeaderCSS}\n${customHunkSeparatorCSS}`,
+      expansionLineCount: 5,
       lineHoverHighlight: "both" as const,
       overflow,
       onPostRender: patchRenderedDiffAccessibility,
       themeType,
     }),
-    [
-      diffStyle,
-      disableBackground,
-      expandUnchanged,
-      hunkSeparators,
-      overflow,
-      showLineNumbers,
-      themeType,
-    ],
+    [diffStyle, disableBackground, expandUnchanged, overflow, showLineNumbers, themeType],
   );
 
   if (selectedFile == null) {
@@ -847,10 +840,7 @@ function FileDiffSectionView({
         file={unresolvedState.file}
         options={{
           ...fileDiffOptions,
-          hunkSeparators:
-            typeof fileDiffOptions.hunkSeparators === "function"
-              ? "line-info"
-              : fileDiffOptions.hunkSeparators,
+          hunkSeparators: "line-info-basic",
           mergeConflictActionsType: "default",
           maxContextLines: 3,
           onPostRender: undefined,
@@ -879,7 +869,7 @@ function FileDiffSectionView({
         {collapsed ? null : IMAGE_EXTENSIONS.has(getFileExtension(file.path)) ? (
           <ImageDiff path={file.path} />
         ) : (
-          <UnsupportedFileBody path={file.path} />
+          <UnsupportedFileBody />
         )}
       </>
     );
@@ -1017,14 +1007,7 @@ function getFileExtension(path: string): string {
   return dot <= 0 ? "" : base.slice(dot + 1).toLowerCase();
 }
 
-function UnsupportedFileBody({ path }: { path: string }) {
-  const extension = getFileExtension(path);
-  const isImage = IMAGE_EXTENSIONS.has(extension);
-  const Icon = isImage ? ImageOff : FileWarning;
-  const label = isImage ? "Image preview not supported" : "Binary file not shown";
-  const description = isImage
-    ? "Image diffs aren't rendered in the viewer yet."
-    : "This file's contents are binary and can't be shown as a text diff.";
+function UnsupportedFileBody() {
   return (
     <div
       role="note"
@@ -1032,11 +1015,13 @@ function UnsupportedFileBody({ path }: { path: string }) {
     >
       <CardContent className="flex max-w-sm flex-col items-center gap-2 p-0">
         <span className="app-unsupported-file-icon inline-flex size-8 items-center justify-center rounded-md">
-          <Icon aria-hidden="true" className="size-4" />
+          <FileWarning aria-hidden="true" className="size-4" />
         </span>
         <div className="space-y-1">
-          <p className="font-medium text-foreground">{label}</p>
-          <p className="leading-relaxed">{description}</p>
+          <p className="font-medium text-foreground">Binary file not shown</p>
+          <p className="leading-relaxed">
+            This file's contents are binary and can't be shown as a text diff.
+          </p>
         </div>
       </CardContent>
     </div>

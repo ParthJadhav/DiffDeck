@@ -16,16 +16,12 @@ export const highlighterLangs = [
 ] as const;
 
 export const themeChoices = ["system", "light", "dark"] as const;
+export type ThemeChoice = (typeof themeChoices)[number];
 export const diffLayouts = ["split", "unified"] as const;
-export const fileTreeShapeOptions = { flattenEmptyDirectories: true } as const;
-export const hunkSeparatorModes = [
-  "line-info",
-  "line-info-basic",
-  "metadata",
-  "simple",
-  "custom",
-] as const;
+export type DiffLayout = (typeof diffLayouts)[number];
 export const overflowModes = ["scroll", "wrap"] as const;
+export type OverflowMode = (typeof overflowModes)[number];
+export const fileTreeShapeOptions = { flattenEmptyDirectories: true } as const;
 
 export const stickyFileHeaderCSS = `
 [data-diffs-header] {
