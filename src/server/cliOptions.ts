@@ -25,25 +25,135 @@ export function readPackageVersion(): string {
   return packageJson.version;
 }
 
+type CliOption = {
+  name: string;
+  /** Placeholder shown in help after the name. */
+  value?: string;
+  description: string;
+  /** Applies the option; returns how many following arguments it consumed. */
+  apply?: (options: CliOptions, value: string | undefined) => number;
+};
+
+function requireValue(name: string, value: string | undefined): string {
+  if (value == null) throw new Error(`Missing value for ${name}.`);
+  return value;
+}
+
+const cliOptions: readonly CliOption[] = [
+  {
+    name: "--repo",
+    value: "<path>",
+    description: "Repository path. Defaults to the current working directory.",
+    apply: (options, value) => {
+      options.repo = requireValue("--repo", value);
+      return 1;
+    },
+  },
+  {
+    name: "--port",
+    value: "<number>",
+    description: `Port to bind. Defaults to ${DEFAULT_PORT} (falls back to a free port if taken).`,
+    apply: (options, value) => {
+      const parsed = Number(requireValue("--port", value));
+      if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
+        throw new Error(`Invalid port: ${value}`);
+      }
+      options.port = parsed;
+      options.portExplicit = true;
+      return 1;
+    },
+  },
+  {
+    name: "--host",
+    value: "<host>",
+    description: "Host to bind. Defaults to 127.0.0.1.",
+    apply: (options, value) => {
+      options.host = requireValue("--host", value);
+      return 1;
+    },
+  },
+  {
+    name: "--no-open",
+    description: "Do not open the browser automatically.",
+    apply: (options) => {
+      options.openBrowser = false;
+      return 0;
+    },
+  },
+  {
+    name: "--debug",
+    description: "Print line-numbered diff parsing logs.",
+    apply: (options) => {
+      options.debug = true;
+      return 0;
+    },
+  },
+  {
+    name: "--watch",
+    description: "Watch the repository and notify the browser when the diff changes.",
+    apply: (options) => {
+      options.watch = true;
+      return 0;
+    },
+  },
+  {
+    name: "--watch-interval",
+    description: "Watch polling interval in milliseconds (default: 750).",
+    apply: (options, value) => {
+      const parsed = Number(value);
+      if (value == null || !Number.isInteger(parsed) || parsed < 100 || parsed > 60_000) {
+        throw new Error(`Invalid watch interval: ${value ?? "missing"}`);
+      }
+      options.watchInterval = parsed;
+      return 1;
+    },
+  },
+  {
+    name: "--editor",
+    value: "<cmd>",
+    description: "Editor command used by the browser's Open in editor action.",
+    apply: (options, value) => {
+      if (value == null || value.trim().length === 0) {
+        throw new Error("Missing value for --editor.");
+      }
+      options.editor = value;
+      return 1;
+    },
+  },
+  {
+    name: "--structural",
+    description: "Enable optional Difftastic structural views when installed.",
+    apply: (options) => {
+      options.structural = true;
+      return 0;
+    },
+  },
+  {
+    name: "--write",
+    description: "Enable confirmed stage, unstage, and revert actions.",
+    apply: (options) => {
+      options.write = true;
+      return 0;
+    },
+  },
+  { name: "--version", description: "Print the installed version and exit." },
+  { name: "--help", description: "Show this help message." },
+];
+
 export function formatCliHelp(): string {
+  const optionLines = cliOptions
+    .map(
+      (option) =>
+        `  ${[option.name, option.value].filter(Boolean).join(" ").padEnd(18)}${option.description}`,
+    )
+    .join("\n");
   return `Diffdeck
 
 Usage:
   diffdeck [options] [git diff args...]
 
 Options:
-  --repo <path>     Repository path. Defaults to the current working directory.
-  --port <number>   Port to bind. Defaults to ${DEFAULT_PORT} (falls back to a free port if taken).
-  --host <host>     Host to bind. Defaults to 127.0.0.1.
-  --no-open         Do not open the browser automatically.
-  --debug           Print line-numbered diff parsing logs.
-  --watch           Watch the repository and notify the browser when the diff changes.
-  --watch-interval  Watch polling interval in milliseconds (default: 750).
-  --editor <cmd>    Editor command used by the browser's Open in editor action.
-  --structural      Enable optional Difftastic structural views when installed.
-  --write           Enable confirmed stage, unstage, and revert actions.
-  --version         Print the installed version and exit.
-  --help            Show this help message.
+${optionLines}
 
 Examples:
   diffdeck
@@ -83,87 +193,15 @@ export function parseCliArgs(argv: string[]): CliOptions {
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-
-    if (argument === "--repo") {
-      const value = argv[index + 1];
-      if (value == null) throw new Error("Missing value for --repo.");
-      options.repo = value;
-      index += 1;
-      continue;
-    }
-
-    if (argument === "--port") {
-      const value = argv[index + 1];
-      if (value == null) throw new Error("Missing value for --port.");
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65_535) {
-        throw new Error(`Invalid port: ${value}`);
-      }
-      options.port = parsed;
-      options.portExplicit = true;
-      index += 1;
-      continue;
-    }
-
-    if (argument === "--host") {
-      const value = argv[index + 1];
-      if (value == null) throw new Error("Missing value for --host.");
-      options.host = value;
-      index += 1;
-      continue;
-    }
-
-    if (argument === "--no-open") {
-      options.openBrowser = false;
-      continue;
-    }
-
-    if (argument === "--debug") {
-      options.debug = true;
-      continue;
-    }
-
-    if (argument === "--watch") {
-      options.watch = true;
-      continue;
-    }
-
-    if (argument === "--watch-interval") {
-      const value = argv[index + 1];
-      const parsed = Number(value);
-      if (value == null || !Number.isInteger(parsed) || parsed < 100 || parsed > 60_000) {
-        throw new Error(`Invalid watch interval: ${value ?? "missing"}`);
-      }
-      options.watchInterval = parsed;
-      index += 1;
-      continue;
-    }
-
-    if (argument === "--editor") {
-      const value = argv[index + 1];
-      if (value == null || value.trim().length === 0) {
-        throw new Error("Missing value for --editor.");
-      }
-      options.editor = value;
-      index += 1;
-      continue;
-    }
-
-    if (argument === "--structural") {
-      options.structural = true;
-      continue;
-    }
-
-    if (argument === "--write") {
-      options.write = true;
-      continue;
-    }
-
     if (argument === "--") {
       options.diffArgs.push(...argv.slice(index + 1));
       break;
     }
-
+    const option = cliOptions.find((candidate) => candidate.name === argument);
+    if (option?.apply != null) {
+      index += option.apply(options, argv[index + 1]);
+      continue;
+    }
     options.diffArgs.push(argument);
   }
 
