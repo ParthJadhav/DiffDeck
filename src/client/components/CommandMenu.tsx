@@ -2,13 +2,13 @@ import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } fro
 import { Command } from "cmdk";
 import { toast } from "sonner";
 import { readDiffLocation } from "../lib/deepLink.js";
-import { openInEditor } from "../lib/editor.js";
+import { api } from "../lib/api.js";
 import { shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
-import { FOCUS_FILE_SEARCH_EVENT } from "./Sidebar.js";
+import { emitAppEvent } from "../lib/appEvents.js";
 import type { HunkNavigation, HunkTarget } from "../lib/hunkNavigation.js";
 import type { ReviewNavigation } from "../lib/reviewNavigation.js";
 import type { ReviewMode, ReviewSurface } from "../lib/reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 export function CommandMenu({
   collapsedPaths,
@@ -74,9 +74,132 @@ export function CommandMenu({
     }
     const location = readDiffLocation(window.location.href);
     const line = location.file === selectedPath ? (location.line ?? 1) : 1;
-    await openInEditor(selectedPath, line);
+    await api.openInEditor(selectedPath, line);
     toast.success("Opened selected file in editor.");
   }, [editorEnabled, selectedPath]);
+
+  const hasSelection = selectedPath != null;
+  // Every review command, in palette order. Commands without a label are
+  // keyboard-only; `shift` tells Shift+J/K apart, other keys ignore it.
+  const commands: ReviewCommand[] = [
+    { key: "/", enabled: true, run: () => emitAppEvent("focus-file-search") },
+    {
+      key: "k",
+      shift: false,
+      label: "Previous visible file",
+      shortcut: "K",
+      repeatable: true,
+      enabled: navigation.previousPath != null,
+      run: () => selectPath(navigation.previousPath),
+    },
+    {
+      key: "a",
+      label:
+        reviewSurface === "accessible"
+          ? "Return to rich diff view"
+          : "Open accessible linear patch view",
+      shortcut: "A",
+      enabled: hasSelection,
+      run: () => onReviewSurfaceChange(reviewSurface === "accessible" ? "rich" : "accessible"),
+    },
+    {
+      key: "j",
+      shift: false,
+      label: "Next visible file",
+      shortcut: "J",
+      repeatable: true,
+      enabled: navigation.nextPath != null,
+      run: () => selectPath(navigation.nextPath),
+    },
+    {
+      key: "k",
+      shift: true,
+      label: "Previous unviewed file",
+      shortcut: "⇧K",
+      repeatable: true,
+      enabled: navigation.previousUnviewedPath != null,
+      run: () => selectPath(navigation.previousUnviewedPath),
+    },
+    {
+      key: "j",
+      shift: true,
+      label: "Next unviewed file",
+      shortcut: "⇧J",
+      repeatable: true,
+      enabled: navigation.nextUnviewedPath != null,
+      run: () => selectPath(navigation.nextUnviewedPath),
+    },
+    {
+      key: "p",
+      label: "Previous changed hunk",
+      shortcut: "P",
+      repeatable: true,
+      enabled: hunkNavigation.previous != null,
+      run: () => {
+        if (hunkNavigation.previous != null) onNavigateHunk(hunkNavigation.previous);
+      },
+    },
+    {
+      key: "n",
+      label: "Next changed hunk",
+      shortcut: "N",
+      repeatable: true,
+      enabled: hunkNavigation.next != null,
+      run: () => {
+        if (hunkNavigation.next != null) onNavigateHunk(hunkNavigation.next);
+      },
+    },
+    {
+      key: "f",
+      label: reviewMode === "focus" ? "Show all visible files" : "Focus selected file",
+      shortcut: "F",
+      enabled: hasSelection,
+      run: () => onReviewModeChange(reviewMode === "focus" ? "all" : "focus"),
+    },
+    {
+      key: "v",
+      label: "Toggle viewed",
+      shortcut: "V",
+      enabled: hasSelection,
+      run: () => {
+        if (selectedPath != null) onViewedChange(selectedPath, !viewedPaths.has(selectedPath));
+      },
+    },
+    {
+      key: "x",
+      label: "Toggle collapsed",
+      shortcut: "X",
+      enabled: hasSelection,
+      run: () => {
+        if (selectedPath != null) {
+          onCollapsedChange(selectedPath, !collapsedPaths.has(selectedPath));
+        }
+      },
+    },
+    {
+      key: "c",
+      label: "Add comment at first changed line",
+      shortcut: "C",
+      enabled: hasSelection,
+      run: () => {
+        if (selectedPath != null) emitAppEvent("add-comment", selectedPath);
+      },
+    },
+    {
+      key: "o",
+      label: "Open in editor",
+      shortcut: "O",
+      enabled: true,
+      run: () => void openEditor().catch((error) => toast.error(String(error))),
+    },
+    {
+      key: "s",
+      label: "Open settings",
+      shortcut: "S",
+      enabled: true,
+      run: () => emitAppEvent("open-settings"),
+    },
+  ];
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (shouldIgnoreShortcutEvent(event)) return;
@@ -91,47 +214,17 @@ export function CommandMenu({
     }
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const key = event.key.toLowerCase();
+    const command = commands.find(
+      (candidate) =>
+        candidate.key === key && (candidate.shift == null || candidate.shift === event.shiftKey),
+    );
     // Holding a key may step through files and hunks, but must never flip a
     // toggle back and forth or open the same panel repeatedly.
-    const steps = key === "j" || key === "k" || key === "n" || key === "p";
-    if (event.repeat && !steps) return;
-    if (event.key === "/") {
-      event.preventDefault();
-      window.dispatchEvent(new Event(FOCUS_FILE_SEARCH_EVENT));
-    } else if (key === "j") {
-      event.preventDefault();
-      selectPath(event.shiftKey ? navigation.nextUnviewedPath : navigation.nextPath);
-    } else if (key === "k") {
-      event.preventDefault();
-      selectPath(event.shiftKey ? navigation.previousUnviewedPath : navigation.previousPath);
-    } else if (key === "f" && selectedPath != null) {
-      event.preventDefault();
-      onReviewModeChange(reviewMode === "focus" ? "all" : "focus");
-    } else if (key === "a" && selectedPath != null) {
-      event.preventDefault();
-      onReviewSurfaceChange(reviewSurface === "accessible" ? "rich" : "accessible");
-    } else if (key === "n" && hunkNavigation.next != null) {
-      event.preventDefault();
-      onNavigateHunk(hunkNavigation.next);
-    } else if (key === "p" && hunkNavigation.previous != null) {
-      event.preventDefault();
-      onNavigateHunk(hunkNavigation.previous);
-    } else if (key === "v" && selectedPath != null) {
-      event.preventDefault();
-      onViewedChange(selectedPath, !viewedPaths.has(selectedPath));
-    } else if (key === "x" && selectedPath != null) {
-      event.preventDefault();
-      onCollapsedChange(selectedPath, !collapsedPaths.has(selectedPath));
-    } else if (key === "c" && selectedPath != null) {
-      event.preventDefault();
-      window.dispatchEvent(new CustomEvent("diffdeck:add-comment", { detail: selectedPath }));
-    } else if (key === "s") {
-      event.preventDefault();
-      window.dispatchEvent(new Event("diffdeck:open-settings"));
-    } else if (key === "o") {
-      event.preventDefault();
-      void openEditor().catch((error) => toast.error(String(error)));
+    if (command == null || !command.enabled || (event.repeat && command.repeatable !== true)) {
+      return;
     }
+    event.preventDefault();
+    command.run();
   });
 
   useEffect(() => {
@@ -168,118 +261,18 @@ export function CommandMenu({
           No matching command.
         </Command.Empty>
         <Command.Group heading="Review" className="text-xs text-muted-foreground">
-          <MenuItem
-            disabled={navigation.previousPath == null}
-            shortcut="K"
-            onSelect={() => run(() => selectPath(navigation.previousPath))}
-          >
-            Previous visible file
-          </MenuItem>
-          <MenuItem
-            disabled={selectedPath == null}
-            shortcut="A"
-            onSelect={() =>
-              run(() =>
-                onReviewSurfaceChange(reviewSurface === "accessible" ? "rich" : "accessible"),
-              )
-            }
-          >
-            {reviewSurface === "accessible"
-              ? "Return to rich diff view"
-              : "Open accessible linear patch view"}
-          </MenuItem>
-          <MenuItem
-            disabled={navigation.nextPath == null}
-            shortcut="J"
-            onSelect={() => run(() => selectPath(navigation.nextPath))}
-          >
-            Next visible file
-          </MenuItem>
-          <MenuItem
-            disabled={navigation.previousUnviewedPath == null}
-            shortcut="⇧K"
-            onSelect={() => run(() => selectPath(navigation.previousUnviewedPath))}
-          >
-            Previous unviewed file
-          </MenuItem>
-          <MenuItem
-            disabled={navigation.nextUnviewedPath == null}
-            shortcut="⇧J"
-            onSelect={() => run(() => selectPath(navigation.nextUnviewedPath))}
-          >
-            Next unviewed file
-          </MenuItem>
-          <MenuItem
-            disabled={hunkNavigation.previous == null}
-            shortcut="P"
-            onSelect={() => {
-              if (hunkNavigation.previous != null) {
-                run(() => onNavigateHunk(hunkNavigation.previous!));
-              }
-            }}
-          >
-            Previous changed hunk
-          </MenuItem>
-          <MenuItem
-            disabled={hunkNavigation.next == null}
-            shortcut="N"
-            onSelect={() => {
-              if (hunkNavigation.next != null) run(() => onNavigateHunk(hunkNavigation.next!));
-            }}
-          >
-            Next changed hunk
-          </MenuItem>
-          <MenuItem
-            disabled={selectedPath == null}
-            shortcut="F"
-            onSelect={() => run(() => onReviewModeChange(reviewMode === "focus" ? "all" : "focus"))}
-          >
-            {reviewMode === "focus" ? "Show all visible files" : "Focus selected file"}
-          </MenuItem>
-          <MenuItem
-            shortcut="V"
-            onSelect={() =>
-              selectedPath != null &&
-              run(() => onViewedChange(selectedPath, !viewedPaths.has(selectedPath)))
-            }
-          >
-            Toggle viewed
-          </MenuItem>
-          <MenuItem
-            shortcut="X"
-            onSelect={() =>
-              selectedPath != null &&
-              run(() => onCollapsedChange(selectedPath, !collapsedPaths.has(selectedPath)))
-            }
-          >
-            Toggle collapsed
-          </MenuItem>
-          <MenuItem
-            shortcut="C"
-            onSelect={() =>
-              run(() =>
-                window.dispatchEvent(
-                  new CustomEvent("diffdeck:add-comment", { detail: selectedPath }),
-                ),
-              )
-            }
-          >
-            Add comment at first changed line
-          </MenuItem>
-          <MenuItem
-            shortcut="O"
-            onSelect={() =>
-              run(() => void openEditor().catch((error) => toast.error(String(error))))
-            }
-          >
-            Open in editor
-          </MenuItem>
-          <MenuItem
-            shortcut="S"
-            onSelect={() => run(() => window.dispatchEvent(new Event("diffdeck:open-settings")))}
-          >
-            Open settings
-          </MenuItem>
+          {commands.map((command) =>
+            command.label == null ? null : (
+              <MenuItem
+                key={`${command.shortcut}`}
+                disabled={!command.enabled}
+                shortcut={command.shortcut}
+                onSelect={() => run(command.run)}
+              >
+                {command.label}
+              </MenuItem>
+            ),
+          )}
         </Command.Group>
         <Command.Group heading="Files" className="mt-2 text-xs text-muted-foreground">
           {matchingFiles.files.map((file) => (
@@ -297,6 +290,16 @@ export function CommandMenu({
       </Command.List>
     </Command.Dialog>
   );
+}
+
+interface ReviewCommand {
+  key: string;
+  shift?: boolean;
+  label?: string;
+  shortcut?: string;
+  repeatable?: boolean;
+  enabled: boolean;
+  run: () => void;
 }
 
 function MenuItem({

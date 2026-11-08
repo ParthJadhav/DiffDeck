@@ -22,16 +22,6 @@ export function CardHeader({ className, ref, ...props }: CardProps) {
   return <div ref={ref} className={cn("flex flex-col gap-y-1.5 p-4", className)} {...props} />;
 }
 
-export function CardTitle({ className, ref, ...props }: CardProps) {
-  return (
-    <div
-      ref={ref}
-      className={cn("font-semibold leading-none tracking-normal", className)}
-      {...props}
-    />
-  );
-}
-
 export function CardDescription({ className, ref, ...props }: CardProps) {
   return <div ref={ref} className={cn("text-sm text-muted-foreground", className)} {...props} />;
 }

@@ -3,22 +3,25 @@ import type { CommentExportRecord } from "../lib/commentExport.js";
 import {
   createReviewSession,
   createReviewSessionIdentity,
+  deleteReviewComment,
   parseReviewSession,
   reconcileReviewSession,
   reconcileCommentAnchors,
   reconcileAnnotationsToComments,
+  saveReviewComment,
   serializeReviewSession,
   updateReviewAnnotations,
+  updateReviewComment,
   updateReviewPathSet,
   type ReviewAnnotation,
   type FileOrder,
   type FileViewMode,
-  type ReviewFilters,
   type ReviewMode,
   type ReviewSurface,
   type ReviewSessionSnapshot,
   type ReviewSessionState,
 } from "../lib/reviewSession.js";
+import type { ReviewFilters } from "../lib/fileFilters.js";
 
 export interface UseReviewSessionResult {
   state: ReviewSessionState;
@@ -35,17 +38,15 @@ export interface UseReviewSessionResult {
   setReviewSurface: (surface: ReviewSurface) => void;
   setSelectedPath: (path: string | null) => void;
   setViewed: (path: string, value: boolean) => void;
-  reconcileComments: (
-    fileDiffs: Parameters<typeof reconcileCommentAnchors>[1],
-    snapshotId: string,
-  ) => void;
   removeCommentsByStatus: (status: "resolved" | "stale") => void;
   resetReview: () => void;
   updateAnnotations: (
     path: string,
     updater: (current: ReviewAnnotation[]) => ReviewAnnotation[],
   ) => void;
-  upsertComment: (comment: CommentExportRecord) => void;
+  /** Saves a submitted note as open on the current snapshot. */
+  saveComment: (comment: CommentExportRecord) => void;
+  updateComment: (comment: CommentExportRecord) => void;
 }
 
 export function useReviewSession(
@@ -137,23 +138,22 @@ export function useReviewSession(
     [],
   );
 
-  const upsertComment = useCallback((comment: CommentExportRecord) => {
-    setState((current) => {
-      const index = current.commentExports.findIndex((item) => item.id === comment.id);
-      if (index === -1) {
-        return { ...current, commentExports: [...current.commentExports, comment] };
-      }
-      const next = [...current.commentExports];
-      next[index] = comment;
-      return { ...current, commentExports: next };
-    });
+  const saveComment = useCallback((comment: CommentExportRecord) => {
+    setState((current) =>
+      saveReviewComment(current, {
+        ...comment,
+        snapshotId: snapshotRef.current.snapshotId,
+        status: "open",
+      }),
+    );
+  }, []);
+
+  const updateComment = useCallback((comment: CommentExportRecord) => {
+    setState((current) => updateReviewComment(current, comment));
   }, []);
 
   const deleteComment = useCallback((id: string) => {
-    setState((current) => ({
-      ...current,
-      commentExports: current.commentExports.filter((comment) => comment.id !== id),
-    }));
+    setState((current) => deleteReviewComment(current, id));
   }, []);
 
   const clearComments = useCallback(() => {
@@ -223,35 +223,12 @@ export function useReviewSession(
     );
   }, []);
 
-  const reconcileComments = useCallback(
-    (nextFileDiffs: Parameters<typeof reconcileCommentAnchors>[1], snapshotId: string) => {
-      setState((current) => {
-        const commentExports = reconcileCommentAnchors(
-          current.commentExports,
-          nextFileDiffs,
-          snapshotId,
-        );
-        if (commentExports === current.commentExports) return current;
-        return {
-          ...current,
-          annotationsByFile: reconcileAnnotationsToComments(
-            current.annotationsByFile,
-            commentExports,
-          ),
-          commentExports,
-        };
-      });
-    },
-    [],
-  );
-
   return {
     state,
     collapsedPaths,
     viewedPaths,
     clearComments,
     deleteComment,
-    reconcileComments,
     removeCommentsByStatus,
     resetReview,
     setCollapsed,
@@ -264,7 +241,8 @@ export function useReviewSession(
     setSelectedPath,
     setViewed,
     updateAnnotations,
-    upsertComment,
+    saveComment,
+    updateComment,
   };
 }
 

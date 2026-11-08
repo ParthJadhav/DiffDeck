@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { orderDiffFiles } from "../src/client/lib/fileOrder.js";
-import type { DiffFileSummary } from "../src/client/types.js";
+import type { DiffFileSummary } from "../src/server/protocol.js";
 
 const files = [
   file("z/deleted.ts", "deleted", 1, 1),

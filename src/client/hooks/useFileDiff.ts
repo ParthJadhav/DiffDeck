@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
-import { fetchJson } from "../lib/api.js";
+import { api } from "../lib/api.js";
 
 export interface UseFileDiffResult {
   fileDiffs: Record<string, FileDiffMetadata>;
@@ -37,10 +37,8 @@ export function useFileDiff(): UseFileDiffResult {
       const controller = new AbortController();
       controllersRef.current.set(path, controller);
       const generation = generationRef.current;
-      const params = new URLSearchParams({ path });
-      void fetchJson<FileDiffMetadata>(`/api/file-diff?${params.toString()}`, {
-        signal: controller.signal,
-      })
+      void api
+        .fileDiff(path, controller.signal)
         .then((fileDiff) => {
           if (generationRef.current !== generation) return;
           loadedRef.current.add(path);

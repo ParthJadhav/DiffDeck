@@ -8,7 +8,7 @@ import {
   searchFiles,
 } from "../src/client/lib/fileListRows.js";
 import { orderDiffFiles } from "../src/client/lib/fileOrder.js";
-import type { DiffFileSummary } from "../src/client/types.js";
+import type { DiffFileSummary } from "../src/server/protocol.js";
 
 const files = orderDiffFiles(
   [

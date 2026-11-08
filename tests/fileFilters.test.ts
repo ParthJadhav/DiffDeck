@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { filterDiffFiles, isDependencyPath } from "../src/client/lib/fileFilters.js";
-import { emptyReviewFilters } from "../src/client/lib/reviewSession.js";
-import type { DiffFileSummary } from "../src/client/types.js";
+import {
+  countActiveFilters,
+  emptyReviewFilters,
+  filterDiffFiles,
+  isDependencyPath,
+} from "../src/client/lib/fileFilters.js";
+
+import type { DiffFileSummary } from "../src/server/protocol.js";
 
 const files: DiffFileSummary[] = [
   file("src/app.ts", "modified", 10),
@@ -50,6 +55,17 @@ describe("file filters", () => {
   test("recognizes dependency manifests by basename without case sensitivity", () => {
     expect(isDependencyPath("packages/app/Package.JSON")).toBe(true);
     expect(isDependencyPath("packages/app/package.json.backup")).toBe(false);
+  });
+  test("counts each narrowing filter once and ignores defaults", () => {
+    expect(countActiveFilters(emptyReviewFilters)).toBe(0);
+    expect(
+      countActiveFilters({
+        ...emptyReviewFilters,
+        extensions: ["ts", "tsx"],
+        hideViewed: true,
+        path: "src",
+      }),
+    ).toBe(3);
   });
 });
 

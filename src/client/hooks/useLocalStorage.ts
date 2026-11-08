@@ -1,45 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Updater<T> = T | ((previous: T) => T);
 
-export interface UseLocalStorageOptions<T> {
-  serialize?: (value: T) => string;
-  deserialize?: (raw: string) => T;
-}
-
-function readFromStorage<T>(key: string, fallback: T, deserialize: (raw: string) => T): T {
+function readFromStorage<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
     const raw = window.localStorage.getItem(key);
     if (raw == null) return fallback;
-    return deserialize(raw);
+    return JSON.parse(raw) as T;
   } catch {
     return fallback;
   }
 }
 
-export function useLocalStorage<T>(
-  key: string,
-  initialValue: T,
-  options: UseLocalStorageOptions<T> = {},
-): [T, (value: Updater<T>) => void] {
-  const serialize = options.serialize ?? JSON.stringify;
-  const deserialize = options.deserialize ?? (JSON.parse as (raw: string) => T);
-
-  const serializeRef = useRef(serialize);
-  const deserializeRef = useRef(deserialize);
-
-  useEffect(() => {
-    serializeRef.current = serialize;
-    deserializeRef.current = deserialize;
-  }, [deserialize, serialize]);
-
-  const [value, setValue] = useState<T>(() => readFromStorage(key, initialValue, deserialize));
+export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: Updater<T>) => void] {
+  const [value, setValue] = useState<T>(() => readFromStorage(key, initialValue));
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem(key, serializeRef.current(value));
+      window.localStorage.setItem(key, JSON.stringify(value));
     } catch {
       // Ignore quota/serialization errors — state still lives in memory.
     }
@@ -50,7 +30,7 @@ export function useLocalStorage<T>(
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== key || event.newValue == null) return;
       try {
-        setValue(deserializeRef.current(event.newValue));
+        setValue(JSON.parse(event.newValue) as T);
       } catch {
         // Keep current value if the cross-tab payload is unreadable.
       }

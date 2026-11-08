@@ -5,7 +5,8 @@ import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { execFile, spawnSync } from "node:child_process";
 import { DiffdeckError } from "./errors.js";
-import type { DiffBuildOptions, DiffFileSummary, DiffSession } from "./types.js";
+import type { DiffBuildOptions, DiffSession } from "./types.js";
+import type { DiffFileSummary, DiffWhitespaceMode } from "./protocol.js";
 import { buildCacheKey } from "./cacheKey.js";
 
 // Node's spawnSync defaults maxBuffer to 1 MB, which is easily exceeded by
@@ -41,7 +42,22 @@ type RawDiffFileContext = {
 
 type DiffLogger = (message: string) => void;
 
-function runGit(repo: string, args: string[]): string {
+function gitFailure(
+  message: string,
+  repo: string,
+  args: readonly string[],
+  status: number | string | null | undefined,
+  signal: string | null | undefined,
+): DiffdeckError {
+  return new DiffdeckError(message, [
+    `repo: ${repo}`,
+    `command: git ${args.join(" ")}`,
+    `exit status: ${status ?? "unknown"}`,
+    `signal: ${signal ?? "none"}`,
+  ]);
+}
+
+function runGit(repo: string, args: readonly string[]): string {
   const result = spawnSync("git", ["-C", repo, ...args], {
     encoding: "utf8",
     maxBuffer: GIT_MAX_BUFFER,
@@ -58,18 +74,13 @@ function runGit(repo: string, args: string[]): string {
   if (result.status !== 0) {
     const stderr = typeof result.stderr === "string" ? result.stderr.trim() : "";
     const message = stderr.length > 0 ? stderr : `git ${args.join(" ")} failed`;
-    throw new DiffdeckError(message, [
-      `repo: ${repo}`,
-      `command: git ${args.join(" ")}`,
-      `exit status: ${result.status ?? "unknown"}`,
-      `signal: ${result.signal ?? "none"}`,
-    ]);
+    throw gitFailure(message, repo, args, result.status, result.signal);
   }
 
   return typeof result.stdout === "string" ? result.stdout : "";
 }
 
-function runGitAsync(repo: string, args: string[]): Promise<string> {
+function runGitAsync(repo: string, args: readonly string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       "git",
@@ -78,14 +89,7 @@ function runGitAsync(repo: string, args: string[]): Promise<string> {
       (error, stdout, stderr) => {
         if (error != null) {
           const message = stderr.trim().length > 0 ? stderr.trim() : error.message;
-          reject(
-            new DiffdeckError(message, [
-              `repo: ${repo}`,
-              `command: git ${args.join(" ")}`,
-              `exit status: ${error.code ?? "unknown"}`,
-              `signal: ${error.signal ?? "none"}`,
-            ]),
-          );
+          reject(gitFailure(message, repo, args, error.code, error.signal));
           return;
         }
         resolve(stdout);
@@ -94,17 +98,41 @@ function runGitAsync(repo: string, args: string[]): Promise<string> {
   });
 }
 
+function tryGit(repo: string, args: readonly string[]): string | null {
+  const result = spawnSync("git", ["-C", repo, ...args], {
+    encoding: "utf8",
+    maxBuffer: GIT_MAX_BUFFER,
+  });
+  return result.status === 0 ? result.stdout : null;
+}
+
 export function resolveRepoRoot(startDirectory: string): string {
   return runGit(startDirectory, ["rev-parse", "--show-toplevel"]).trim();
 }
 
-export function getRawDiff(repoRoot: string, diffArgs: string[]): string {
-  // core.quotePath=false keeps non-ASCII paths as raw UTF-8 instead of C-style
-  // octal escapes wrapped in quotes. Git still quotes control characters such
-  // as tabs and newlines; those headers are normalized before processPatch.
-  // Explicit prefixes keep repository/global diff.srcPrefix and diff.dstPrefix
-  // settings from changing the header format that the normalizer consumes.
-  return runGit(repoRoot, [
+const whitespaceFlags: Record<DiffWhitespaceMode, string[]> = {
+  normal: [],
+  "ignore-eol": ["--ignore-space-at-eol"],
+  "ignore-space-change": ["--ignore-space-change"],
+  "ignore-all": ["--ignore-all-space"],
+  "ignore-blank-lines": ["--ignore-blank-lines"],
+};
+
+/**
+ * The one `git diff` invocation DiffDeck parses or applies.
+ *
+ * core.quotePath=false keeps non-ASCII paths as raw UTF-8 instead of C-style
+ * octal escapes wrapped in quotes. Git still quotes control characters such
+ * as tabs and newlines; those headers are normalized before processPatch.
+ * Explicit prefixes keep repository/global diff.srcPrefix, diff.dstPrefix and
+ * diff.noprefix settings from changing the header format that the normalizer
+ * and `git apply` consume.
+ */
+function gitDiffArgs(
+  diffArgs: readonly string[],
+  whitespaceMode: DiffWhitespaceMode = "normal",
+): string[] {
+  return [
     "-c",
     "core.quotePath=false",
     "diff",
@@ -115,24 +143,37 @@ export function getRawDiff(repoRoot: string, diffArgs: string[]): string {
     "--binary",
     "--no-color",
     "--no-ext-diff",
+    ...whitespaceFlags[whitespaceMode],
     ...diffArgs,
-  ]);
+  ];
 }
 
-export function getRawDiffAsync(repoRoot: string, diffArgs: string[]): Promise<string> {
-  return runGitAsync(repoRoot, [
-    "-c",
-    "core.quotePath=false",
-    "diff",
-    "--src-prefix=a/",
-    "--dst-prefix=b/",
-    "--find-renames",
-    "--submodule=diff",
-    "--binary",
-    "--no-color",
-    "--no-ext-diff",
-    ...diffArgs,
-  ]);
+export function getRawDiff(
+  repoRoot: string,
+  diffArgs: readonly string[],
+  whitespaceMode?: DiffWhitespaceMode,
+): string {
+  return runGit(repoRoot, gitDiffArgs(diffArgs, whitespaceMode));
+}
+
+export function getRawDiffAsync(
+  repoRoot: string,
+  diffArgs: readonly string[],
+  whitespaceMode?: DiffWhitespaceMode,
+): Promise<string> {
+  return runGitAsync(repoRoot, gitDiffArgs(diffArgs, whitespaceMode));
+}
+
+export function getFileDiff(
+  repoRoot: string,
+  diffArgs: readonly string[],
+  paths: string | readonly string[],
+  whitespaceMode: DiffWhitespaceMode,
+): string {
+  const separator = diffArgs.indexOf("--");
+  const diffOptions = separator === -1 ? diffArgs : diffArgs.slice(0, separator);
+  const pathspec = typeof paths === "string" ? [paths] : paths;
+  return runGit(repoRoot, gitDiffArgs([...diffOptions, "--", ...pathspec], whitespaceMode));
 }
 
 function decodeGitQuotedPathToken(input: string, startIndex: number): GitPathToken | null {
@@ -578,12 +619,7 @@ function readWorktreeFile(repoRoot: string, path: string): string | null {
 }
 
 function readIndexFile(repoRoot: string, path: string): string | null {
-  const result = spawnSync("git", ["-C", repoRoot, "show", `:${path}`], {
-    encoding: "utf8",
-    maxBuffer: 1024 * 1024 * 50,
-  });
-  if (result.status !== 0) return null;
-  return result.stdout;
+  return tryGit(repoRoot, ["show", `:${path}`]);
 }
 
 function createFileContents(name: string, contents: string): FileContents {
@@ -686,11 +722,8 @@ function hydrateFileDiff(
 }
 
 function getUnmergedPaths(repoRoot: string): string[] {
-  const result = spawnSync("git", ["-C", repoRoot, "diff", "--name-only", "--diff-filter=U"], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return [];
-  return result.stdout.split(/\r?\n/).flatMap((path) => {
+  const output = tryGit(repoRoot, ["diff", "--name-only", "--diff-filter=U"]) ?? "";
+  return output.split(/\r?\n/).flatMap((path) => {
     const trimmed = path.trim();
     return trimmed.length === 0 ? [] : [trimmed];
   });
@@ -757,7 +790,7 @@ export function buildDiffSession(
     repoRoot,
     currentDirectory,
     diffArgs,
-    getRawDiff(repoRoot, diffArgs),
+    getRawDiff(repoRoot, diffArgs, options?.whitespaceMode),
     options,
   );
 }

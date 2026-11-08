@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { withCapabilityToken } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import { isTextEntryActive } from "../lib/keyboard.js";
 
 export function useWatchEvents(enabled: boolean, onReload: () => void, autoRefresh: boolean): void {
   useEffect(() => {
     if (!enabled) return;
-    const source = new EventSource(withCapabilityToken("/api/events"));
+    const source = new EventSource(api.eventsUrl());
     const handleSnapshot = () => {
       const editingComment =
         document.querySelector(".app-comment-textarea, dialog[open] textarea") != null ||

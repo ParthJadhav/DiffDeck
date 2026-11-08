@@ -1,4 +1,4 @@
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 export interface DirectoryRow {
   kind: "directory";
@@ -101,7 +101,6 @@ export function searchFiles(
   return files.filter((file) => file.path.toLocaleLowerCase().includes(normalized));
 }
 
-/** Collapsed folders that hide `path`; expanding them reveals the file. */
 export function collapsedAncestors(collapsed: ReadonlySet<string>, path: string): string[] {
   const ancestors: string[] = [];
   for (const id of collapsed) {

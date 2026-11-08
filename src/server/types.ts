@@ -1,17 +1,5 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
-import type { GitStatus } from "@pierre/trees";
-
-export interface DiffFileSummary {
-  path: string;
-  prevPath?: string;
-  diffId: string;
-  changeType: FileDiffMetadata["type"];
-  gitStatus: GitStatus;
-  additions: number;
-  deletions: number;
-  hasMergeConflicts?: boolean;
-  isBinary?: boolean;
-}
+import type { DiffFileSummary, DiffWhitespaceMode } from "./protocol.js";
 
 export interface DiffSession {
   snapshotId: string;
@@ -42,4 +30,5 @@ export interface CliOptions {
 export interface DiffBuildOptions {
   debug?: boolean;
   log?: (message: string) => void;
+  whitespaceMode?: DiffWhitespaceMode;
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
-import { fetchJson } from "../lib/api.js";
-import type { DiffWhitespaceMode, SessionPayload } from "../types.js";
+import { api } from "../lib/api.js";
+import type { DiffWhitespaceMode, SessionPayload } from "../../server/protocol.js";
 
 export interface UseSessionResult {
   session: SessionPayload | null;
@@ -57,9 +57,7 @@ export function useSession(): UseSessionResult {
     setError(null);
 
     try {
-      const params = new URLSearchParams({ t: String(Date.now()) });
-      if (rebuild) params.set("refresh", "1");
-      const nextSession = await fetchJson<SessionPayload>(`/api/session?${params.toString()}`);
+      const nextSession = await api.session(rebuild);
       if (requestIdRef.current === requestId) {
         setSession(nextSession);
         setRevision((current) => current + 1);
@@ -100,11 +98,7 @@ export function useSession(): UseSessionResult {
     dispatchActivity({ type: "start", initial: false });
     setError(null);
     try {
-      const nextSession = await fetchJson<SessionPayload>("/api/preferences", {
-        body: JSON.stringify({ whitespaceMode: mode }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
+      const nextSession = await api.setWhitespaceMode(mode);
       if (requestIdRef.current === requestId) {
         setSession(nextSession);
         setRevision((current) => current + 1);

@@ -1,26 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Braces, Check, Copy, Download, Eye, FileText, Send, Trash2, X } from "lucide-react";
-import type { CommentExportRecord } from "../lib/commentExport.js";
-import { fetchWithCapability, withCapabilityToken } from "../lib/api.js";
+import { api } from "../lib/api.js";
 import {
   createReviewPacket,
   formatReviewPacketJson,
   formatReviewPacketMarkdown,
+  type ReviewPacketInput,
 } from "../lib/reviewPacket.js";
 import { cn } from "../lib/cn.js";
 import { copyTextToClipboard } from "../lib/clipboard.js";
 import { Button } from "./ui/button.js";
 
 type CopyStatus = "idle" | "copied" | "failed";
-
-export interface ReviewPacketSource {
-  comments: readonly CommentExportRecord[];
-  diffArgs: string[];
-  repoRoot: string;
-  snapshotId: string;
-  totalFiles: number;
-  viewedFiles: number;
-}
 
 function useReviewPacket({
   comments,
@@ -29,17 +20,9 @@ function useReviewPacket({
   snapshotId,
   totalFiles,
   viewedFiles,
-}: ReviewPacketSource) {
+}: ReviewPacketInput) {
   const packet = useMemo(
-    () =>
-      createReviewPacket({
-        comments: [...comments],
-        diffArgs,
-        repoRoot,
-        snapshotId,
-        totalFiles,
-        viewedFiles,
-      }),
+    () => createReviewPacket({ comments, diffArgs, repoRoot, snapshotId, totalFiles, viewedFiles }),
     [comments, diffArgs, repoRoot, snapshotId, totalFiles, viewedFiles],
   );
   const markdown = useMemo(() => formatReviewPacketMarkdown(packet), [packet]);
@@ -47,7 +30,7 @@ function useReviewPacket({
   return { json, markdown };
 }
 
-export function noteNoun(count: number): string {
+function noteNoun(count: number): string {
   return count === 1 ? "note" : "notes";
 }
 
@@ -55,7 +38,7 @@ export function noteNoun(count: number): string {
  * The one place a review leaves DiffDeck: copy for an agent chat, download
  * the JSON packet, or print it in the terminal that launched DiffDeck.
  */
-export function HandoffBar(props: ReviewPacketSource) {
+export function HandoffBar(props: ReviewPacketInput) {
   const { json, markdown } = useReviewPacket(props);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
@@ -88,15 +71,7 @@ export function HandoffBar(props: ReviewPacketSource) {
 
   const handleSend = async () => {
     try {
-      const response = await fetchWithCapability("/api/review-packet", {
-        body: json,
-        headers: { "content-type": "application/json" },
-        method: "POST",
-      });
-      if (!response.ok) throw new Error("Terminal submission failed");
-      // Consume the body so the browser does not report the completed request
-      // as aborted when the page later navigates away.
-      await response.text();
+      await api.sendReviewPacket(json);
       report("copied", "Sent review packet to the terminal");
     } catch {
       report("failed", "Unable to send the review packet to the terminal");
@@ -145,7 +120,7 @@ export function HandoffBar(props: ReviewPacketSource) {
           for agent
         </span>
       </Button>
-      <form action={withCapabilityToken("/api/review-packet/download")} method="post">
+      <form action={api.reviewPacketDownloadUrl()} method="post">
         <input type="hidden" name="packet" value={json} />
         <Button
           aria-label="Download review packet as JSON"
@@ -179,7 +154,7 @@ export function HandoffBar(props: ReviewPacketSource) {
 export function PacketPreview({
   onClearAll,
   ...source
-}: ReviewPacketSource & { onClearAll: () => void }) {
+}: ReviewPacketInput & { onClearAll: () => void }) {
   const { json, markdown } = useReviewPacket(source);
   const [previewFormat, setPreviewFormat] = useState<"markdown" | "json">("markdown");
   const [clearConfirmation, setClearConfirmation] = useState({ active: false, commentCount: 0 });

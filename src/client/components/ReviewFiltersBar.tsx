@@ -9,7 +9,8 @@ import {
 } from "react";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { anchoredPanelPlacement, type PanelSide } from "../lib/anchoredPanel.js";
-import type { FileOrder, ReviewFilters } from "../lib/reviewSession.js";
+import type { FileOrder } from "../lib/reviewSession.js";
+import { countActiveFilters, emptyReviewFilters, type ReviewFilters } from "../lib/fileFilters.js";
 import { cn } from "../lib/cn.js";
 import { Button } from "./ui/button.js";
 import { Checkbox } from "./ui/checkbox.js";
@@ -21,20 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog.js";
-
-const emptyFilters: ReviewFilters = {
-  binary: false,
-  changeSizes: [],
-  conflicts: false,
-  dependency: false,
-  extensions: [],
-  hideDeleted: false,
-  hideGenerated: false,
-  hideLock: false,
-  hideViewed: false,
-  path: "",
-  statuses: [],
-};
 
 export function ReviewFiltersBar({
   fileOrder,
@@ -84,12 +71,6 @@ export function ReviewFiltersBar({
       window.removeEventListener("scroll", updatePanelPosition, true);
     };
   }, [open, updatePanelPosition]);
-
-  useEffect(() => {
-    const handleOpenRequest = () => setOpen(true);
-    window.addEventListener("diffdeck:open-filters", handleOpenRequest);
-    return () => window.removeEventListener("diffdeck:open-filters", handleOpenRequest);
-  }, []);
 
   useEffect(() => {
     if (open) {
@@ -306,7 +287,7 @@ export function ReviewFiltersBar({
                 variant="ghost"
                 size="xs"
                 disabled={activeCount === 0}
-                onClick={() => onChange(emptyFilters)}
+                onClick={() => onChange({ ...emptyReviewFilters })}
                 className="text-muted-foreground"
               >
                 Clear filters
@@ -407,20 +388,4 @@ function FilterCheck({
       <span className="truncate">{label}</span>
     </label>
   );
-}
-
-export function countActiveFilters(filters: ReviewFilters): number {
-  return [
-    filters.binary,
-    filters.conflicts,
-    filters.dependency,
-    filters.hideDeleted,
-    filters.hideGenerated,
-    filters.hideLock,
-    filters.hideViewed,
-    filters.path.length > 0,
-    filters.extensions.length > 0,
-    filters.statuses.length > 0,
-    filters.changeSizes.length > 0,
-  ].filter(Boolean).length;
 }

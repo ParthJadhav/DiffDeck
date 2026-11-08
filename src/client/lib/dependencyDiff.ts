@@ -1,4 +1,5 @@
 import type { FileDiffMetadata } from "@pierre/diffs";
+import { sortedStrings } from "./strings.js";
 
 export interface DependencyChange {
   name: string;
@@ -26,16 +27,6 @@ export function summarizeDependencyDiff(fileDiff: FileDiffMetadata): DependencyC
     changes.push({ name, oldVersion, newVersion, type });
   }
   return changes;
-}
-
-function sortedStrings(values: Iterable<string>): string[] {
-  const result: string[] = [];
-  for (const value of values) {
-    const index = result.findIndex((current) => current.localeCompare(value) > 0);
-    if (index === -1) result.push(value);
-    else result.splice(index, 0, value);
-  }
-  return result;
 }
 
 function parsePackages(path: string, sourceLines: readonly string[]): Map<string, string> {

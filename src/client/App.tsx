@@ -3,7 +3,7 @@ import { WorkerPoolContextProvider, useWorkerPool } from "@pierre/diffs/react";
 import { Toaster, toast } from "sonner";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { Accessibility, ArrowLeft, Files } from "lucide-react";
-import { FOCUS_FILE_SEARCH_EVENT, Sidebar, type SidebarProps } from "./components/Sidebar.js";
+import { Sidebar, type SidebarProps } from "./components/Sidebar.js";
 import { DiffWorkspace, type DiffWorkspaceProps } from "./components/DiffWorkspace.js";
 import { DiffControls, type DiffControlsProps } from "./components/DiffControls.js";
 import { CommandMenu } from "./components/CommandMenu.js";
@@ -20,22 +20,32 @@ import { useReviewSession } from "./hooks/useReviewSession.js";
 import { useWatchEvents } from "./hooks/useWatchEvents.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useMediaQuery } from "./hooks/useMediaQuery.js";
-import { highlighterLangs, themeOptions } from "./lib/constants.js";
-import { filterDiffFiles } from "./lib/fileFilters.js";
+import {
+  highlighterLangs,
+  themeOptions,
+  type DiffLayout,
+  type OverflowMode,
+  type ThemeChoice,
+} from "./lib/constants.js";
+import {
+  emptyReviewFilters,
+  filterDiffFiles,
+  hasTextDiff,
+  isLargeChange,
+} from "./lib/fileFilters.js";
 import { buildDiffDeepLink, buildSelectedFileUrl, readDiffLocation } from "./lib/deepLink.js";
 import { getHunkNavigation, type HunkTarget } from "./lib/hunkNavigation.js";
+import { emitAppEvent, onAppEvent } from "./lib/appEvents.js";
 import { getReviewNavigation } from "./lib/reviewNavigation.js";
 import { orderDiffFiles } from "./lib/fileOrder.js";
 import { cn } from "./lib/cn.js";
 import type { CommentExportRecord } from "./lib/commentExport.js";
-import { emptyReviewFilters, type ReviewSessionSnapshot } from "./lib/reviewSession.js";
-import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "./lib/uiTypes.js";
-import type { DiffWhitespaceMode, SessionPayload } from "./types.js";
+import type { ReviewSessionSnapshot } from "./lib/reviewSession.js";
+
+import type { DiffWhitespaceMode, SessionPayload } from "../server/protocol.js";
 import { workerFactory } from "./workerFactory.js";
 
 const lineDiffType = "word-alt" as const;
-const hunkSeparators: HunkSeparatorMode = "custom";
-const LARGE_DIFF_LINE_THRESHOLD = 800;
 
 export function App() {
   const { session, loading, refreshing, error, revision, refresh, reload, setWhitespaceMode } =
@@ -243,7 +253,7 @@ function useDiffDeckSessionModel({
     // A write action can remove the selected file from the session before the
     // selection is renormalized; requesting its diff would 404.
     if (selectedFile == null) return;
-    if (selectedFile.hasMergeConflicts === true || selectedFile.isBinary === true) return;
+    if (!hasTextDiff(selectedFile)) return;
     requestPath(selectedPath);
   }, [requestPath, selectedPath, sessionFilesByPath]);
 
@@ -293,22 +303,19 @@ function useDiffDeckSessionModel({
     window.history.replaceState(null, "", nextHref);
   }, [selectedPath]);
 
-  useEffect(() => {
-    const updateLine = (event: Event) => {
-      const detail = (
-        event as CustomEvent<{ line: number; path: string; side: HunkTarget["side"] }>
-      ).detail;
-      if (detail.path !== selectedPath) return;
-      setSelectedLocation({ line: detail.line, path: detail.path, side: detail.side });
-      window.history.replaceState(
-        null,
-        "",
-        buildDiffDeepLink(window.location.href, detail.path, detail),
-      );
-    };
-    window.addEventListener("diffdeck:line-selected", updateLine);
-    return () => window.removeEventListener("diffdeck:line-selected", updateLine);
-  }, [selectedPath]);
+  useEffect(
+    () =>
+      onAppEvent("line-selected", (location) => {
+        if (location.path !== selectedPath) return;
+        setSelectedLocation(location);
+        window.history.replaceState(
+          null,
+          "",
+          buildDiffDeepLink(window.location.href, location.path, location),
+        );
+      }),
+    [selectedPath],
+  );
 
   const handleTreeSelection = useCallback(
     (path: string | null) => {
@@ -319,38 +326,9 @@ function useDiffDeckSessionModel({
       reviewSession.setSelectedPath(path);
       if (path != null) setScrollSignal((current) => current + 1);
       const selectedFile = path == null ? null : sessionFilesByPath.get(path);
-      if (selectedFile?.hasMergeConflicts !== true && selectedFile?.isBinary !== true) {
-        if (path != null) requestPath(path);
-      }
+      if (path != null && (selectedFile == null || hasTextDiff(selectedFile))) requestPath(path);
     },
     [requestPath, reviewSession, selectedPath, sessionFilesByPath],
-  );
-
-  const handleHubCommentUpdate = useCallback(
-    (comment: CommentExportRecord) => {
-      reviewSession.updateAnnotations(comment.filePath, (current) =>
-        current.map((annotation) =>
-          annotation.metadata.id === comment.id
-            ? {
-                ...annotation,
-                metadata: { ...annotation.metadata, body: comment.body },
-              }
-            : annotation,
-        ),
-      );
-      reviewSession.upsertComment(comment);
-    },
-    [reviewSession],
-  );
-
-  const handleHubCommentDelete = useCallback(
-    (comment: CommentExportRecord) => {
-      reviewSession.updateAnnotations(comment.filePath, (current) =>
-        current.filter((annotation) => annotation.metadata.id !== comment.id),
-      );
-      reviewSession.deleteComment(comment.id);
-    },
-    [reviewSession],
   );
 
   const handleJumpToComment = useCallback(
@@ -370,21 +348,13 @@ function useDiffDeckSessionModel({
           "",
           buildDiffDeepLink(window.location.href, comment.filePath, target),
         );
-        window.dispatchEvent(
-          new CustomEvent("diffdeck:navigate-line", {
-            detail: { ...target, path: comment.filePath },
-          }),
-        );
+        emitAppEvent("navigate-line", target);
       }
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:focus-note", {
-          detail: {
-            id: comment.id,
-            path: comment.filePath,
-            scope: scope === "line" && status === "open" ? "line" : "file",
-          },
-        }),
-      );
+      emitAppEvent("focus-note", {
+        id: comment.id,
+        path: comment.filePath,
+        scope: scope === "line" && status === "open" ? "line" : "file",
+      });
     },
     [handleTreeSelection, reviewSession, visibleFiles],
   );
@@ -406,17 +376,6 @@ function useDiffDeckSessionModel({
 
   const handleViewedFileChange = useCallback(
     (path: string, value: boolean) => reviewSession.setViewed(path, value),
-    [reviewSession],
-  );
-
-  const handleCommentSaved = useCallback(
-    (comment: CommentExportRecord) =>
-      reviewSession.upsertComment({ ...comment, snapshotId: session.snapshotId, status: "open" }),
-    [reviewSession, session.snapshotId],
-  );
-
-  const handleCommentDeleted = useCallback(
-    (id: string) => reviewSession.deleteComment(id),
     [reviewSession],
   );
 
@@ -442,11 +401,7 @@ function useDiffDeckSessionModel({
         "",
         buildDiffDeepLink(window.location.href, selectedPath, target),
       );
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:navigate-line", {
-          detail: { line: target.line, path: selectedPath, side: target.side },
-        }),
-      );
+      emitAppEvent("navigate-line", { line: target.line, path: selectedPath, side: target.side });
     },
     [collapsedFilePaths, handleCollapsedFileChange, selectedPath],
   );
@@ -560,11 +515,10 @@ function useDiffDeckSessionModel({
     fileDiffs,
     fileDiffErrors,
     files: workspaceFiles,
-    hunkSeparators,
     onAnnotationsChange: reviewSession.updateAnnotations,
     onCollapsedFileChange: handleCollapsedFileChange,
-    onCommentDeleted: handleCommentDeleted,
-    onCommentSaved: handleCommentSaved,
+    onCommentDeleted: reviewSession.deleteComment,
+    onCommentSaved: reviewSession.saveComment,
     onFileCommentDraftChange: reviewSession.setFileCommentDraft,
     onRequestFileDiff: requestSessionFileDiff,
     onRetryFileDiff: retryPath,
@@ -589,8 +543,6 @@ function useDiffDeckSessionModel({
     controlsProps,
     handleClearAllComments,
     handleCollapsedFileChange,
-    handleHubCommentDelete,
-    handleHubCommentUpdate,
     handleJumpToComment,
     handleNavigateHunk,
     handleTreeSelection,
@@ -618,8 +570,6 @@ function DiffDeckSessionView({
   controlsProps,
   handleClearAllComments,
   handleCollapsedFileChange,
-  handleHubCommentDelete,
-  handleHubCommentUpdate,
   handleJumpToComment,
   handleNavigateHunk,
   handleTreeSelection,
@@ -692,9 +642,9 @@ function DiffDeckSessionView({
             onRemoveStatus={reviewSession.removeCommentsByStatus}
           />
         }
-        onDelete={handleHubCommentDelete}
+        onDelete={(comment) => reviewSession.deleteComment(comment.id)}
         onJump={handleJumpToComment}
-        onUpdate={handleHubCommentUpdate}
+        onUpdate={reviewSession.updateComment}
       />
     ),
   } satisfies SidebarProps;
@@ -740,13 +690,7 @@ function DiffDeckSessionView({
 }
 
 function getAutoCollapsedPaths(files: readonly SessionPayload["files"][number][]): string[] {
-  const paths: string[] = [];
-  for (const file of files) {
-    if (file.additions + file.deletions >= LARGE_DIFF_LINE_THRESHOLD) {
-      paths.push(file.path);
-    }
-  }
-  return paths;
+  return files.filter(isLargeChange).map((file) => file.path);
 }
 
 function DiffDeckLayout({
@@ -774,11 +718,11 @@ function DiffDeckLayout({
       setNarrowSearchRequested(true);
       setNarrowNavigationOpen(true);
     };
-    window.addEventListener("diffdeck:focus-note", showReview);
-    window.addEventListener(FOCUS_FILE_SEARCH_EVENT, showFileSearch);
+    const unsubscribeNote = onAppEvent("focus-note", showReview);
+    const unsubscribeSearch = onAppEvent("focus-file-search", showFileSearch);
     return () => {
-      window.removeEventListener("diffdeck:focus-note", showReview);
-      window.removeEventListener(FOCUS_FILE_SEARCH_EVENT, showFileSearch);
+      unsubscribeNote();
+      unsubscribeSearch();
     };
   }, [isDesktopLayout]);
 

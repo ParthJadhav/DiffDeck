@@ -17,17 +17,29 @@ export function patchAnnotationMeta(
   );
 }
 
-export function createCommentAnnotation(
+export function newLineCommentId(side: AnnotationSide, lineNumber: number): string {
+  return `${side}-${lineNumber}-${Date.now()}`;
+}
+
+/** Opens a composer at a line unless one is already open there. */
+export function addCommentForm(
+  annotations: CommentAnnotation[],
   side: AnnotationSide,
   lineNumber: number,
-): CommentAnnotation {
+): CommentAnnotation[] {
+  const alreadyOpen = annotations.some(
+    (annotation) =>
+      annotation.side === side &&
+      annotation.lineNumber === lineNumber &&
+      annotation.metadata.kind === "comment-form",
+  );
+  return alreadyOpen ? annotations : [...annotations, createCommentAnnotation(side, lineNumber)];
+}
+
+function createCommentAnnotation(side: AnnotationSide, lineNumber: number): CommentAnnotation {
   return {
     side,
     lineNumber,
-    metadata: {
-      body: "",
-      id: `${side}-${lineNumber}-${Date.now()}`,
-      kind: "comment-form",
-    },
+    metadata: { body: "", id: newLineCommentId(side, lineNumber), kind: "comment-form" },
   };
 }

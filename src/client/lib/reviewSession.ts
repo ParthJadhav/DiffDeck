@@ -1,6 +1,8 @@
 import type { AnnotationSide } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { CommentExportRecord } from "./commentExport.js";
+import { emptyReviewFilters, sanitizeReviewFilters, type ReviewFilters } from "./fileFilters.js";
+import { sanitizeStringArray, sortedStrings } from "./strings.js";
 
 export const REVIEW_SESSION_VERSION = 5;
 
@@ -22,20 +24,6 @@ export interface ReviewAnnotation {
   side: AnnotationSide;
   lineNumber: number;
   metadata: ReviewAnnotationMetadata;
-}
-
-export interface ReviewFilters {
-  binary: boolean;
-  conflicts: boolean;
-  dependency: boolean;
-  extensions: string[];
-  changeSizes: string[];
-  hideDeleted: boolean;
-  hideGenerated: boolean;
-  hideLock: boolean;
-  hideViewed: boolean;
-  path: string;
-  statuses: string[];
 }
 
 export interface ReviewSessionFile {
@@ -68,20 +56,6 @@ export interface ReviewSessionState {
   version: typeof REVIEW_SESSION_VERSION;
   viewedPaths: string[];
 }
-
-export const emptyReviewFilters: ReviewFilters = {
-  binary: false,
-  conflicts: false,
-  dependency: false,
-  extensions: [],
-  changeSizes: [],
-  hideDeleted: false,
-  hideGenerated: false,
-  hideLock: false,
-  hideViewed: false,
-  path: "",
-  statuses: [],
-};
 
 export function createReviewSessionIdentity(snapshot: ReviewSessionSnapshot): string {
   const source = JSON.stringify([snapshot.repoRoot, snapshot.diffArgs]);
@@ -149,7 +123,7 @@ export function parseReviewSession(
           ? candidate.fileOrder
           : "path",
       fileViewMode: candidate.fileViewMode === "list" ? "list" : "tree",
-      filters: sanitizeFilters(candidate.filters),
+      filters: sanitizeReviewFilters(candidate.filters),
       identity: candidate.identity,
       reviewMode: candidate.reviewMode === "focus" ? "focus" : "all",
       reviewSurface: candidate.reviewSurface === "accessible" ? "accessible" : "rich",
@@ -277,6 +251,85 @@ export function updateReviewAnnotations(
   return { ...annotationsByFile, [path]: next };
 }
 
+/**
+ * Notes live in two shapes: the exported records (what the packet carries)
+ * and the per-file annotations the diff renders. These three operations are
+ * the only way to change a saved note, so both shapes always agree.
+ */
+export function saveReviewComment(
+  state: ReviewSessionState,
+  comment: CommentExportRecord,
+): ReviewSessionState {
+  const annotationsByFile =
+    comment.scope === "line"
+      ? updateReviewAnnotations(state.annotationsByFile, comment.filePath, (current) => {
+          const metadata = { body: comment.body, id: comment.id, kind: "comment" as const };
+          return current.some((annotation) => annotation.metadata.id === comment.id)
+            ? current.map((annotation) =>
+                annotation.metadata.id === comment.id
+                  ? {
+                      ...annotation,
+                      metadata: { ...annotation.metadata, ...metadata, previousBody: undefined },
+                    }
+                  : annotation,
+              )
+            : [...current, { side: comment.side, lineNumber: comment.lineNumber, metadata }];
+        })
+      : state.annotationsByFile;
+  return {
+    ...state,
+    annotationsByFile,
+    commentExports: upsertComment(state.commentExports, comment),
+  };
+}
+
+/** Edits a saved note's body or status without touching an open composer. */
+export function updateReviewComment(
+  state: ReviewSessionState,
+  comment: CommentExportRecord,
+): ReviewSessionState {
+  return {
+    ...state,
+    annotationsByFile: updateReviewAnnotations(
+      state.annotationsByFile,
+      comment.filePath,
+      (current) =>
+        current.map((annotation) =>
+          annotation.metadata.id === comment.id
+            ? { ...annotation, metadata: { ...annotation.metadata, body: comment.body } }
+            : annotation,
+        ),
+    ),
+    commentExports: upsertComment(state.commentExports, comment),
+  };
+}
+
+export function deleteReviewComment(state: ReviewSessionState, id: string): ReviewSessionState {
+  let annotationsByFile = state.annotationsByFile;
+  for (const [path, annotations] of Object.entries(state.annotationsByFile)) {
+    if (!annotations.some((annotation) => annotation.metadata.id === id)) continue;
+    annotationsByFile = updateReviewAnnotations(annotationsByFile, path, (current) =>
+      current.filter((annotation) => annotation.metadata.id !== id),
+    );
+  }
+  return {
+    ...state,
+    annotationsByFile,
+    commentExports: state.commentExports.filter((comment) => comment.id !== id),
+  };
+}
+
+function upsertComment(
+  comments: readonly CommentExportRecord[],
+  comment: CommentExportRecord,
+): CommentExportRecord[] {
+  const index = comments.findIndex((item) => item.id === comment.id);
+  if (index === -1) return [...comments, comment];
+  const next = [...comments];
+  next[index] = comment;
+  return next;
+}
+
 export function reconcileCommentAnchors(
   comments: readonly CommentExportRecord[],
   fileDiffs: Readonly<Record<string, FileDiffMetadata>>,
@@ -389,20 +442,6 @@ function uniqueExistingPaths(
   return sortedStrings(new Set(values.filter((path) => paths.has(path))));
 }
 
-function sanitizeStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? sortedStrings(new Set(value.filter((item): item is string => typeof item === "string")))
-    : [];
-}
-
-function sortedStrings(values: Iterable<string>): string[] {
-  const result = Array.from(values);
-  // Oxlint recommends toSorted(), but the project's current TypeScript lib
-  // target does not include ES2023 array methods. This mutates only our copy.
-  // oxlint-disable-next-line unicorn/no-array-sort
-  return result.sort((left, right) => left.localeCompare(right));
-}
-
 function sanitizeStringRecord(value: unknown): Record<string, string> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
@@ -451,22 +490,4 @@ function sanitizeCommentExports(value: unknown): CommentExportRecord[] {
       Array.isArray(candidate.contextLines)
     );
   });
-}
-
-function sanitizeFilters(value: unknown): ReviewFilters {
-  if (value == null || typeof value !== "object") return { ...emptyReviewFilters };
-  const candidate = value as Partial<ReviewFilters>;
-  return {
-    binary: candidate.binary === true,
-    conflicts: candidate.conflicts === true,
-    dependency: candidate.dependency === true,
-    extensions: sanitizeStringArray(candidate.extensions),
-    changeSizes: sanitizeStringArray(candidate.changeSizes),
-    hideDeleted: candidate.hideDeleted === true,
-    hideGenerated: candidate.hideGenerated === true,
-    hideLock: candidate.hideLock === true,
-    hideViewed: candidate.hideViewed === true,
-    path: typeof candidate.path === "string" ? candidate.path : "",
-    statuses: sanitizeStringArray(candidate.statuses),
-  };
 }

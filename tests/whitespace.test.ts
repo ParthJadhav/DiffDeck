@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { getRawDiff } from "../src/server/git.js";
-import { isDiffWhitespaceMode, withWhitespaceMode } from "../src/server/whitespace.js";
+import { isDiffWhitespaceMode } from "../src/server/protocol.js";
 
 const repos: string[] = [];
 
@@ -30,19 +30,7 @@ function createRepo(): string {
 }
 
 describe("whitespace modes", () => {
-  test("maps only known UI modes to fixed Git flags", () => {
-    expect(withWhitespaceMode(["--cached", "--", "*.ts"], "normal")).toEqual([
-      "--cached",
-      "--",
-      "*.ts",
-    ]);
-    expect(withWhitespaceMode(["--cached"], "ignore-eol")).toEqual([
-      "--ignore-space-at-eol",
-      "--cached",
-    ]);
-    expect(withWhitespaceMode([], "ignore-space-change")).toEqual(["--ignore-space-change"]);
-    expect(withWhitespaceMode([], "ignore-all")).toEqual(["--ignore-all-space"]);
-    expect(withWhitespaceMode([], "ignore-blank-lines")).toEqual(["--ignore-blank-lines"]);
+  test("accepts only the UI's whitespace mode names", () => {
     expect(isDiffWhitespaceMode("ignore-all")).toBe(true);
     expect(isDiffWhitespaceMode("--ignore-all-space")).toBe(false);
   });
@@ -50,8 +38,9 @@ describe("whitespace modes", () => {
   test("changes Git output instead of visually hiding whitespace-only lines", () => {
     const repo = createRepo();
     writeFileSync(join(repo, "example.txt"), "alpha   \n");
-    expect(getRawDiff(repo, withWhitespaceMode([], "normal"))).toContain("+alpha   ");
-    expect(getRawDiff(repo, withWhitespaceMode([], "ignore-eol"))).toBe("");
-    expect(getRawDiff(repo, withWhitespaceMode([], "ignore-all"))).toBe("");
+    expect(getRawDiff(repo, [], "normal")).toContain("+alpha   ");
+    expect(getRawDiff(repo, [], "ignore-eol")).toBe("");
+    expect(getRawDiff(repo, [], "ignore-space-change")).toBe("");
+    expect(getRawDiff(repo, [], "ignore-all")).toBe("");
   });
 });

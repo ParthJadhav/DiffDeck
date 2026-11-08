@@ -11,7 +11,7 @@ import {
 import { cleanLastNewline } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs/react";
 import { LoaderCircle } from "lucide-react";
-import type { NavigateLineDetail } from "../../lib/diffDom.js";
+import { onAppEvent, type LineLocation } from "../../lib/appEvents.js";
 import { readDiffLocation } from "../../lib/deepLink.js";
 
 const ROW_HEIGHT = 20;
@@ -126,16 +126,15 @@ export const HeavyFileDiff = memo(function HeavyFileDiff({
   // 24k-line) hunk tree. Always start false — initialising from `!collapsed`
   // would render rows synchronously on mount and skip the deferral.
   const [renderRows, setRenderRows] = useState(false);
-  const [pendingTarget, setPendingTarget] = useState<NavigateLineDetail | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<LineLocation | null>(null);
 
-  useEffect(() => {
-    const handleNavigation = (event: Event) => {
-      const detail = (event as CustomEvent<NavigateLineDetail>).detail;
-      if (detail.path === fileDiff.name) setPendingTarget(detail);
-    };
-    window.addEventListener("diffdeck:navigate-line", handleNavigation);
-    return () => window.removeEventListener("diffdeck:navigate-line", handleNavigation);
-  }, [fileDiff.name]);
+  useEffect(
+    () =>
+      onAppEvent("navigate-line", (location) => {
+        if (location.path === fileDiff.name) setPendingTarget(location);
+      }),
+    [fileDiff.name],
+  );
 
   useEffect(() => {
     const location = readDiffLocation(window.location.href);

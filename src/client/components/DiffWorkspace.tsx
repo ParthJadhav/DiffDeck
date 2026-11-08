@@ -20,26 +20,32 @@ import {
   type FileDiffMetadata,
 } from "@pierre/diffs/react";
 import type { AnnotationSide, SelectedLineRange } from "@pierre/diffs";
-import { AlertCircle, FileWarning, ImageOff, LoaderCircle } from "lucide-react";
-import { customHunkSeparatorCSS, stickyFileHeaderCSS } from "../lib/constants.js";
-import { fetchJson } from "../lib/api.js";
+import { AlertCircle, FileWarning, LoaderCircle } from "lucide-react";
+import {
+  customHunkSeparatorCSS,
+  stickyFileHeaderCSS,
+  type DiffLayout,
+  type OverflowMode,
+  type ThemeChoice,
+} from "../lib/constants.js";
+import { api } from "../lib/api.js";
 import {
   focusRenderedReviewNote,
+  retryUntilRendered,
   scrollToRenderedDiffLine,
-  type NavigateLineDetail,
 } from "../lib/diffDom.js";
+import { emitAppEvent, onAppEvent, type LineLocation } from "../lib/appEvents.js";
 import { readDiffLocation } from "../lib/deepLink.js";
 import { getHunkTargets } from "../lib/hunkNavigation.js";
 import { buildCommentContext, type CommentExportRecord } from "../lib/commentExport.js";
-import type { DiffLayout, HunkSeparatorMode, OverflowMode, ThemeChoice } from "../lib/uiTypes.js";
-import type { DiffFileSummary, SessionPayload } from "../types.js";
+import { imageMimeType, type DiffFileSummary, type SessionPayload } from "../../server/protocol.js";
 import { isDependencyPath } from "../lib/fileFilters.js";
 import { Card, CardContent, CardDescription, CardHeader } from "./ui/card.js";
 import { Button } from "./ui/button.js";
 import { Skeleton } from "./ui/skeleton.js";
 import { CommentAnnotationView } from "./diff/CommentAnnotation.js";
 import {
-  createCommentAnnotation,
+  addCommentForm,
   patchAnnotationMeta,
   type CommentAnnotation,
 } from "./diff/commentAnnotationModel.js";
@@ -58,8 +64,6 @@ const AccessiblePatchView = lazy(async () => {
 });
 
 const EMPTY_ANNOTATIONS: CommentAnnotation[] = [];
-const LINE_NAVIGATION_RETRY_ATTEMPTS = 160;
-const LINE_NAVIGATION_RETRY_MS = 50;
 
 export interface DiffWorkspaceProps {
   annotationsByFile: Readonly<Record<string, CommentAnnotation[]>>;
@@ -73,7 +77,6 @@ export interface DiffWorkspaceProps {
   files: DiffFileSummary[];
   fileDiffs: Record<string, FileDiffMetadata>;
   fileDiffErrors: Record<string, string>;
-  hunkSeparators: HunkSeparatorMode;
   onAnnotationsChange: (
     path: string,
     updater: (current: CommentAnnotation[]) => CommentAnnotation[],
@@ -113,7 +116,6 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
     files,
     fileDiffs,
     fileDiffErrors,
-    hunkSeparators,
     onAnnotationsChange,
     onCollapsedFileChange,
     onCommentDeleted,
@@ -138,83 +140,40 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
   } = props;
 
   useEffect(() => {
-    let navigationGeneration = 0;
-    let timer = 0;
-    const navigate = (event: Event) => {
-      const detail = (event as CustomEvent<NavigateLineDetail>).detail;
-      const generation = ++navigationGeneration;
-      let attempts = 0;
-      const tryScroll = () => {
-        if (generation !== navigationGeneration) return;
-        if (scrollToRenderedDiffLine(detail)) return;
-        attempts += 1;
-        if (attempts < LINE_NAVIGATION_RETRY_ATTEMPTS) {
-          timer = window.setTimeout(tryScroll, LINE_NAVIGATION_RETRY_MS);
-        }
-      };
-      window.requestAnimationFrame(tryScroll);
-    };
-    window.addEventListener("diffdeck:navigate-line", navigate);
+    let cancelPending = () => {};
+    const unsubscribe = onAppEvent("navigate-line", (location) => {
+      cancelPending();
+      cancelPending = retryUntilRendered(() => scrollToRenderedDiffLine(location));
+    });
     return () => {
-      navigationGeneration += 1;
-      window.clearTimeout(timer);
-      window.removeEventListener("diffdeck:navigate-line", navigate);
+      cancelPending();
+      unsubscribe();
     };
   }, []);
 
   useEffect(() => {
-    let generation = 0;
-    let timer = 0;
-    const focusNote = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string; path: string; scope: "file" | "line" }>)
-        .detail;
-      const requestGeneration = ++generation;
-      let attempts = 0;
-      const tryFocus = () => {
-        if (requestGeneration !== generation) return;
-        if (focusRenderedReviewNote(detail)) return;
-        attempts += 1;
-        if (attempts < LINE_NAVIGATION_RETRY_ATTEMPTS) {
-          timer = window.setTimeout(tryFocus, LINE_NAVIGATION_RETRY_MS);
-        }
-      };
-      window.requestAnimationFrame(tryFocus);
-    };
-    window.addEventListener("diffdeck:focus-note", focusNote);
+    let cancelPending = () => {};
+    const unsubscribe = onAppEvent("focus-note", (note) => {
+      cancelPending();
+      cancelPending = retryUntilRendered(() => focusRenderedReviewNote(note));
+    });
     return () => {
-      generation += 1;
-      window.clearTimeout(timer);
-      window.removeEventListener("diffdeck:focus-note", focusNote);
+      cancelPending();
+      unsubscribe();
     };
   }, []);
 
-  const handleShortcutComment = useEffectEvent((event: Event) => {
-    const path = (event as CustomEvent<string>).detail;
+  const handleShortcutComment = useEffectEvent((path: string) => {
     const fileDiff = fileDiffs[path];
     if (fileDiff == null) return;
     const target = getHunkTargets(fileDiff)[0];
     if (target == null) return;
     flushSync(() =>
-      onAnnotationsChange(path, (current) => {
-        if (
-          current.some(
-            (annotation) =>
-              annotation.side === target.side &&
-              annotation.lineNumber === target.line &&
-              annotation.metadata.kind === "comment-form",
-          )
-        ) {
-          return current;
-        }
-        return [...current, createCommentAnnotation(target.side, target.line)];
-      }),
+      onAnnotationsChange(path, (current) => addCommentForm(current, target.side, target.line)),
     );
   });
 
-  useEffect(() => {
-    window.addEventListener("diffdeck:add-comment", handleShortcutComment);
-    return () => window.removeEventListener("diffdeck:add-comment", handleShortcutComment);
-  }, []);
+  useEffect(() => onAppEvent("add-comment", handleShortcutComment), []);
 
   const diffOptions = useMemo(
     () => ({
@@ -225,25 +184,14 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
       enableGutterUtility: true,
       enableLineSelection: true,
       expandUnchanged,
-      hunkSeparators: hunkSeparators === "custom" ? "line-info-basic" : hunkSeparators,
-      unsafeCSS: [stickyFileHeaderCSS, hunkSeparators === "custom" && customHunkSeparatorCSS]
-        .filter(Boolean)
-        .join("\n"),
-      expansionLineCount: hunkSeparators === "custom" ? 5 : 100,
+      hunkSeparators: "line-info-basic" as const,
+      unsafeCSS: `${stickyFileHeaderCSS}\n${customHunkSeparatorCSS}`,
+      expansionLineCount: 5,
       lineHoverHighlight: "both" as const,
       overflow,
-      onPostRender: patchRenderedDiffAccessibility,
       themeType,
     }),
-    [
-      diffStyle,
-      disableBackground,
-      expandUnchanged,
-      hunkSeparators,
-      overflow,
-      showLineNumbers,
-      themeType,
-    ],
+    [diffStyle, disableBackground, expandUnchanged, overflow, showLineNumbers, themeType],
   );
 
   if (selectedFile == null) {
@@ -292,7 +240,6 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
           error={fileDiffErrors[selectedFile.path]}
           file={selectedFile}
           fileDiff={fileDiffs[selectedFile.path]}
-          onAnnotationsChange={onAnnotationsChange}
           onCommentSaved={onCommentSaved}
           onRetry={onRetryFileDiff}
           onReturnToRich={() => onReviewSurfaceChange("rich")}
@@ -348,11 +295,22 @@ export function DiffWorkspace(props: DiffWorkspaceProps) {
   );
 }
 
+const accessibleCodeRoots = new WeakSet<ShadowRoot>();
+
+/**
+ * Pierre renders its horizontally scrollable code columns without a name or
+ * tab stop. Label them after every render, including Pierre's own re-renders
+ * of the same shadow root.
+ */
 function patchRenderedDiffAccessibility(node: HTMLElement) {
-  queueMicrotask(() => {
-    const tree = node.getRootNode();
-    const scope = tree instanceof ShadowRoot ? tree : (node.shadowRoot ?? node);
-    patchScrollableCodeAccessibility(scope);
+  const root = node.shadowRoot;
+  if (root == null) return;
+  patchScrollableCodeAccessibility(root);
+  if (accessibleCodeRoots.has(root)) return;
+  accessibleCodeRoots.add(root);
+  new MutationObserver(() => patchScrollableCodeAccessibility(root)).observe(root, {
+    childList: true,
+    subtree: true,
   });
 }
 
@@ -482,35 +440,6 @@ function useFileDiffSectionModel({
 
   const isHeavyFile = file.additions + file.deletions >= HEAVY_DIFF_LINE_THRESHOLD;
 
-  useEffect(() => {
-    if (collapsed || fileDiff == null || isHeavyFile) return;
-    let attempts = 0;
-    let timer = 0;
-    let cancelled = false;
-    let observer: MutationObserver | null = null;
-    const patch = () => {
-      if (cancelled) return;
-      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-file-path]")).find(
-        (candidate) => candidate.dataset.filePath === file.path,
-      );
-      const shadowRoot = card?.querySelector("diffs-container")?.shadowRoot;
-      if (shadowRoot != null) {
-        patchScrollableCodeAccessibility(shadowRoot);
-        observer = new MutationObserver(() => patchScrollableCodeAccessibility(shadowRoot));
-        observer.observe(shadowRoot, { childList: true, subtree: true });
-        return;
-      }
-      attempts += 1;
-      if (attempts < 20) timer = window.setTimeout(patch, 25);
-    };
-    window.requestAnimationFrame(patch);
-    return () => {
-      cancelled = true;
-      observer?.disconnect();
-      window.clearTimeout(timer);
-    };
-  }, [collapsed, file.path, fileDiff, isHeavyFile]);
-
   const headerActions = useMemo(
     () => (
       <FileActions
@@ -581,10 +510,10 @@ function useFileDiffSectionModel({
       dispatchUnresolvedState(idleUnresolvedFileState);
       return;
     }
-    const params = new URLSearchParams({ path: file.path });
     let cancelled = false;
     dispatchUnresolvedState({ error: null, file: null, loading: true });
-    void fetchJson<FileContents>(`/api/unresolved-file?${params.toString()}`)
+    void api
+      .unresolvedFile(file.path)
       .then((contents) => {
         if (!cancelled) dispatchUnresolvedState({ error: null, file: contents, loading: false });
       })
@@ -607,6 +536,7 @@ function useFileDiffSectionModel({
   const handlePostRender = useCallback(
     (...args: Parameters<typeof installHunkExpansionFallback>) => {
       installHunkExpansionFallback(...args);
+      patchRenderedDiffAccessibility(args[0]);
       const location = readDiffLocation(window.location.href);
       if (location.file !== filePath || location.line == null || location.side == null) {
         return;
@@ -615,7 +545,7 @@ function useFileDiffSectionModel({
         line: location.line,
         path: filePath,
         side: location.side,
-      } satisfies NavigateLineDetail;
+      } satisfies LineLocation;
       window.requestAnimationFrame(() => {
         scrollToRenderedDiffLine(detail, { source: "render" });
       });
@@ -631,19 +561,7 @@ function useFileDiffSectionModel({
 
   const addCommentAtLine = useCallback(
     (side: AnnotationSide, lineNumber: number) => {
-      onAnnotationsChange(filePath, (current) => {
-        if (
-          current.some(
-            (annotation) =>
-              annotation.side === side &&
-              annotation.lineNumber === lineNumber &&
-              annotation.metadata.kind === "comment-form",
-          )
-        ) {
-          return current;
-        }
-        return [...current, createCommentAnnotation(side, lineNumber)];
-      });
+      onAnnotationsChange(filePath, (current) => addCommentForm(current, side, lineNumber));
     },
     [filePath, onAnnotationsChange],
   );
@@ -651,19 +569,17 @@ function useFileDiffSectionModel({
   const handleLineSelectionEnd = useCallback(
     (range: SelectedLineRange | null) => {
       onSelectedLinesChange(filePath, range);
-      diffOptions?.onLineSelectionEnd?.(range);
-      diffOptions?.onLineSelected?.(range);
       if (range == null) return;
       const side: AnnotationSide =
         (range.endSide ?? range.side) === "deletions" ? "deletions" : "additions";
       addCommentAtLine(side, Math.max(range.start, range.end));
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:line-selected", {
-          detail: { line: Math.max(range.start, range.end), path: filePath, side },
-        }),
-      );
+      emitAppEvent("line-selected", {
+        line: Math.max(range.start, range.end),
+        path: filePath,
+        side,
+      });
     },
-    [addCommentAtLine, diffOptions, filePath, onSelectedLinesChange],
+    [addCommentAtLine, filePath, onSelectedLinesChange],
   );
 
   const handleCommentCancel = useCallback(
@@ -681,7 +597,6 @@ function useFileDiffSectionModel({
         return current.filter((annotation) => annotation.metadata.id !== id);
       });
       onSelectedLinesChange(filePath, null);
-      diffOptions?.onLineSelected?.(null);
       // Discarding a new composer unmounts the focused textarea; keep focus in
       // the workspace instead of dropping it on <body>.
       window.requestAnimationFrame(() => {
@@ -690,7 +605,7 @@ function useFileDiffSectionModel({
         }
       });
     },
-    [diffOptions, filePath, onAnnotationsChange, onSelectedLinesChange],
+    [filePath, onAnnotationsChange, onSelectedLinesChange],
   );
 
   const handleCommentEdit = useCallback(
@@ -705,16 +620,6 @@ function useFileDiffSectionModel({
       });
     },
     [filePath, onAnnotationsChange],
-  );
-
-  const handleCommentDelete = useCallback(
-    (id: string) => {
-      onAnnotationsChange(filePath, (current) =>
-        current.filter((annotation) => annotation.metadata.id !== id),
-      );
-      onCommentDeleted(id);
-    },
-    [filePath, onAnnotationsChange, onCommentDeleted],
   );
 
   const handleCommentBodyChange = useCallback(
@@ -740,13 +645,6 @@ function useFileDiffSectionModel({
       if (submittedAnnotation == null) return;
 
       const normalizedBody = body.trim().length > 0 ? body.trim() : "Needs review before merging.";
-      onAnnotationsChange(filePath, (current) =>
-        patchAnnotationMeta(current, id, {
-          body: normalizedBody,
-          kind: "comment",
-          previousBody: undefined,
-        }),
-      );
       onCommentSaved({
         body: normalizedBody,
         contextLines: buildCommentContext({
@@ -762,14 +660,11 @@ function useFileDiffSectionModel({
         side: submittedAnnotation.side,
       });
       onSelectedLinesChange(filePath, null);
-      diffOptions?.onLineSelected?.(null);
     },
     [
-      diffOptions,
       file.hasMergeConflicts,
       filePath,
       fileDiff,
-      onAnnotationsChange,
       onCommentSaved,
       onSelectedLinesChange,
       unresolvedState.file,
@@ -803,7 +698,7 @@ function useFileDiffSectionModel({
         annotation={annotation as CommentAnnotation}
         onBodyChange={handleCommentBodyChange}
         onCancel={handleCommentCancel}
-        onDelete={handleCommentDelete}
+        onDelete={onCommentDeleted}
         onEdit={handleCommentEdit}
         onSubmit={handleCommentSubmit}
       />
@@ -811,9 +706,9 @@ function useFileDiffSectionModel({
     [
       handleCommentBodyChange,
       handleCommentCancel,
-      handleCommentDelete,
       handleCommentEdit,
       handleCommentSubmit,
+      onCommentDeleted,
     ],
   );
 
@@ -898,10 +793,7 @@ function FileDiffSectionView({
         file={unresolvedState.file}
         options={{
           ...fileDiffOptions,
-          hunkSeparators:
-            typeof fileDiffOptions.hunkSeparators === "function"
-              ? "line-info"
-              : fileDiffOptions.hunkSeparators,
+          hunkSeparators: "line-info-basic",
           mergeConflictActionsType: "default",
           maxContextLines: 3,
           onPostRender: undefined,
@@ -927,10 +819,10 @@ function FileDiffSectionView({
           onViewedChange={handleHeaderViewedChange}
           viewed={viewed}
         />
-        {collapsed ? null : IMAGE_EXTENSIONS.has(getFileExtension(file.path)) ? (
+        {collapsed ? null : imageMimeType(file.path) != null ? (
           <ImageDiff path={file.path} />
         ) : (
-          <UnsupportedFileBody path={file.path} />
+          <UnsupportedFileBody />
         )}
       </>
     );
@@ -1047,35 +939,7 @@ function FileDiffSectionView({
   );
 }
 
-const IMAGE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "bmp",
-  "ico",
-  "tif",
-  "tiff",
-  "avif",
-  "heic",
-  "heif",
-]);
-
-function getFileExtension(path: string): string {
-  const base = path.slice(path.lastIndexOf("/") + 1);
-  const dot = base.lastIndexOf(".");
-  return dot <= 0 ? "" : base.slice(dot + 1).toLowerCase();
-}
-
-function UnsupportedFileBody({ path }: { path: string }) {
-  const extension = getFileExtension(path);
-  const isImage = IMAGE_EXTENSIONS.has(extension);
-  const Icon = isImage ? ImageOff : FileWarning;
-  const label = isImage ? "Image preview not supported" : "Binary file not shown";
-  const description = isImage
-    ? "Image diffs aren't rendered in the viewer yet."
-    : "This file's contents are binary and can't be shown as a text diff.";
+function UnsupportedFileBody() {
   return (
     <div
       role="note"
@@ -1083,11 +947,13 @@ function UnsupportedFileBody({ path }: { path: string }) {
     >
       <CardContent className="flex max-w-sm flex-col items-center gap-2 p-0">
         <span className="app-unsupported-file-icon inline-flex size-8 items-center justify-center rounded-md">
-          <Icon aria-hidden="true" className="size-4" />
+          <FileWarning aria-hidden="true" className="size-4" />
         </span>
         <div className="space-y-1">
-          <p className="font-medium text-foreground">{label}</p>
-          <p className="leading-relaxed">{description}</p>
+          <p className="font-medium text-foreground">Binary file not shown</p>
+          <p className="leading-relaxed">
+            This file's contents are binary and can't be shown as a text diff.
+          </p>
         </div>
       </CardContent>
     </div>

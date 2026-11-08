@@ -14,10 +14,10 @@ import { buildCommentContext, type CommentExportRecord } from "../lib/commentExp
 import { copyTextToClipboard } from "../lib/clipboard.js";
 import { buildDiffDeepLink, hasCapabilityToken, readDiffLocation } from "../lib/deepLink.js";
 import { cn } from "../lib/cn.js";
-import type { ReviewAnnotation } from "../lib/reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import { emitAppEvent, onAppEvent } from "../lib/appEvents.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 import { isSubmitShortcut, shouldIgnoreShortcutEvent } from "../lib/keyboard.js";
-import { createCommentAnnotation } from "./diff/commentAnnotationModel.js";
+import { newLineCommentId } from "./diff/commentAnnotationModel.js";
 import { ComposerHint } from "./diff/ComposerHint.js";
 import { Button } from "./ui/button.js";
 import { Textarea } from "./ui/textarea.js";
@@ -29,10 +29,6 @@ type AccessiblePatchViewProps = {
   error?: string;
   file: DiffFileSummary;
   fileDiff?: FileDiffMetadata;
-  onAnnotationsChange: (
-    path: string,
-    updater: (current: ReviewAnnotation[]) => ReviewAnnotation[],
-  ) => void;
   onCommentSaved: (comment: CommentExportRecord) => void;
   onRetry: (path: string) => void;
   onReturnToRich: () => void;
@@ -53,7 +49,6 @@ function AccessiblePatchViewContent({
   error,
   file,
   fileDiff,
-  onAnnotationsChange,
   onCommentSaved,
   onRetry,
   onReturnToRich,
@@ -88,16 +83,7 @@ function AccessiblePatchViewContent({
       if (row == null) return;
       setCurrentChange(index);
       const line = lineForChangedRow(row);
-      window.history.replaceState(
-        null,
-        "",
-        buildDiffDeepLink(window.location.href, file.path, { line, side: row.side }),
-      );
-      window.dispatchEvent(
-        new CustomEvent("diffdeck:line-selected", {
-          detail: { line, path: file.path, side: row.side },
-        }),
-      );
+      emitAppEvent("line-selected", { line, path: file.path, side: row.side });
       window.requestAnimationFrame(() => {
         const element = rowRefs.current.get(row.key);
         element?.scrollIntoView({ block: "center" });
@@ -107,17 +93,17 @@ function AccessiblePatchViewContent({
     [changedRows, file.path],
   );
 
-  useEffect(() => {
-    const openFirstChangeComposer = (event: Event) => {
-      if ((event as CustomEvent<string>).detail !== file.path) return;
-      const first = changedRows[0];
-      if (first == null) return;
-      setComposer({ body: "", key: first.key });
-      focusChange(0);
-    };
-    window.addEventListener("diffdeck:add-comment", openFirstChangeComposer);
-    return () => window.removeEventListener("diffdeck:add-comment", openFirstChangeComposer);
-  }, [changedRows, file.path, focusChange]);
+  useEffect(
+    () =>
+      onAppEvent("add-comment", (path) => {
+        if (path !== file.path) return;
+        const first = changedRows[0];
+        if (first == null) return;
+        setComposer({ body: "", key: first.key });
+        focusChange(0);
+      }),
+    [changedRows, file.path, focusChange],
+  );
 
   const nextIndex =
     changedRows.length === 0
@@ -168,12 +154,6 @@ function AccessiblePatchViewContent({
     const body = composer.body.trim();
     if (body.length === 0) return;
     const lineNumber = lineForChangedRow(row);
-    const draft = createCommentAnnotation(row.side, lineNumber);
-    const saved: ReviewAnnotation = {
-      ...draft,
-      metadata: { ...draft.metadata, body, kind: "comment" },
-    };
-    onAnnotationsChange(file.path, (current) => [...current, saved]);
     onCommentSaved({
       body,
       contextLines: buildCommentContext({
@@ -183,7 +163,7 @@ function AccessiblePatchViewContent({
         unresolvedFile: null,
       }),
       filePath: file.path,
-      id: saved.metadata.id,
+      id: newLineCommentId(row.side, lineNumber),
       lineNumber,
       scope: "line",
       side: row.side,

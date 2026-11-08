@@ -1,7 +1,7 @@
 import { prepareFileTreeInput } from "@pierre/trees";
 import { fileTreeShapeOptions } from "./constants.js";
 import type { FileOrder } from "./reviewSession.js";
-import type { DiffFileSummary } from "../types.js";
+import type { DiffFileSummary } from "../../server/protocol.js";
 
 const statusPriority: Record<string, number> = {
   modified: 1,
@@ -33,7 +33,7 @@ export function orderDiffFiles(
   };
   const ordered = [...files];
   // Oxlint recommends toSorted(), but the project's current TypeScript lib
-  // target does not include ES2023 array methods. This mutates only our copy.
+  // target does not include ES2023 array methods.
   // oxlint-disable-next-line unicorn/no-array-sort
   return ordered.sort(compare);
 }

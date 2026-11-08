@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SelectedLineRange } from "@pierre/diffs";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
-import type { DiffFileSummary } from "../../types.js";
+import type { DiffFileSummary } from "../../../server/protocol.js";
 import { isTextEntryEvent } from "../../lib/keyboard.js";
 import { chooseVisiblePath } from "../../lib/visiblePath.js";
+import { hasTextDiff } from "../../lib/fileFilters.js";
 import { Card } from "../ui/card.js";
 
 const VIRTUOSO_OVERSCAN_PX = 1200;
@@ -74,7 +75,7 @@ export function MultiFileScroller(props: {
     (range: { startIndex: number; endIndex: number }) => {
       for (let index = range.startIndex; index <= range.endIndex; index += 1) {
         const file = files[index];
-        if (file == null || file.hasMergeConflicts === true || file.isBinary === true) continue;
+        if (file == null || !hasTextDiff(file)) continue;
         if (collapsedFilePaths.has(file.path)) continue;
         onRequestFileDiff(file.path);
       }
@@ -96,8 +97,6 @@ export function MultiFileScroller(props: {
     },
     [onVisiblePathChange],
   );
-
-  useEffect(() => cleanupVisibleObserver(visibleObserverCleanupRef), []);
 
   const handledScrollRequestRef = useRef<string | null>(null);
   useEffect(() => {
@@ -251,13 +250,5 @@ function installVisiblePathObserver(
   return () => {
     intersectionObserver.disconnect();
     mutationObserver.disconnect();
-  };
-}
-
-function cleanupVisibleObserver(ref: { current: (() => void) | null }) {
-  const cleanup = ref.current;
-  return () => {
-    cleanup?.();
-    if (ref.current === cleanup) ref.current = null;
   };
 }

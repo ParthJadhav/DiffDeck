@@ -1,39 +1,33 @@
 #!/usr/bin/env node
 
 import { realpathSync } from "node:fs";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import open from "open";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  buildDiffSessionFromRawDiff,
-  getRawDiff,
-  getRawDiffAsync,
-  resolveRepoRoot,
-} from "./git.js";
-import { startServer, type DiffSessionSource } from "./server.js";
-import type { CliOptions } from "./types.js";
+import { resolveRepoRoot } from "./git.js";
+import { createGitDiffSource, type DiffSource } from "./diffSource.js";
+import { startServer, type ServerOptions } from "./server.js";
 import { formatCliError } from "./errors.js";
-import { withWhitespaceMode, type DiffWhitespaceMode } from "./whitespace.js";
-import { getCliInformationalOutput, parseCliArgs } from "./cliOptions.js";
+import { getCliInformationalOutput, isDebugEnvironment, parseCliArgs } from "./cliOptions.js";
 
 export { parseCliArgs } from "./cliOptions.js";
 
 async function startServerWithFallback(
-  sessionSource: DiffSessionSource,
-  options: CliOptions & { capabilityToken?: string },
+  source: DiffSource,
+  port: number,
+  portExplicit: boolean,
+  host: string,
+  options: ServerOptions,
 ) {
   try {
-    return await startServer(sessionSource, options.port, options.host, options);
+    return await startServer(source, port, host, options);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException)?.code;
-    const portWasExplicit = options.portExplicit;
-    if (code !== "EADDRINUSE" || portWasExplicit) throw error;
+    if (code !== "EADDRINUSE" || portExplicit) throw error;
 
-    console.warn(
-      `Port ${options.port} is in use. Falling back to a free port — pass --port to override.`,
-    );
-    return await startServer(sessionSource, 0, options.host, options);
+    console.warn(`Port ${port} is in use. Falling back to a free port — pass --port to override.`);
+    return await startServer(source, 0, host, options);
   }
 }
 
@@ -47,59 +41,27 @@ async function main(): Promise<void> {
   const options = parseCliArgs(argv);
   const requestedRepoPath = realpathSync(resolve(options.repo));
   const repoRoot = resolveRepoRoot(requestedRepoPath);
-  let whitespaceMode: DiffWhitespaceMode = "normal";
-  const buildSessionForMode = (mode: DiffWhitespaceMode) =>
-    buildDiffSessionFromRawDiff(
-      repoRoot,
-      requestedRepoPath,
-      options.diffArgs,
-      getRawDiff(repoRoot, withWhitespaceMode(options.diffArgs, mode)),
-      {
-        debug: options.debug,
-      },
-    );
-  const buildSession = () => buildSessionForMode(whitespaceMode);
-  const session = buildSession();
-  let watchFingerprint = createHash("sha256").update(session.rawDiff).digest("hex");
-  let watchGeneration = 0;
-  const poll = async () => {
-    const generation = watchGeneration;
-    const rawDiff = await getRawDiffAsync(
-      repoRoot,
-      withWhitespaceMode(options.diffArgs, whitespaceMode),
-    );
-    if (generation !== watchGeneration) return null;
-    const nextFingerprint = createHash("sha256").update(rawDiff).digest("hex");
-    if (nextFingerprint === watchFingerprint) return null;
-    const nextSession = buildDiffSessionFromRawDiff(
-      repoRoot,
-      requestedRepoPath,
-      options.diffArgs,
-      rawDiff,
-      { debug: options.debug },
-    );
-    watchFingerprint = nextFingerprint;
-    return nextSession;
-  };
+  const source = createGitDiffSource({
+    repoRoot,
+    currentDirectory: requestedRepoPath,
+    diffArgs: options.diffArgs,
+    debug: options.debug,
+  });
+  const session = source.current();
   const remote = !isLoopbackHost(options.host);
-  const capabilityToken = remote ? randomBytes(24).toString("base64url") : undefined;
   const server = await startServerWithFallback(
+    source,
+    options.port,
+    options.portExplicit,
+    options.host,
     {
-      initialSession: session,
-      getWhitespaceMode: () => whitespaceMode,
-      onRefresh: (nextSession) => {
-        watchGeneration += 1;
-        watchFingerprint = createHash("sha256").update(nextSession.rawDiff).digest("hex");
-      },
-      poll,
-      refresh: buildSession,
-      setWhitespaceMode: (nextMode) => {
-        const nextSession = buildSessionForMode(nextMode);
-        whitespaceMode = nextMode;
-        return nextSession;
-      },
+      capabilityToken: remote ? randomBytes(24).toString("base64url") : undefined,
+      editor: options.editor,
+      structural: options.structural,
+      watch: options.watch,
+      watchInterval: options.watchInterval,
+      write: options.write,
     },
-    { ...options, capabilityToken },
   );
 
   console.log(`Diffdeck server running at ${server.url}`);
@@ -149,10 +111,7 @@ export function isCliEntrypoint(entryPath: string, modulePath: string): boolean 
 
 if (process.argv[1] != null && isCliEntrypoint(process.argv[1], fileURLToPath(import.meta.url))) {
   main().catch((error: unknown) => {
-    const debug =
-      process.argv.includes("--debug") ||
-      process.env.DIFFDECK_DEBUG === "1" ||
-      process.env.DIFFDECK_DEBUG === "true";
+    const debug = process.argv.includes("--debug") || isDebugEnvironment();
     console.error(formatCliError(error, debug));
     process.exit(1);
   });
