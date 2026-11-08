@@ -42,6 +42,9 @@ async function request<T>(url: string, init?: RequestInit, fallbackError?: strin
       response.status,
     );
   }
+  // Always consume the body, even when the caller ignores it, so the browser
+  // does not report the completed request as aborted when the page later
+  // navigates away (e.g. after sending the review packet to the terminal).
   return (await response.json()) as T;
 }
 
