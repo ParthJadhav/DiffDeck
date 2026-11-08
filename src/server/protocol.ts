@@ -61,11 +61,15 @@ const imageMimeTypes: Record<string, string> = {
   avif: "image/avif",
   bmp: "image/bmp",
   gif: "image/gif",
+  heic: "image/heic",
+  heif: "image/heif",
   ico: "image/x-icon",
   jpeg: "image/jpeg",
   jpg: "image/jpeg",
   png: "image/png",
   svg: "image/svg+xml",
+  tif: "image/tiff",
+  tiff: "image/tiff",
   webp: "image/webp",
 };
 
