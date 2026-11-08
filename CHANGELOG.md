@@ -2,6 +2,48 @@
 
 All notable changes to DiffDeck. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-11-08
+
+Hunk actions write exactly the hunk you clicked. This release fixes several cases where stage,
+unstage, or revert could write a different or larger hunk than the one shown, and restores image
+previews that were missing or showed an error. Internally the server and client were reorganized
+so each concern lives in one place; CLI flags, `--help` output, the HTTP API, and the review
+packet are unchanged.
+
+### Fixed
+
+- **Hunk stage/unstage/revert in whitespace modes.** With `Ignore whitespace` (or another
+  whitespace mode) on, the server counted hunks on the unfiltered diff while the UI counted them on
+  the filtered one, so an action could hit a different hunk than the one clicked. The hunk is now
+  located on the diff you see and applied from the exact diff. When a whitespace-only change merges
+  two displayed hunks into one exact hunk, the write is refused instead of writing both.
+- **Hunk actions on staged renames.** The per-file diff for a renamed file was built from the new
+  path only, so git saw a whole-file addition: unstaging or reverting a hunk dropped the whole file
+  from the index (and from the worktree on revert). The previous path is now included, so the
+  rename and its other hunks are kept.
+- **Hunk actions on CRLF files.** CRLF line endings were stripped from the patch, so hunks in CRLF
+  files never applied and a new CRLF file was staged with LF endings.
+- **Repositories with `diff.noprefix`, `diff.srcPrefix`, or `diff.dstPrefix`.** Hunk writes and image
+  reads now use the same pinned `a/`/`b/` prefixes as the main diff, so `git apply` no longer
+  fails on these repositories.
+- **Writes refuse a diff that changed on disk.** Without `--watch`, a hunk or file action now
+  rebuilds the diff first and refuses with "The diff changed; refresh before applying this action."
+  if the files changed since you opened the review, instead of staging or discarding unseen
+  contents.
+- **Added and deleted image previews.** An added or deleted image showed "old image side is
+  unavailable." instead of its one existing side.
+- **TIFF and HEIC image previews.** `.tif`, `.tiff`, `.heic`, and `.heif` images are served with
+  their real MIME types instead of `application/octet-stream`.
+- Opening a line composer and finishing a note edit in the Notes tab keep focus where you expect,
+  and a watch-mode poll that started before a refresh can no longer publish a stale diff.
+
+### Changed
+
+- Internal restructure: one diff source and one `git diff` command on the server, one HTTP
+  contract shared by server and client, one client API module, one typed list of app events, one
+  command list for shortcuts and the palette, one review filter module, and one CLI option table.
+- The release check also runs the tester-army `e2e` flow suite in installed Google Chrome.
+
 ## [0.8.0] — 2026-09-24
 
 The sidebar is redesigned from the ground up around the daily review loop: orient, walk the files,

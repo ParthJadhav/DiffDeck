@@ -1,3 +1,29 @@
+# DiffDeck 0.9.0 — hunk actions write the hunk you clicked
+
+Stage, unstage, and revert are the riskiest buttons in DiffDeck: they change your index and your
+worktree. 0.9.0 fixes every case we found where they could write something other than the hunk
+on screen.
+
+- **Whitespace modes.** With a whitespace mode on, the hunk is now located on the diff you see and
+  applied from the exact diff. If a hidden whitespace change joins two visible hunks, DiffDeck
+  refuses the write instead of writing both.
+- **Staged renames.** Unstaging or reverting one hunk of a renamed file no longer drops the whole
+  file from the index or the worktree.
+- **CRLF files.** Hunks in CRLF files apply, and new CRLF files keep their line endings when staged.
+- **`diff.noprefix` and custom prefixes.** Hunk writes and image reads ignore repository prefix
+  settings, like the main diff already did.
+- **Changed on disk.** Without `--watch`, a write first checks that the files still match what
+  you reviewed, and asks you to refresh if they do not.
+
+Image previews are fixed too: added and deleted images show their one side instead of an error,
+and `.tif`/`.tiff`/`.heic`/`.heif` are served with their real types.
+
+Under the hood the server and client were reorganized so each concern lives in one place. CLI
+flags, `--help` output, the HTTP API, and the review packet are unchanged. See `CHANGELOG.md` for
+the full list.
+
+---
+
 # DiffDeck 0.8.0 — a sidebar built for the review loop
 
 The sidebar had every control a review needs, but not where a review needs it. The command you
